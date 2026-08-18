@@ -1,0 +1,71 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.venv/
+venv/
+env/
+rev_env/
+
+# Local runtime data (SQLite DB, blobs, queue)
+.localdata/
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment & Secrets
+.env
+.env.local
+.env.*.local
+.env.example
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.sublime-project
+.sublime-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+*.lnk
+
+# Build & Distribution
+dist/
+build/
+*.egg-info/
+*.whl
+
+# AI Assistant Artifacts
+.specstory/
+.cursorindexingignore
+.claude/
+CLAUDE.md
+
+# Abacus AI
+.abacusai/
+
+# Node (if applicable)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Misc
+.cache/
+*.log
+.coverage
+htmlcov/
+
+# Data
+/2026 Complete
+/2026 Original
+/Uploads
+data/
+guerbet_example/
+Transcript/
