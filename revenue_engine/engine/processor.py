@@ -136,7 +136,7 @@ def _run_pipeline(
     payment_id, deposit_amount, pid_source = resolve_payment_id(
         conn=conn,
         supplier_profile_id=supplier_id,
-        filename=Path(file_path).name,
+        filename=job.get("original_file_name") or Path(file_path).name,
         payor_filter=supplier.get("payor_filter_name"),
         manual_payment_id=manual_payment_id or job.get("payment_id"),
     )
