@@ -24,14 +24,14 @@ set -euo pipefail
 # -----------------------------------------------------------------------
 # CONFIGURATION
 # -----------------------------------------------------------------------
-RESOURCE_GROUP="alliant-rg"
-LOCATION="eastus"
-NAME_PREFIX="rev"
-EXISTING_SQL_SERVER=""    # e.g. "pdn-sql-abc123" to share purchasing-solutions SQL server
-EXISTING_ENVIRONMENT=""   # e.g. "pdn-env" to share purchasing-solutions Container Apps env
+RESOURCE_GROUP="${RESOURCE_GROUP:-alliant-rg}"
+LOCATION="${LOCATION:-eastus}"
+NAME_PREFIX="${NAME_PREFIX:-rev}"
+EXISTING_SQL_SERVER="${EXISTING_SQL_SERVER:-}"    # e.g. "pdn-sql-abc123" to share purchasing-solutions SQL server
+EXISTING_ENVIRONMENT="${EXISTING_ENVIRONMENT:-}"  # e.g. "pdn-env" to share purchasing-solutions Container Apps env
 
 ACR_SUFFIX=$(printf "%06d" $((RANDOM % 1000000)))
-ACR_NAME="revreg${ACR_SUFFIX}"
+ACR_NAME="${ACR_NAME:-revreg${ACR_SUFFIX}}"
 
 step() {
     echo ""
