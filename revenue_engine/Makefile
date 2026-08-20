@@ -34,4 +34,4 @@ clean:
 	find . -name '__pycache__' -type d -prune -exec rm -rf {} +
 
 deploy:
-	powershell -File infra/deploy.ps1
+	bash infra/deploy.sh
