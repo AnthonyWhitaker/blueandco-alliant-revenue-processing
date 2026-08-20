@@ -159,3 +159,59 @@ def load_account_list(
 
     conn.commit()
     return inserted, skipped
+
+
+def create_member(
+    conn: object,
+    name: str,
+    account_id: Optional[str] = None,
+    premier_entity_code: Optional[str] = None,
+    alliant_entity_code: Optional[str] = None,
+    city: Optional[str] = None,
+    state: Optional[str] = None,
+    zip_code: Optional[str] = None,
+) -> int:
+    """
+    Manually create a single new member record — used when a supplier file
+    references a real facility that isn't yet in the Account List (e.g. a
+    zero-fuzzy-match-candidate resolved during Review).
+
+    Returns the new member.id.
+    """
+    name = (name or "").strip()
+    if not name:
+        raise ValueError("Member name is required")
+
+    entity_code = (premier_entity_code or alliant_entity_code or "").strip() or None
+    canonical = normalize_name(name)
+    norm_city_val = normalize_city(city) if city else None
+    norm_state_val = normalize_state(state) if state else None
+    norm_zip_val = normalize_zip(zip_code) if zip_code else None
+
+    from .db import get_last_insert_id
+    cursor = conn.execute(
+        """
+        INSERT INTO member (
+            account_id, premier_entity_code, alliant_entity_code, entity_code,
+            name, canonical_key,
+            billing_city, billing_state, billing_zip,
+            norm_city, norm_state, norm_zip
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            (account_id or "").strip() or None,
+            (premier_entity_code or "").strip() or None,
+            (alliant_entity_code or "").strip() or None,
+            entity_code,
+            name,
+            canonical,
+            (city or "").strip() or None,
+            (state or "").strip() or None,
+            (zip_code or "").strip() or None,
+            norm_city_val,
+            norm_state_val,
+            norm_zip_val,
+        ),
+    )
+    conn.commit()
+    return get_last_insert_id(conn, cursor)

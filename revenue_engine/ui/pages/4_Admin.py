@@ -19,7 +19,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from engine.db import init_db, execute_upsert, execute_insert_ignore, execute_insert_or_replace
-from engine.member_loader import load_account_list
+from engine.member_loader import load_account_list, create_member
 from engine.payment_resolver import load_ledger_from_excel
 from engine.file_reader import infer_column_map
 from engine.constants import (
@@ -68,6 +68,41 @@ with tab_members:
             "SELECT entity_code, name, billing_city, billing_state FROM member LIMIT 50"
         ).fetchall()
         st.dataframe(pd.DataFrame([dict(r) for r in rows]), use_container_width=True, hide_index=True)
+
+    st.divider()
+    st.markdown("### Add a Single Member")
+    st.caption(
+        "For a real facility that's missing from the Account List (e.g. a "
+        "zero-match customer from a supplier file) — a full Account List "
+        "refresh will still override this row's city/state/zip if it later "
+        "appears there."
+    )
+    with st.form("add_member_form"):
+        am_col1, am_col2 = st.columns(2)
+        am_name = am_col1.text_input("Facility Name *")
+        am_entity_code = am_col2.text_input("Premier/Alliant Entity Code (optional)")
+        am_col3, am_col4 = st.columns(2)
+        am_account_id = am_col3.text_input("Salesforce Account ID (optional)")
+        am_col5, am_col6, am_col7 = st.columns(3)
+        am_city = am_col5.text_input("City")
+        am_state = am_col6.text_input("State")
+        am_zip = am_col7.text_input("Zip")
+        am_submitted = st.form_submit_button("Add Member", type="primary")
+
+    if am_submitted and am_name.strip():
+        try:
+            new_id = create_member(
+                conn=conn,
+                name=am_name.strip(),
+                account_id=am_account_id.strip() or None,
+                premier_entity_code=am_entity_code.strip() or None,
+                city=am_city.strip() or None,
+                state=am_state.strip() or None,
+                zip_code=am_zip.strip() or None,
+            )
+            st.success(f"Added '{am_name.strip()}' as member id {new_id}.")
+        except Exception as e:
+            st.error(f"Error: {e}")
 
 # ------------------------------------------------------------------
 # Payment Ledger tab

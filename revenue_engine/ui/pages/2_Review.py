@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from engine.db import init_db
 from engine.processor import apply_review_decision
+from engine.member_loader import create_member
 
 st.set_page_config(page_title="Review | Revenue Processing", layout="wide")
 st.title("🔍 Review — Unmatched Customers")
@@ -129,7 +130,7 @@ for item in review_items:
                     f"{r['name']} — {r['entity_code']} ({r['billing_city'] or ''}, {r['billing_state'] or ''})": r["id"]
                     for r in search_results
                 }
-                options["— None of these —"] = None
+                options["— None of these / add new facility —"] = None
                 choice_label = st.selectbox(
                     "Select correct member",
                     list(options.keys()),
@@ -138,9 +139,56 @@ for item in review_items:
                 chosen_member_id = options[choice_label]
             else:
                 st.info("No matching members found.")
-                chosen_member_id = item.get("suggested_member_id")
+                chosen_member_id = None
         else:
             chosen_member_id = item.get("suggested_member_id")
+
+        # -------------------------------------------------------------
+        # Fallback: no existing member matches — create a new one
+        # -------------------------------------------------------------
+        new_member_id = None
+        if chosen_member_id is None:
+            with st.container(border=True):
+                st.markdown("**Not in the database? Add it as a new facility**")
+                with st.form(f"new_member_form_{item['id']}"):
+                    nm_col1, nm_col2 = st.columns(2)
+                    nm_name = nm_col1.text_input(
+                        "Facility Name *", value=item["customer_name_sample"],
+                        key=f"nm_name_{item['id']}",
+                    )
+                    nm_entity_code = nm_col2.text_input(
+                        "Premier/Alliant Entity Code (optional)",
+                        key=f"nm_ec_{item['id']}",
+                    )
+                    nm_col3, nm_col4, nm_col5 = st.columns(3)
+                    nm_city = nm_col3.text_input(
+                        "City", value=item.get("city") or "", key=f"nm_city_{item['id']}",
+                    )
+                    nm_state = nm_col4.text_input(
+                        "State", value=item.get("state") or "", key=f"nm_state_{item['id']}",
+                    )
+                    nm_zip = nm_col5.text_input(
+                        "Zip", value=item.get("zip") or "", key=f"nm_zip_{item['id']}",
+                    )
+                    create_and_match = st.form_submit_button("Create Facility & Match", type="secondary")
+
+                if create_and_match and nm_name.strip():
+                    try:
+                        new_member_id = create_member(
+                            conn=conn,
+                            name=nm_name.strip(),
+                            premier_entity_code=nm_entity_code.strip() or None,
+                            city=nm_city.strip() or None,
+                            state=nm_state.strip() or None,
+                            zip_code=nm_zip.strip() or None,
+                        )
+                        st.session_state[f"new_member_id_{item['id']}"] = new_member_id
+                        st.success(f"Created new facility '{nm_name.strip()}' (member id {new_member_id}). Click Approve below to match it.")
+                    except Exception as e:
+                        st.error(f"Error creating facility: {e}")
+
+        if st.session_state.get(f"new_member_id_{item['id']}"):
+            chosen_member_id = st.session_state[f"new_member_id_{item['id']}"]
 
         create_alias = st.checkbox(
             "Create alias (remember this match for future files)",
