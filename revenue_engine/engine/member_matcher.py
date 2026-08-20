@@ -14,7 +14,6 @@ Matching priority:
   6. Nationwide   — fuzzy name across all members (last resort)
 """
 
-import sqlite3
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -99,7 +98,7 @@ class MemberMatcher:
 
     def __init__(
         self,
-        conn: sqlite3.Connection,
+        conn: object,
         supplier_profile_id: int,
         zip_state_threshold: int = FUZZY_ZIP_STATE_THRESHOLD,
         city_state_threshold: int = FUZZY_CITY_STATE_THRESHOLD,
@@ -297,7 +296,9 @@ class MemberMatcher:
             return
         jde_str = str(jde_number).strip()
         try:
-            self.conn.execute(
+            from .db import execute_upsert
+            execute_upsert(
+                self.conn,
                 """
                 INSERT INTO jde_member_history
                     (supplier_profile_id, jde_number, member_id, first_seen_job_id, last_seen_job_id, occurrence_count)

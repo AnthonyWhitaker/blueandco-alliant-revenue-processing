@@ -17,7 +17,6 @@ in the supplier_profile and supplier_column_map database records.
 """
 
 import json
-import sqlite3
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
@@ -36,6 +35,7 @@ from .constants import (
     EXC_REVENUE_MISMATCH, EXC_PROCESSING_ERROR,
     REVIEW_PENDING,
 )
+from .db import execute_upsert, execute_insert_ignore, get_last_insert_id
 from .file_reader import read_supplier_file
 from .member_matcher import MemberMatcher
 from .normalizer import parse_date, first_of_month, get_quarter_label, parse_deposit_amount_from_filename
@@ -51,7 +51,7 @@ def _safe_float(val) -> Optional[float]:
         return None
 
 
-def _job_log(conn: sqlite3.Connection, job_id: int, exc_type: str, message: str, severity: str = "warning", row_id: Optional[int] = None) -> None:
+def _job_log(conn: object, job_id: int, exc_type: str, message: str, severity: str = "warning", row_id: Optional[int] = None) -> None:
     conn.execute(
         "INSERT INTO exception (job_id, row_id, exception_type, message, severity) VALUES (?, ?, ?, ?, ?)",
         (job_id, row_id, exc_type, message, severity),
@@ -59,7 +59,7 @@ def _job_log(conn: sqlite3.Connection, job_id: int, exc_type: str, message: str,
 
 
 def process_job(
-    conn: sqlite3.Connection,
+    conn: object,
     job_id: int,
     manual_payment_id: Optional[str] = None,
 ) -> dict:
@@ -106,7 +106,7 @@ def process_job(
 
 
 def _run_pipeline(
-    conn: sqlite3.Connection,
+    conn: object,
     job: dict,
     supplier: dict,
     file_path: str,
@@ -284,7 +284,7 @@ def _run_pipeline(
                 row_status, "valid" if result.matched else "pending",
             ),
         )
-        row_ids.append(cursor.lastrowid)
+        row_ids.append(get_last_insert_id(conn, cursor))
 
     conn.commit()
 
@@ -351,7 +351,7 @@ def _run_pipeline(
 
 
 def _build_review_items(
-    conn: sqlite3.Connection,
+    conn: object,
     job_id: int,
     supplier_id: int,
     matcher: MemberMatcher,
@@ -408,7 +408,7 @@ def _build_review_items(
 
 
 def _aggregate_output(
-    conn: sqlite3.Connection,
+    conn: object,
     job_id: int,
     job: dict,
     supplier: dict,
@@ -479,7 +479,7 @@ def _aggregate_output(
 
 
 def apply_review_decision(
-    conn: sqlite3.Connection,
+    conn: object,
     review_item_id: int,
     resolved_member_id: Optional[int],
     resolution_scope: str,
@@ -583,7 +583,8 @@ def apply_review_decision(
         if resolution_scope == "global":
             sp_id = None
         try:
-            conn.execute(
+            execute_insert_ignore(
+                conn,
                 """
                 INSERT OR IGNORE INTO member_alias
                     (member_id, supplier_profile_id, raw_name, canonical_key,
@@ -600,7 +601,8 @@ def apply_review_decision(
 
     # Also update JDE history if we have a JDE number
     if item.get("jde_number") and supplier_profile_id:
-        conn.execute(
+        execute_upsert(
+            conn,
             """
             INSERT INTO jde_member_history
                 (supplier_profile_id, jde_number, member_id, first_seen_job_id, last_seen_job_id)

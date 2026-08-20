@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from engine.db import init_db
+from engine.db import init_db, execute_upsert, execute_insert_ignore
 from engine.normalizer import normalize_key
 
 # ---------------------------------------------------------------------------
@@ -77,7 +77,8 @@ def seed_guerbet(
     print("Seeding Guerbet supplier profile...")
 
     # Insert supplier profile
-    conn.execute(
+    execute_upsert(
+        conn,
         """
         INSERT INTO supplier_profile (
             name, description, contract_id,
@@ -117,7 +118,8 @@ def seed_guerbet(
     inserted_maps = 0
     for source_col, canonical, required in GUERBET_COLUMN_MAP:
         try:
-            conn.execute(
+            execute_insert_ignore(
+                conn,
                 """
                 INSERT OR IGNORE INTO supplier_column_map
                     (supplier_profile_id, source_column, canonical_field, is_required)
@@ -166,7 +168,8 @@ def seed_guerbet(
                       f"'{target_entity_code}' — alias '{raw_name}' not linked")
                 continue
             try:
-                conn.execute(
+                execute_insert_ignore(
+                    conn,
                     """
                     INSERT OR IGNORE INTO member_alias
                         (member_id, supplier_profile_id, raw_name, canonical_key,

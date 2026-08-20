@@ -8,7 +8,6 @@ Output tabs:
   4. JDE Mapping — JDE# → PEC → DB Name (for manual review and future reference)
 """
 
-import sqlite3
 from pathlib import Path
 from typing import Optional
 
@@ -19,7 +18,7 @@ from .constants import SF_UPLOAD_COLUMNS
 
 
 def export_job(
-    conn: sqlite3.Connection,
+    conn: object,
     job_id: int,
     output_path: Optional[str] = None,
 ) -> str:
@@ -66,7 +65,7 @@ def export_job(
     return output_path
 
 
-def _build_upload_df(conn: sqlite3.Connection, job_id: int) -> pd.DataFrame:
+def _build_upload_df(conn: object, job_id: int) -> pd.DataFrame:
     rows = conn.execute(
         """
         SELECT
@@ -96,7 +95,7 @@ def _build_upload_df(conn: sqlite3.Connection, job_id: int) -> pd.DataFrame:
     return df
 
 
-def _build_validation_df(conn: sqlite3.Connection, job_id: int) -> pd.DataFrame:
+def _build_validation_df(conn: object, job_id: int) -> pd.DataFrame:
     rows = conn.execute(
         """
         SELECT DISTINCT
@@ -119,7 +118,7 @@ def _build_validation_df(conn: sqlite3.Connection, job_id: int) -> pd.DataFrame:
     return pd.DataFrame([dict(r) for r in rows])
 
 
-def _build_unmatched_df(conn: sqlite3.Connection, job_id: int) -> pd.DataFrame:
+def _build_unmatched_df(conn: object, job_id: int) -> pd.DataFrame:
     rows = conn.execute(
         """
         SELECT
@@ -143,7 +142,7 @@ def _build_unmatched_df(conn: sqlite3.Connection, job_id: int) -> pd.DataFrame:
     return pd.DataFrame([dict(r) for r in rows])
 
 
-def _build_jde_mapping_df(conn: sqlite3.Connection, job_id: int) -> pd.DataFrame:
+def _build_jde_mapping_df(conn: object, job_id: int) -> pd.DataFrame:
     rows = conn.execute(
         """
         SELECT DISTINCT
@@ -223,7 +222,7 @@ def _write_xlsx(
 
 
 def export_to_dataframes(
-    conn: sqlite3.Connection,
+    conn: object,
     job_id: int,
 ) -> dict[str, pd.DataFrame]:
     """

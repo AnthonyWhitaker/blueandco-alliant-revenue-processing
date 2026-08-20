@@ -21,7 +21,9 @@ rev_env/
 .env
 .env.local
 .env.*.local
-.env.example
+
+# Docker / Streamlit logs
+streamlit_*.log
 
 # IDE & Editor
 .vscode/

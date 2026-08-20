@@ -1,0 +1,26 @@
+version: "3.9"
+
+services:
+  revenue-engine:
+    build: .
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - REVENUE_DB_PATH=/app/data/revenue.db
+    restart: unless-stopped
+
+  # Optional: local SQL Server for testing Azure SQL path
+  # mssql:
+  #   image: mcr.microsoft.com/mssql/server:2022-latest
+  #   environment:
+  #     ACCEPT_EULA: "Y"
+  #     MSSQL_SA_PASSWORD: "<YourStrong!Passw0rd>"
+  #   ports:
+  #     - "1433:1433"
+  #   volumes:
+  #     - mssql-data:/var/opt/mssql
+
+# volumes:
+#   mssql-data:

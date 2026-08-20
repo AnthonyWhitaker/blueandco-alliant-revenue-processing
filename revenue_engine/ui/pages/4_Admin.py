@@ -18,7 +18,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from engine.db import init_db
+from engine.db import init_db, execute_upsert, execute_insert_ignore, execute_insert_or_replace
 from engine.member_loader import load_account_list
 from engine.payment_resolver import load_ledger_from_excel
 from engine.file_reader import infer_column_map
@@ -133,7 +133,8 @@ with tab_suppliers:
 
     if submitted and s_name:
         try:
-            conn.execute(
+            execute_upsert(
+                conn,
                 """
                 INSERT INTO supplier_profile
                     (name, description, contract_id, revenue_type, keep_return_default,
@@ -208,7 +209,8 @@ with tab_colmap:
         if f"infer_suggestions_{sp_id}" in st.session_state:
             if st.button("Save Inferred Mappings"):
                 for src_col, canon in st.session_state[f"infer_suggestions_{sp_id}"].items():
-                    conn.execute(
+                    execute_insert_or_replace(
+                        conn,
                         """
                         INSERT OR REPLACE INTO supplier_column_map
                             (supplier_profile_id, source_column, canonical_field, is_required)
@@ -234,7 +236,8 @@ with tab_colmap:
             saved    = st.form_submit_button("Save Mapping", type="primary")
 
         if saved and src_col:
-            conn.execute(
+            execute_insert_or_replace(
+                conn,
                 """
                 INSERT OR REPLACE INTO supplier_column_map
                     (supplier_profile_id, source_column, canonical_field, is_required)
@@ -300,7 +303,8 @@ with tab_aliases:
             if alias_saved and alias_raw:
                 from engine.normalizer import normalize_key
                 try:
-                    conn.execute(
+                    execute_insert_ignore(
+                        conn,
                         """
                         INSERT OR IGNORE INTO member_alias
                             (member_id, supplier_profile_id, raw_name, canonical_key, jde_number, approved_by, approved_at)

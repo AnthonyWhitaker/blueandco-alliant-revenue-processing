@@ -7,14 +7,13 @@ Resolves a Salesforce Payment ID for each job using:
   3. Column-based: read Payment ID directly from a column in the raw file
 """
 
-import sqlite3
 from typing import Optional
 
 from .normalizer import parse_deposit_amount_from_filename
 
 
 def resolve_payment_id(
-    conn: sqlite3.Connection,
+    conn: object,
     supplier_profile_id: int,
     filename: str,
     payor_filter: Optional[str] = None,
@@ -54,7 +53,7 @@ def resolve_payment_id(
 
 
 def lookup_payment_id_from_ledger(
-    conn: sqlite3.Connection,
+    conn: object,
     deposit_amount: float,
     payor_filter: Optional[str] = None,
     tolerance: float = 0.02,
@@ -80,7 +79,7 @@ def lookup_payment_id_from_ledger(
 
 
 def load_ledger_from_excel(
-    conn: sqlite3.Connection,
+    conn: object,
     ledger_path: str,
     sheet_name: str = "Ledger",
 ) -> int:
@@ -126,7 +125,9 @@ def load_ledger_from_excel(
 
             contract = str(row.get("contract_id", "")).strip() or None
 
-            conn.execute(
+            from .db import execute_insert_ignore
+            execute_insert_ignore(
+                conn,
                 """
                 INSERT OR IGNORE INTO payment_ledger
                     (payor, payment_received_date, deposit_amount, sf_payment_id, contract_id)

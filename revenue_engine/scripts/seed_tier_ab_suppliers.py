@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from engine.db import init_db
+from engine.db import init_db, execute_upsert, execute_insert_ignore
 
 # ---------------------------------------------------------------------------
 # Supplier definitions: (profile kwargs, column map list)
@@ -210,7 +210,8 @@ SUPPLIERS = [
 
 def seed_supplier(conn, definition: dict) -> int:
     p = definition["profile"]
-    conn.execute(
+    execute_upsert(
+        conn,
         """
         INSERT INTO supplier_profile (
             name, description, contract_id,
@@ -240,7 +241,8 @@ def seed_supplier(conn, definition: dict) -> int:
     ).fetchone()["id"]
 
     for source_col, canonical, required in definition["column_map"]:
-        conn.execute(
+        execute_insert_ignore(
+            conn,
             """
             INSERT OR IGNORE INTO supplier_column_map
                 (supplier_profile_id, source_column, canonical_field, is_required)

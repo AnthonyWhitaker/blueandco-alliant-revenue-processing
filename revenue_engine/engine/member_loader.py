@@ -3,7 +3,6 @@ Loads the Account List (member/facility master) into the member table.
 Can be re-run to refresh the member table from a new Account List export.
 """
 
-import sqlite3
 from pathlib import Path
 from typing import Optional
 
@@ -40,7 +39,7 @@ def _find_col(df_cols: list[str], candidates: list[str]) -> Optional[str]:
 
 
 def load_account_list(
-    conn: sqlite3.Connection,
+    conn: object,
     file_path: str,
     sheet_name: Optional[str] = None,
     replace_all: bool = False,
@@ -115,7 +114,9 @@ def load_account_list(
         norm_zip   = normalize_zip(zip_raw)
 
         try:
-            conn.execute(
+            from .db import execute_upsert
+            execute_upsert(
+                conn,
                 """
                 INSERT INTO member (
                     account_id, premier_entity_code, alliant_entity_code, entity_code,

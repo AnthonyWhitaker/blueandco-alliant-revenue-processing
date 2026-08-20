@@ -11,7 +11,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from engine.db import init_db
+from engine.db import init_db, get_last_insert_id
 from engine.processor import process_job
 from engine.normalizer import parse_date_from_filename, guess_supplier_from_filename
 
@@ -133,7 +133,7 @@ if st.button("Process File", type="primary", disabled=not ready_to_process):
                 ),
             )
             conn.commit()
-            job_id = cursor.lastrowid
+            job_id = get_last_insert_id(conn, cursor)
 
             # Run pipeline
             result = process_job(

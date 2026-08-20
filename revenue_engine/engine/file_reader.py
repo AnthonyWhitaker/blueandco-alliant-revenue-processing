@@ -12,7 +12,6 @@ Handles:
 - Summary row stripping (rows where a required column is NaN)
 """
 
-import sqlite3
 from pathlib import Path
 from typing import Optional
 
@@ -25,7 +24,7 @@ def _normalize_col(name: str) -> str:
 
 
 def load_supplier_column_map(
-    conn: sqlite3.Connection,
+    conn: object,
     supplier_profile_id: int,
 ) -> dict[str, str]:
     """
@@ -41,7 +40,7 @@ def load_supplier_column_map(
 def read_supplier_file(
     file_path: str,
     supplier_profile: dict,
-    conn: sqlite3.Connection,
+    conn: object,
 ) -> tuple[pd.DataFrame, list[str]]:
     """
     Read a raw supplier file and return:
@@ -140,7 +139,7 @@ def read_supplier_file(
 def infer_column_map(
     df: pd.DataFrame,
     supplier_profile_id: int,
-    conn: sqlite3.Connection,
+    conn: object,
 ) -> dict[str, str]:
     """
     Attempt to auto-infer a column mapping for a new supplier's file
