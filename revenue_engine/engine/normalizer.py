@@ -97,6 +97,13 @@ def parse_date(value: Optional[object], dayfirst: bool = False) -> Optional[str]
     if value is None:
         return None
     import pandas as pd
+    # Handle quarter-label strings like "Q4 2025" / "4Q2025" (Harbinger, Zier)
+    if isinstance(value, str):
+        m = re.match(r"^\s*Q?([1-4])\s*Q?\s*[- ]?\s*(\d{4})\s*$", value.strip(), re.IGNORECASE)
+        if m:
+            quarter, year = int(m.group(1)), int(m.group(2))
+            month = (quarter - 1) * 3 + 1
+            return f"{year}-{month:02d}-01"
     try:
         ts = pd.to_datetime(value, dayfirst=dayfirst)
         if pd.isna(ts):
@@ -136,6 +143,50 @@ def get_quarter_label(date_str: Optional[str]) -> Optional[str]:
         return f"{quarter}Q{year}"
     except Exception:
         return None
+
+
+def parse_date_from_filename(filename: str) -> Optional[str]:
+    """
+    Extract a date from a filename like:
+        'Guerbet 2025.07.02 4231.37 Ledger.xlsx'
+    Looks for a YYYY.MM.DD or YYYY-MM-DD token.
+    Returns an ISO date string (YYYY-MM-DD), or None if not found/invalid.
+    """
+    m = re.search(r"\b((?:19|20)\d{2})[.\-](\d{1,2})[.\-](\d{1,2})\b", filename)
+    if not m:
+        return None
+    try:
+        from datetime import date
+        year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        return date(year, month, day).isoformat()
+    except ValueError:
+        return None
+
+
+def guess_supplier_from_filename(filename: str, supplier_names: list[str]) -> Optional[str]:
+    """
+    Guess which supplier a filename belongs to by matching the filename
+    stem against known supplier profile names.
+
+    Prefers an exact case-insensitive prefix match (e.g. 'Guerbet 2025...'
+    -> 'Guerbet'); falls back to fuzzy partial-ratio matching (threshold 80).
+    Returns the matched supplier name, or None if no confident match found.
+    """
+    from thefuzz import fuzz
+
+    stem = re.sub(r"\.[a-zA-Z]{2,5}$", "", filename).strip().lower()
+
+    for name in supplier_names:
+        if stem.startswith(name.strip().lower()):
+            return name
+
+    best_name, best_score = None, 0
+    for name in supplier_names:
+        score = fuzz.partial_ratio(name.strip().lower(), stem)
+        if score > best_score:
+            best_score, best_name = score, name
+
+    return best_name if best_score >= 80 else None
 
 
 def parse_deposit_amount_from_filename(filename: str) -> Optional[float]:

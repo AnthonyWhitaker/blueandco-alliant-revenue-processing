@@ -17,11 +17,25 @@ CANONICAL_SALES_AMOUNT      = "sales_amount"
 CANONICAL_FEE_AMOUNT        = "fee_amount"
 CANONICAL_PRODUCT_LINE      = "product_line"
 CANONICAL_CONTRACT_NUMBER   = "contract_number"
+# Supplier-provided identity hints — used for exact-match fast paths ahead of
+# fuzzy name matching. Populated when the supplier file already carries a
+# Premier/Alliant Entity Code or a Salesforce Account ID per row (e.g. Viscot,
+# Zier, Bon Secours, Harbinger, Propio).
+CANONICAL_ENTITY_CODE_HINT  = "entity_code_hint"
+CANONICAL_ACCOUNT_ID_HINT   = "account_id_hint"
 
+# fee_amount and process_date are always required. Customer identity can be
+# established via customer_name, jde_number, OR one of the exact-match hints
+# above — at least one of REQUIRED_IDENTITY_FIELDS_ANY must be present.
 REQUIRED_CANONICAL_FIELDS = [
-    CANONICAL_CUSTOMER_NAME,
     CANONICAL_FEE_AMOUNT,
     CANONICAL_PROCESS_DATE,
+]
+REQUIRED_IDENTITY_FIELDS_ANY = [
+    CANONICAL_CUSTOMER_NAME,
+    CANONICAL_JDE_NUMBER,
+    CANONICAL_ENTITY_CODE_HINT,
+    CANONICAL_ACCOUNT_ID_HINT,
 ]
 
 # ---------------------------------------------------------------------------
@@ -43,6 +57,8 @@ MATCH_CITY_STATE    = "city_state"
 MATCH_STATE         = "state"
 MATCH_NATIONWIDE    = "nationwide"
 MATCH_UNMATCHED     = "unmatched"
+MATCH_ENTITY_CODE   = "entity_code_exact"
+MATCH_ACCOUNT_ID    = "account_id_exact"
 
 # ---------------------------------------------------------------------------
 # Job status values

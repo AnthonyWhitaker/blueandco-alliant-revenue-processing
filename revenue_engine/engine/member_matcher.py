@@ -33,6 +33,8 @@ from .constants import (
     MATCH_STATE,
     MATCH_NATIONWIDE,
     MATCH_UNMATCHED,
+    MATCH_ENTITY_CODE,
+    MATCH_ACCOUNT_ID,
 )
 from .normalizer import normalize_name, normalize_zip, normalize_state, normalize_city
 
@@ -118,6 +120,8 @@ class MemberMatcher:
         self._by_state: dict[str, list[dict]] = {}
         self._aliases: dict[str, dict] = {}        # canonical_key → member dict
         self._jde_map: dict[str, dict] = {}        # jde_number → member dict
+        self._by_entity_code: dict[str, dict] = {}  # entity_code → member dict
+        self._by_account_id: dict[str, dict] = {}   # account_id → member dict
 
     # ------------------------------------------------------------------
     # Loading
@@ -145,6 +149,12 @@ class MemberMatcher:
                 self._by_city_state.setdefault((c, s), []).append(m)
             if s:
                 self._by_state.setdefault(s, []).append(m)
+            ec = (m.get("entity_code") or "").strip().upper()
+            if ec:
+                self._by_entity_code[ec] = m
+            aid = (m.get("account_id") or "").strip()
+            if aid:
+                self._by_account_id[aid] = m
 
     def _load_aliases(self) -> None:
         rows = self.conn.execute(
@@ -192,14 +202,33 @@ class MemberMatcher:
         city: Optional[str] = None,
         state: Optional[str] = None,
         zip_code: Optional[str] = None,
+        entity_code_hint: Optional[str] = None,
+        account_id_hint: Optional[str] = None,
     ) -> MatchResult:
         """
-        Run the 5-tier matching strategy and return a MatchResult.
+        Run the matching strategy and return a MatchResult.
+
+        Tier 0a/0b (entity_code_hint / account_id_hint) apply when the
+        supplier file already carries a Premier/Alliant Entity Code or a
+        Salesforce Account ID per row — an exact match against the member
+        master, ahead of JDE history and fuzzy name matching.
         """
         norm_name = normalize_name(customer_name)
         norm_zip  = normalize_zip(zip_code)
         norm_state = normalize_state(state)
         norm_city  = normalize_city(city)
+
+        # Tier 0a: Salesforce Account ID exact match (highest confidence)
+        if account_id_hint:
+            aid = str(account_id_hint).strip()
+            if aid in self._by_account_id:
+                return _member_row_to_result(self._by_account_id[aid], MATCH_ACCOUNT_ID, 100)
+
+        # Tier 0b: Premier/Alliant Entity Code exact match
+        if entity_code_hint:
+            ec = str(entity_code_hint).strip().upper()
+            if ec in self._by_entity_code:
+                return _member_row_to_result(self._by_entity_code[ec], MATCH_ENTITY_CODE, 100)
 
         # Tier 1: JDE history / alias by JDE number
         if jde_number:

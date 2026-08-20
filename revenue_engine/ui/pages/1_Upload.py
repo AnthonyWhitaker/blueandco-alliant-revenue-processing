@@ -4,6 +4,7 @@ Upload page — select supplier, upload raw file, run processing pipeline.
 
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
@@ -12,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from engine.db import init_db
 from engine.processor import process_job
+from engine.normalizer import parse_date_from_filename, guess_supplier_from_filename
 
 st.set_page_config(page_title="Upload | Revenue Processing", layout="wide")
 st.title("📁 Upload & Process")
@@ -31,24 +33,80 @@ if not suppliers:
     st.stop()
 
 supplier_names = {s["name"]: dict(s) for s in suppliers}
-selected_name = st.selectbox("Select Supplier", list(supplier_names.keys()))
-selected_supplier = supplier_names[selected_name]
-
-st.markdown(f"**Contract ID:** `{selected_supplier.get('contract_id') or '—'}`  |  "
-            f"**Revenue Type:** `{selected_supplier.get('revenue_type', 'Admin Fee')}`")
-
-st.divider()
 
 uploaded_file = st.file_uploader(
     "Upload raw supplier file (XLSX or CSV)",
     type=["xlsx", "xls", "xlsm", "csv"],
 )
 
-col1, col2 = st.columns(2)
-date_received = col1.date_input("Date Received (optional — parsed from filename if blank)")
-manual_payment_id = col2.text_input("Payment ID Override (optional — auto-resolved from ledger)")
+if not uploaded_file:
+    st.info("Upload a file to continue — supplier and date received will be inferred from the filename.")
+    st.divider()
+    st.subheader("Recent Jobs")
+    recent_jobs = conn.execute(
+        """
+        SELECT rj.id, sp.name AS supplier, rj.original_file_name,
+               rj.status, rj.row_count, rj.matched_count, rj.unmatched_count,
+               rj.total_revenue, rj.created_at
+        FROM revenue_job rj
+        JOIN supplier_profile sp ON sp.id = rj.supplier_profile_id
+        ORDER BY rj.created_at DESC
+        LIMIT 20
+        """
+    ).fetchall()
+    if recent_jobs:
+        import pandas as pd
+        df_jobs = pd.DataFrame([dict(r) for r in recent_jobs])
+        df_jobs.columns = ["Job #", "Supplier", "File", "Status", "Rows", "Matched", "Unmatched", "Total Revenue", "Created"]
+        st.dataframe(df_jobs, use_container_width=True, hide_index=True)
+    else:
+        st.info("No jobs yet.")
+    st.stop()
 
-if uploaded_file and st.button("Process File", type="primary"):
+# Infer supplier and date from the filename (only once per uploaded file)
+if st.session_state.get("_upload_inferred_for") != uploaded_file.name:
+    st.session_state["_upload_inferred_for"] = uploaded_file.name
+    st.session_state["_upload_guessed_supplier"] = guess_supplier_from_filename(
+        uploaded_file.name, list(supplier_names.keys())
+    )
+    st.session_state["_upload_guessed_date"] = parse_date_from_filename(uploaded_file.name)
+
+guessed_supplier = st.session_state.get("_upload_guessed_supplier")
+guessed_date_str = st.session_state.get("_upload_guessed_date")
+
+st.divider()
+
+col1, col2 = st.columns(2)
+
+supplier_options = ["— select —"] + list(supplier_names.keys())
+default_idx = supplier_options.index(guessed_supplier) if guessed_supplier in supplier_options else 0
+selected_name = col1.selectbox("Supplier", supplier_options, index=default_idx)
+if guessed_supplier:
+    col1.caption(f"Inferred from filename: **{guessed_supplier}**")
+else:
+    col1.caption("Could not infer supplier from filename — please select one.")
+
+if guessed_date_str:
+    guessed_date = datetime.strptime(guessed_date_str, "%Y-%m-%d").date()
+    date_received = col2.date_input("Date Received", value=guessed_date)
+    col2.caption(f"Inferred from filename: **{guessed_date_str}**")
+else:
+    date_received = col2.date_input("Date Received", value=None)
+    col2.caption("Could not infer date from filename — please select one.")
+
+manual_payment_id = st.text_input("Payment ID Override (optional — auto-resolved from ledger)")
+
+selected_supplier = supplier_names.get(selected_name)
+if selected_supplier:
+    st.markdown(f"**Contract ID:** `{selected_supplier.get('contract_id') or '—'}`  |  "
+                f"**Revenue Type:** `{selected_supplier.get('revenue_type', 'Admin Fee')}`")
+
+ready_to_process = bool(uploaded_file and selected_supplier and date_received)
+
+if not ready_to_process:
+    st.caption("Select a supplier and date received to enable processing.")
+
+if st.button("Process File", type="primary", disabled=not ready_to_process):
     with st.spinner("Processing..."):
         # Save uploaded file to temp location
         suffix = Path(uploaded_file.name).suffix

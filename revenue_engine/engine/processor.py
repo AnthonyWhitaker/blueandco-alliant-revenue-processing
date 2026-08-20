@@ -28,7 +28,7 @@ from .constants import (
     CANONICAL_CUSTOMER_NAME, CANONICAL_JDE_NUMBER, CANONICAL_PROCESS_DATE,
     CANONICAL_CITY, CANONICAL_STATE, CANONICAL_ZIP, CANONICAL_ADDRESS,
     CANONICAL_SALES_AMOUNT, CANONICAL_FEE_AMOUNT, CANONICAL_PRODUCT_LINE,
-    CANONICAL_CONTRACT_NUMBER,
+    CANONICAL_CONTRACT_NUMBER, CANONICAL_ENTITY_CODE_HINT, CANONICAL_ACCOUNT_ID_HINT,
     STATUS_PROCESSING, STATUS_COMPLETED, STATUS_FAILED, STATUS_NEEDS_REVIEW,
     ROW_MATCHED, ROW_UNMATCHED, ROW_ALIAS_MATCHED,
     MATCH_UNMATCHED, MATCH_JDE_HISTORY, MATCH_ALIAS,
@@ -188,6 +188,12 @@ def _run_pipeline(
     def get_cache_key(row_series) -> str:
         if jde_col and pd.notna(row_series.get(jde_col)):
             return f"jde:{row_series[jde_col]}"
+        aid = row_series.get(CANONICAL_ACCOUNT_ID_HINT)
+        if pd.notna(aid) and str(aid).strip():
+            return f"aid:{aid}"
+        ec = row_series.get(CANONICAL_ENTITY_CODE_HINT)
+        if pd.notna(ec) and str(ec).strip():
+            return f"ec:{ec}"
         return f"name:{row_series.get(CANONICAL_CUSTOMER_NAME, '')}"
 
     # ------------------------------------------------------------------
@@ -204,6 +210,11 @@ def _run_pipeline(
         # Parse canonical values
         jde_num   = str(row.get(CANONICAL_JDE_NUMBER, "") or "").strip() if jde_col else None
         cust_name = str(row.get(CANONICAL_CUSTOMER_NAME, "") or "").strip()
+        entity_code_hint = str(row.get(CANONICAL_ENTITY_CODE_HINT, "") or "").strip() or None
+        account_id_hint  = str(row.get(CANONICAL_ACCOUNT_ID_HINT, "") or "").strip() or None
+        if not cust_name:
+            # Fall back to the identity hint for display purposes (review UI, logs)
+            cust_name = entity_code_hint or account_id_hint or ""
         proc_date = parse_date(row.get(CANONICAL_PROCESS_DATE))
         city      = str(row.get(CANONICAL_CITY, "") or "").strip()
         state     = str(row.get(CANONICAL_STATE, "") or "").strip()
@@ -226,6 +237,8 @@ def _run_pipeline(
                 city=city,
                 state=state,
                 zip_code=zip_code,
+                entity_code_hint=entity_code_hint,
+                account_id_hint=account_id_hint,
             )
             match_cache[cache_key] = result
             # Persist JDE history for successful matches
@@ -408,19 +421,19 @@ def _aggregate_output(
     """
     rows = conn.execute(
         """
-        SELECT entity_code, account_id, process_date,
+        SELECT entity_code, account_id, process_date, contract_number,
                SUM(sales_amount) AS volume,
                SUM(fee_amount)   AS total_revenue
         FROM revenue_row
         WHERE job_id = ? AND match_status IN ('matched', 'alias_matched')
           AND entity_code IS NOT NULL
-        GROUP BY entity_code, account_id, process_date
+        GROUP BY entity_code, account_id, process_date, contract_number
         ORDER BY entity_code, process_date
         """,
         (job_id,),
     ).fetchall()
 
-    contract_id = job.get("contract_id") or supplier.get("contract_id")
+    default_contract_id = job.get("contract_id") or supplier.get("contract_id")
     revenue_type = supplier.get("revenue_type", "Admin Fee")
     keep_return  = supplier.get("keep_return_default", "Keep")
     date_received = job.get("date_received")
@@ -435,6 +448,7 @@ def _aggregate_output(
         vol = r["volume"] or 0.0
         total_revenue += rev
         total_volume  += vol
+        row_contract_id = r["contract_number"] or default_contract_id
 
         conn.execute(
             """
@@ -448,7 +462,7 @@ def _aggregate_output(
                 job_id,
                 r["entity_code"],
                 r["account_id"],
-                contract_id,
+                row_contract_id,
                 payment_id,
                 vol,
                 rev,

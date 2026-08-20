@@ -116,8 +116,12 @@ def read_supplier_file(
     df_out.rename(columns=rename, inplace=True)
 
     # Check required canonical fields
-    from .constants import REQUIRED_CANONICAL_FIELDS
+    from .constants import REQUIRED_CANONICAL_FIELDS, REQUIRED_IDENTITY_FIELDS_ANY
     missing_required = [f for f in REQUIRED_CANONICAL_FIELDS if f not in found_canonical]
+    if not any(f in found_canonical for f in REQUIRED_IDENTITY_FIELDS_ANY):
+        missing_required.append(
+            f"one of {REQUIRED_IDENTITY_FIELDS_ANY} (customer identity)"
+        )
     if missing_required:
         raise ValueError(
             f"Required columns not found in file. Missing canonical fields: {missing_required}. "

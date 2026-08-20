@@ -57,11 +57,13 @@ GUERBET_KNOWN_ALIASES = [
     {
         "raw_name": "OH MUHLENBERG LLC",
         "jde_number": "854488",
+        "target_entity_code": "KY0039",
         "notes": "Maps to Owensboro Health (KY0039)",
     },
     {
         "raw_name": "RESURGEONS ORTHOLINK",
         "jde_number": None,
+        "target_entity_code": "656982",
         "notes": "Maps to United Musculoskeletal Partners - UMP (656982)",
     },
 ]
@@ -147,32 +149,31 @@ def seed_guerbet(
     # Seed known aliases (attempt to link by entity code / JDE if members are loaded)
     n_members = conn.execute("SELECT COUNT(*) FROM member").fetchone()[0]
     if n_members > 0:
-        print("  Seeding known Guerbet aliases…")
+        print("  Seeding known Guerbet aliases...")
         for alias_def in GUERBET_KNOWN_ALIASES:
             raw_name = alias_def["raw_name"]
             jde_num = alias_def.get("jde_number")
-            # Try to find member by entity code hint in notes
-            # For now — insert alias with member_id=None; user resolves in Review UI
+            target_entity_code = alias_def.get("target_entity_code")
             canon = normalize_key(raw_name)
+            member_row = None
+            if target_entity_code:
+                member_row = conn.execute(
+                    "SELECT id FROM member WHERE entity_code = ? AND is_active = 1 LIMIT 1",
+                    (target_entity_code,),
+                ).fetchone()
+            if not member_row:
+                print(f"    Warning: no active member found for entity code "
+                      f"'{target_entity_code}' — alias '{raw_name}' not linked")
+                continue
             try:
                 conn.execute(
                     """
                     INSERT OR IGNORE INTO member_alias
                         (member_id, supplier_profile_id, raw_name, canonical_key,
                          jde_number, approved_by, approved_at)
-                    SELECT m.id, ?, ?, ?, ?, 'seed_script', CURRENT_TIMESTAMP
-                    FROM member m
-                    WHERE m.is_active = 1
-                    ORDER BY CASE
-                        WHEN ? IS NOT NULL THEN (
-                            SELECT COUNT(*) FROM jde_member_history
-                            WHERE jde_number = ? AND supplier_profile_id = ?
-                        )
-                        ELSE 0
-                    END DESC
-                    LIMIT 1
+                    VALUES (?, ?, ?, ?, ?, 'seed_script', CURRENT_TIMESTAMP)
                     """,
-                    (sp_id, raw_name, canon, jde_num, jde_num, jde_num, sp_id),
+                    (member_row["id"], sp_id, raw_name, canon, jde_num),
                 )
             except Exception:
                 pass

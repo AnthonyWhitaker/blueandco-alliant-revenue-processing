@@ -177,15 +177,40 @@ The DB schema is designed to be migrated to Azure SQL (the purchasing app's DB) 
 
 ---
 
+## Onboarded Suppliers (as of this pass)
+
+In addition to Guerbet, `scripts/seed_tier_ab_suppliers.py` configures:
+
+- **Tier A** (exact-match fast path via a supplier-provided Premier/Alliant
+  Entity Code or Salesforce Account ID — `MemberMatcher` Tier 0, ahead of
+  fuzzy matching): **Viscot**, **Zier**
+- **Tier B** (same Tier 0 fast path where available, falling back to the
+  existing fuzzy name + geography engine): **Bon Secours**, **Harbinger
+  Medical**, **Propio**, **Electro Medical**, **Medegen**
+
+Verified against real raw ledgers in `2026 Original/2026 Complete`
+(`scripts/test_tier_ab_suppliers.py`): Zier, Harbinger Medical, Propio, and
+Medegen reconcile to the penny. Viscot reconciles within ~2–5%. Electro
+Medical needs review-queue tuning (~70% match rate on one sample file).
+**Bon Secours does not yet reconcile** — its `Admin_Fee` column sums to
+roughly 3–4x the actual deposit; the December 2025 sample shows
+`FBO Fee Share` (`Admin_Fee × 55%`) divided by ~2 equals the deposit almost
+exactly, but this split has not been confirmed with Brandi and is **not**
+implemented — do not book Bon Secours revenue from this engine until that's
+verified.
+
 ## Known Issues / Future Work
 
 ### Immediate
-- [ ] The two recurring Guerbet unmatched customers (JDE 854488, 766089) need aliases linked in Admin → Aliases after Account List is loaded
+- [ ] Confirm the Bon Secours fee-share calculation with Brandi before onboarding it for real (see above)
+- [ ] Electro Medical match rate needs review-queue triage / threshold tuning
+- [ ] The two recurring Guerbet unmatched customers (JDE 854488, 766089) — fixed via `seed_guerbet.py` known-alias linking (now resolves by entity code instead of a broken heuristic); a 3rd/4th customer (PEC 825384, TX0238) still needs manual review per month
 - [ ] Payment ID column-based resolution (for suppliers that include it in the file) is implemented but untested
 
 ### Near-term
+- [ ] Tier C suppliers (aggregate workpapers with no facility-level rows — Airgas, Aramark, CME, Komet, McKesson, Amerisource, etc.) need a different "manual allocation" job type; the matcher can't help with these
+- [ ] Carolon needs its own onboarding pass — its raw "Contract ID" column is actually a facility code, not the real Salesforce Contract ID, so a straight column-map won't work
 - [ ] Batch processing: watch a folder and auto-process new files
-- [ ] Support for suppliers without JDE numbers (name-only matching)
 - [ ] Medline support: item-level rows needing heavy rollup before matching
 
 ### Longer-term
