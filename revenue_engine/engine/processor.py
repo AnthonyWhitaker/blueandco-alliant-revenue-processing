@@ -38,7 +38,7 @@ from .constants import (
 from .db import execute_upsert, execute_insert_ignore, get_last_insert_id
 from .file_reader import read_supplier_file
 from .member_matcher import MemberMatcher
-from .normalizer import parse_date, first_of_month, get_quarter_label, parse_deposit_amount_from_filename
+from .normalizer import parse_date, first_of_month, get_quarter_label, parse_deposit_amount_from_filename, parse_date_from_filename
 from .payment_resolver import resolve_payment_id
 
 
@@ -216,6 +216,10 @@ def _run_pipeline(
             # Fall back to the identity hint for display purposes (review UI, logs)
             cust_name = entity_code_hint or account_id_hint or ""
         proc_date = parse_date(row.get(CANONICAL_PROCESS_DATE))
+        if not proc_date:
+            proc_date = parse_date_from_filename(
+                job.get("original_file_name") or ""
+            )
         city      = str(row.get(CANONICAL_CITY, "") or "").strip()
         state     = str(row.get(CANONICAL_STATE, "") or "").strip()
         zip_code  = str(row.get(CANONICAL_ZIP, "") or "").strip()

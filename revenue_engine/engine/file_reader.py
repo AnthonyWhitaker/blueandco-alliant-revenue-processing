@@ -58,19 +58,32 @@ def read_supplier_file(
     header_row = supplier_profile.get("header_row") or 0
     sheet_name = supplier_profile.get("sheet_name") or 0
     skip_col = supplier_profile.get("skip_rows_where_col_null")
+    max_read_columns = supplier_profile.get("max_read_columns")
 
     warnings: list[str] = []
+
+    # Build read kwargs
+    read_kwargs = dict(sheet_name=sheet_name, header=header_row, dtype=str)
+    # max_read_columns is a hint to avoid reading 16K stray-fill columns,
+    # but only applies if the file actually has that many columns — some
+    # months the file is narrower (e.g. Carolon Ledger_1/2 vs Ledger_3).
+    # We'll try with usecols first; if it fails, retry without.
+    _usecols = None
+    if max_read_columns:
+        _usecols = range(0, int(max_read_columns))
 
     # Read the raw file
     suffix = path.suffix.lower()
     if suffix in (".xlsx", ".xls", ".xlsm"):
         try:
-            df = pd.read_excel(
-                file_path,
-                sheet_name=sheet_name,
-                header=header_row,
-                dtype=str,
-            )
+            kw = {**read_kwargs, "usecols": _usecols} if _usecols else read_kwargs
+            try:
+                df = pd.read_excel(file_path, **kw)
+            except ValueError as e:
+                if _usecols and "out-of-bounds" in str(e):
+                    df = pd.read_excel(file_path, **read_kwargs)
+                else:
+                    raise
         except Exception as e:
             raise ValueError(f"Cannot read Excel file: {e}") from e
     elif suffix == ".csv":

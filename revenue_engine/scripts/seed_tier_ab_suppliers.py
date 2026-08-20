@@ -205,6 +205,35 @@ SUPPLIERS = [
             ("Admin Fee $",          "fee_amount",       True),
         ],
     },
+    {
+        "profile": dict(
+            name="Carolon",
+            description="Carolon — supplier rebate ledger. Column layout is "
+                        "non-standard: the header labels 'Total Revenue' and "
+                        "'Volume' are swapped (D=volume, C=blank), and the "
+                        "actual admin fee sits in an unlabelled trailing column "
+                        "(U, pandas 'Unnamed: 20') = volume × rate. The "
+                        "'Contract ID' column is really the PEC/entity code. "
+                        "max_read_columns=22 avoids reading 16K stray-fill "
+                        "columns on some files.",
+            contract_id="AL-NS-008",
+            revenue_type="Admin Fee",
+            keep_return_default="Keep",
+            header_row=0,
+            sheet_name=None,
+            skip_rows_where_col_null="Unnamed: 20",
+            payor_filter_name="Carolon",
+            max_read_columns=22,
+        ),
+        "column_map": [
+            ("Facility ID",   "customer_name",     True),
+            ("Contract ID",   "entity_code_hint",  True),
+            ("Volume",        "contract_number",   False),
+            ("Total Revenue", "sales_amount",      False),
+            ("Unnamed: 19",   "product_line",      False),
+            ("Unnamed: 20",   "fee_amount",        True),
+        ],
+    },
 ]
 
 
@@ -217,21 +246,23 @@ def seed_supplier(conn, definition: dict) -> int:
             name, description, contract_id,
             revenue_type, keep_return_default,
             header_row, sheet_name,
-            skip_rows_where_col_null,
+            skip_rows_where_col_null, max_read_columns,
             payment_id_source, payor_filter_name
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ledger', ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ledger', ?)
         ON CONFLICT(name) DO UPDATE SET
             description               = excluded.description,
             contract_id               = excluded.contract_id,
             skip_rows_where_col_null  = excluded.skip_rows_where_col_null,
+            max_read_columns          = excluded.max_read_columns,
             payor_filter_name         = excluded.payor_filter_name,
             updated_at                = CURRENT_TIMESTAMP
         """,
         (
-            p["name"], p["description"], p["contract_id"],
+            p["name"], p["description"], p.get("contract_id"),
             p["revenue_type"], p["keep_return_default"],
-            p["header_row"], p["sheet_name"],
+            p["header_row"], p.get("sheet_name"),
             p["skip_rows_where_col_null"],
+            p.get("max_read_columns"),
             p["payor_filter_name"],
         ),
     )

@@ -62,8 +62,6 @@ resource newSqlServer 'Microsoft.Sql/servers@2023-05-01-preview' = if (existingS
   }
 }
 
-var sqlServerRef = existingSqlServerName != '' ? existingSqlServer : newSqlServer
-
 resource sqlFirewall 'Microsoft.Sql/servers/firewallRules@2023-05-01-preview' = if (existingSqlServerName == '') {
   parent: newSqlServer
   name: 'AllowAzureServices'
@@ -73,12 +71,25 @@ resource sqlFirewall 'Microsoft.Sql/servers/firewallRules@2023-05-01-preview' = 
   }
 }
 
-resource revenueDb 'Microsoft.Sql/servers/databases@2023-05-01-preview' = {
-  parent: sqlServerRef
+// "parent" must be a direct reference to a resource symbol, not a variable
+// that conditionally resolves to one of two resources — so the database is
+// declared twice, once per branch, each parented directly.
+resource revenueDbOnExisting 'Microsoft.Sql/servers/databases@2023-05-01-preview' = if (existingSqlServerName != '') {
+  parent: existingSqlServer
   name: 'alliant_revenue'
   location: location
   sku: { name: 'S0', tier: 'Standard' }
 }
+
+resource revenueDbOnNew 'Microsoft.Sql/servers/databases@2023-05-01-preview' = if (existingSqlServerName == '') {
+  parent: newSqlServer
+  name: 'alliant_revenue'
+  location: location
+  sku: { name: 'S0', tier: 'Standard' }
+}
+
+var sqlServerFqdn = existingSqlServerName != '' ? existingSqlServer.properties.fullyQualifiedDomainName : newSqlServer.properties.fullyQualifiedDomainName
+var databaseName = existingSqlServerName != '' ? revenueDbOnExisting.name : revenueDbOnNew.name
 
 // --- Container Apps (reuse existing environment or create) ------------------
 
@@ -113,7 +124,7 @@ var envId = existingEnvironmentName != '' ? existingEnv.id : newEnv.id
 
 // --- Secrets & connection strings ------------------------------------------
 
-var sqlConnString = 'Driver={ODBC Driver 18 for SQL Server};Server=tcp:${sqlServerRef.properties.fullyQualifiedDomainName},1433;Database=${revenueDb.name};Uid=${sqlAdminLogin};Pwd=${sqlAdminPassword};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30'
+var sqlConnString = 'Driver={ODBC Driver 18 for SQL Server};Server=tcp:${sqlServerFqdn},1433;Database=${databaseName};Uid=${sqlAdminLogin};Pwd=${sqlAdminPassword};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30'
 
 var appSecrets = concat(
   [
@@ -171,5 +182,5 @@ resource revenueApp 'Microsoft.App/containerApps@2024-03-01' = {
 }
 
 output appUrl string = 'https://${revenueApp.properties.configuration.ingress.fqdn}'
-output sqlServerFqdn string = sqlServerRef.properties.fullyQualifiedDomainName
-output databaseName string = revenueDb.name
+output sqlServerFqdn string = sqlServerFqdn
+output databaseName string = databaseName

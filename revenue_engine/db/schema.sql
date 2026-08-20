@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS supplier_profile (
     header_row              INTEGER NOT NULL DEFAULT 0,    -- 0-based row index for header
     sheet_name              TEXT,                          -- NULL = first sheet
     skip_rows_where_col_null TEXT,                         -- strip summary rows (e.g., "JDE Customer Number")
+    max_read_columns        INTEGER,                       -- limit columns read (e.g. 22 for Carolon's wide stray-fill files)
     -- Payment ID resolution
     payment_id_source       TEXT NOT NULL DEFAULT 'ledger', -- 'ledger' | 'manual' | 'column'
     payor_filter_name       TEXT,                          -- name to filter ledger on (e.g., "Guerbet")

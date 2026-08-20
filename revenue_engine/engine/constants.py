@@ -24,12 +24,13 @@ CANONICAL_CONTRACT_NUMBER   = "contract_number"
 CANONICAL_ENTITY_CODE_HINT  = "entity_code_hint"
 CANONICAL_ACCOUNT_ID_HINT   = "account_id_hint"
 
-# fee_amount and process_date are always required. Customer identity can be
-# established via customer_name, jde_number, OR one of the exact-match hints
-# above — at least one of REQUIRED_IDENTITY_FIELDS_ANY must be present.
+# fee_amount is always required from the file. process_date can be omitted
+# from the file if the filename carries a date (e.g. Carolon) — the
+# processor falls back to parse_date_from_filename(). Customer identity can
+# be established via customer_name, jde_number, OR one of the exact-match
+# hints above — at least one of REQUIRED_IDENTITY_FIELDS_ANY must be present.
 REQUIRED_CANONICAL_FIELDS = [
     CANONICAL_FEE_AMOUNT,
-    CANONICAL_PROCESS_DATE,
 ]
 REQUIRED_IDENTITY_FIELDS_ANY = [
     CANONICAL_CUSTOMER_NAME,

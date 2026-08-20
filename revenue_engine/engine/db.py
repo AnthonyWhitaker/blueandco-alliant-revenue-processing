@@ -177,7 +177,19 @@ def init_db(db_path: Optional[str] = None):
             conn.execute(schema_sql)
         conn.commit()
 
+    # Lightweight schema migrations for existing databases
+    _safe_add_column(conn, "supplier_profile", "max_read_columns", "INTEGER")
+
     return conn
+
+
+def _safe_add_column(conn, table: str, column: str, col_type: str) -> None:
+    """Add a column to a table if it doesn't already exist (SQLite only)."""
+    try:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+        conn.commit()
+    except Exception:
+        pass  # column already exists
 
 
 # ---------------------------------------------------------------------------
