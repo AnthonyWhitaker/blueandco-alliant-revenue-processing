@@ -221,7 +221,7 @@ SUPPLIERS = [
             keep_return_default="Keep",
             header_row=0,
             sheet_name=None,
-            skip_rows_where_col_null="Unnamed: 20",
+            skip_rows_where_col_null="Facility ID",
             payor_filter_name="Carolon",
             max_read_columns=22,
         ),
