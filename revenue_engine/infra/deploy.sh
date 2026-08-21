@@ -220,6 +220,9 @@ cleanup_firewall() {
 }
 trap cleanup_firewall EXIT
 
+echo "Pulling latest image (avoid stale local cache)..."
+docker pull "$APP_IMAGE"
+
 echo "Running schema init + seed..."
 docker run --rm \
     -e AZURE_SQL_CONNECTION_STRING="$SQL_CONN" \
