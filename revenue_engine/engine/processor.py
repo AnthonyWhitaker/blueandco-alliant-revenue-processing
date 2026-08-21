@@ -193,7 +193,14 @@ def _run_pipeline(
             return f"aid:{aid}"
         ec = row_series.get(CANONICAL_ENTITY_CODE_HINT)
         if pd.notna(ec) and str(ec).strip():
-            return f"ec:{ec}"
+            # Some supplier files (e.g. Bon Secours) reuse the same entity
+            # code across multiple distinct facility names, so the hint
+            # alone is not a safe cache key on its own — fold in name/state
+            # too, otherwise the first row's (possibly unmatched) fuzzy
+            # result gets wrongly reused for every other name sharing the code.
+            name = row_series.get(CANONICAL_CUSTOMER_NAME, "")
+            state = row_series.get(CANONICAL_STATE, "")
+            return f"ec:{ec}|{name}|{state}"
         return f"name:{row_series.get(CANONICAL_CUSTOMER_NAME, '')}"
 
     # ------------------------------------------------------------------

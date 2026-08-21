@@ -192,17 +192,29 @@ Verified against real raw ledgers in `2026 Original/2026 Complete`
 (`scripts/test_tier_ab_suppliers.py`): Zier, Harbinger Medical, Propio, and
 Medegen reconcile to the penny. Viscot reconciles within ~2–5%. Electro
 Medical needs review-queue tuning (~70% match rate on one sample file).
-**Bon Secours does not yet reconcile** — its `Admin_Fee` column sums to
-roughly 3–4x the actual deposit; the December 2025 sample shows
-`FBO Fee Share` (`Admin_Fee × 55%`) divided by ~2 equals the deposit almost
-exactly, but this split has not been confirmed with Brandi and is **not**
-implemented — do not book Bon Secours revenue from this engine until that's
-verified.
+**Bon Secours fee formula confirmed by Brandi**: revenue = `FBO Fee Share`
+column (= `Admin_Fee × FBO Fee Share %`), mapped straight to `fee_amount`
+(`scripts/test_bon_secours.py`). The December 2025 sample
+(`Bon Secours 2025.12.09 132275.03 Ledger.xlsx`) sums to the $132,275.03
+deposit almost exactly once the trailing grand-total row (no `Facility_Name`)
+is excluded. **Match rate is not yet good enough to book from**: 717/994
+rows matched (~86% of dollars) on that sample. The file has no
+city/zip — only a `St` column — so unmatched facilities fall through to
+state-only fuzzy matching, which can't disambiguate facilities that share a
+name across a state (e.g. multiple "University Medical Center"s). Fixed
+along the way: a `MemberMatcher` row-cache bug in `processor.py` where the
+per-row match cache was keyed on `entity_code_hint` alone; Bon Secours
+reuses the same Alliant entity code across several *different* facility
+names, so the first (possibly unmatched) fuzzy result for a code was being
+wrongly reused for every other row sharing it. Cache key now also folds in
+customer name + state — verified no regression on Guerbet/Carolon.
+Remaining Bon Secours gap needs alias curation via the review queue (same
+pattern as the Electro Medical near-misses below), not a formula fix.
 
 ## Known Issues / Future Work
 
 ### Immediate
-- [ ] Confirm the Bon Secours fee-share calculation with Brandi before onboarding it for real (see above)
+- [ ] Bon Secours: alias/review-queue triage to close the ~14% unmatched-dollar gap (see above) — fee formula itself is confirmed and implemented
 - [ ] Electro Medical match rate needs review-queue triage / threshold tuning
 - [ ] The two recurring Guerbet unmatched customers (JDE 854488, 766089) — fixed via `seed_guerbet.py` known-alias linking (now resolves by entity code instead of a broken heuristic); a 3rd/4th customer (PEC 825384, TX0238) still needs manual review per month
 - [ ] Payment ID column-based resolution (for suppliers that include it in the file) is implemented but untested

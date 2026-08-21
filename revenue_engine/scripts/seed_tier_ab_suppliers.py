@@ -87,11 +87,17 @@ SUPPLIERS = [
             keep_return_default="Keep",
             header_row=0,
             sheet_name=None,
-            skip_rows_where_col_null="Admin_Fee",
+            skip_rows_where_col_null="Facility_Name",
             payor_filter_name="Bon Secours",
         ),
         # Header names vary slightly month to month — both variants are mapped;
         # file_reader.py silently ignores whichever set isn't present in a given file.
+        # Fee formula confirmed by Brandi: Alliant money paid = FBO Fee Share =
+        # Admin_Fee x FBO Fee Share %. The file already carries the pre-computed
+        # "FBO Fee Share" column, so that is mapped straight to fee_amount rather
+        # than recomputing from Admin_Fee (which also avoids the trailing
+        # grand-total row, which has no Facility_Name and is dropped by
+        # skip_rows_where_col_null, but does have a non-null Admin_Fee).
         "column_map": [
             ("Entity_Code",           "entity_code_hint", False),
             ("Facility Entity Code",  "entity_code_hint", False),
@@ -105,8 +111,8 @@ SUPPLIERS = [
             ("Earned Period",         "process_date",     True),
             ("Total Sales",           "sales_amount",     False),
             ("Sales",                 "sales_amount",     False),
-            ("Admin_Fee",             "fee_amount",       True),
-            ("Admin Fee",             "fee_amount",       True),
+            ("FBO Fee Share",         "fee_amount",       True),
+            ("FBO Fee Share $",       "fee_amount",       True),
         ],
     },
     {
