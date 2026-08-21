@@ -188,19 +188,22 @@ trap cleanup_firewall EXIT
 
 echo "Running schema init + seed..."
 docker run --rm \
+    --entrypoint python \
     -e AZURE_SQL_CONNECTION_STRING="$SQL_CONN" \
     "$APP_IMAGE" \
-    python -c "from engine.db import init_db; init_db(); print('Schema OK')"
+    -c "from engine.db import init_db; init_db(); print('Schema OK')"
 
 docker run --rm \
+    --entrypoint python \
     -e AZURE_SQL_CONNECTION_STRING="$SQL_CONN" \
     "$APP_IMAGE" \
-    python scripts/seed_guerbet.py
+    scripts/seed_guerbet.py
 
 docker run --rm \
+    --entrypoint python \
     -e AZURE_SQL_CONNECTION_STRING="$SQL_CONN" \
     "$APP_IMAGE" \
-    python scripts/seed_tier_ab_suppliers.py
+    scripts/seed_tier_ab_suppliers.py
 
 echo "Database bootstrapped."
 
