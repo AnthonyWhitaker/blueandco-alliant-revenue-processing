@@ -34,20 +34,27 @@ ACR_SUFFIX=$(printf "%06d" $((RANDOM % 1000000)))
 ACR_NAME="${ACR_NAME:-revreg${ACR_SUFFIX}}"
 
 step() {
+    local n=$1 total=$2 msg=$3
     echo ""
-    echo "[$1/6] $2"
+    echo -e "\033[36m[$n/$total] $msg\033[0m"
 }
+
+green()  { echo -e "\033[32m$*\033[0m"; }
+yellow() { echo -e "\033[33m$*\033[0m"; }
 
 # -----------------------------------------------------------------------
 # PRE-FLIGHT
 # -----------------------------------------------------------------------
 echo ""
-echo "========================================================="
-echo " Alliant Revenue Engine - Azure Deployment"
-echo "========================================================="
-echo " Resource group : $RESOURCE_GROUP"
-echo " Location       : $LOCATION"
-echo " Name prefix    : $NAME_PREFIX"
+green "========================================================="
+green " Alliant Revenue Engine - Azure Deployment"
+green "========================================================="
+echo " Resource group     : $RESOURCE_GROUP"
+echo " Location           : $LOCATION"
+echo " Name prefix        : $NAME_PREFIX"
+echo " ACR candidate      : $ACR_NAME  (reuses existing ACR if found)"
+echo " Existing SQL server: ${EXISTING_SQL_SERVER:-<none - will create new>}"
+echo " Existing environment: ${EXISTING_ENVIRONMENT:-<none - will create new>}"
 echo ""
 
 if [ ! -f "infra/main.bicep" ]; then
@@ -60,11 +67,21 @@ if ! command -v az >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! AZ_ACCOUNT_NAME=$(az account show --query user.name -o tsv 2>/dev/null); then
+if ! command -v docker >/dev/null 2>&1; then
+    echo "ERROR: Docker CLI not found. Install Docker and make sure it is running." >&2
+    exit 1
+fi
+
+AZ_ACCOUNT_NAME=$(az account show --query 'user.name' --output tsv 2>/dev/null || true)
+AZ_SUB_NAME=$(az account show --query 'name' --output tsv 2>/dev/null || true)
+AZ_SUB_ID=$(az account show --query 'id' --output tsv 2>/dev/null || true)
+
+if [ -z "$AZ_ACCOUNT_NAME" ]; then
     echo "ERROR: Not logged in to Azure. Run: az login" >&2
     exit 1
 fi
 echo "Azure account  : $AZ_ACCOUNT_NAME"
+echo "Subscription   : $AZ_SUB_NAME ($AZ_SUB_ID)"
 
 SQL_LOGIN="pdnadmin"
 if [ -z "${SQL_ADMIN_PASSWORD:-}" ]; then
@@ -76,7 +93,7 @@ SQL_PASSWORD="$SQL_ADMIN_PASSWORD"
 # -----------------------------------------------------------------------
 # STEP 1 - Resource group
 # -----------------------------------------------------------------------
-step 1 "Resource group"
+step 1 6 "Resource group"
 RG_EXISTS=$(az group exists --name "$RESOURCE_GROUP")
 if [ "$RG_EXISTS" = "false" ]; then
     echo "Creating resource group '$RESOURCE_GROUP'..."
@@ -88,7 +105,7 @@ fi
 # -----------------------------------------------------------------------
 # STEP 2 - Azure Container Registry
 # -----------------------------------------------------------------------
-step 2 "Azure Container Registry"
+step 2 6 "Azure Container Registry"
 
 EXISTING_ACR=$(az acr list --resource-group "$RESOURCE_GROUP" --query '[0].name' -o tsv 2>/dev/null || true)
 if [ -n "$EXISTING_ACR" ]; then
@@ -110,7 +127,7 @@ echo "$ACR_PASSWORD" | docker login "$ACR_LOGIN_SERVER" -u "$ACR_USERNAME" --pas
 # -----------------------------------------------------------------------
 # STEP 3 - Build and push Docker image
 # -----------------------------------------------------------------------
-step 3 "Build and push Docker image"
+step 3 6 "Build and push Docker image (ACR Tasks - built in Azure)"
 
 APP_IMAGE="${ACR_LOGIN_SERVER}/revenue-engine:latest"
 echo "Building image $APP_IMAGE in Azure..."
@@ -119,7 +136,7 @@ az acr build --registry "$ACR_NAME" --image "revenue-engine:latest" --file Docke
 # -----------------------------------------------------------------------
 # STEP 4 - Bicep deployment
 # -----------------------------------------------------------------------
-step 4 "Azure infrastructure via Bicep"
+step 4 6 "Azure infrastructure via Bicep (~3-5 min)"
 
 TEMP_PARAMS=$(mktemp /tmp/rev-params-XXXXXX.json)
 cat > "$TEMP_PARAMS" <<EOF
@@ -143,18 +160,35 @@ EOF
 cleanup_params() { rm -f "$TEMP_PARAMS"; }
 trap cleanup_params EXIT
 
-BICEP_OUT=$(az deployment group create \
+DEPLOYMENT_NAME="rev-deploy-$(date +%Y%m%d%H%M%S)"
+
+az deployment group create \
     --resource-group "$RESOURCE_GROUP" \
+    --name "$DEPLOYMENT_NAME" \
     --template-file infra/main.bicep \
     --parameters "@$TEMP_PARAMS" \
-    --output json)
+    --output none
 
 cleanup_params
 trap - EXIT
 
-APP_URL=$(echo "$BICEP_OUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['properties']['outputs']['appUrl']['value'])")
-SQL_FQDN=$(echo "$BICEP_OUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['properties']['outputs']['sqlServerFqdn']['value'])")
-DB_NAME=$(echo "$BICEP_OUT" | python3 -c "import json,sys; print(json.load(sys.stdin)['properties']['outputs']['databaseName']['value'])")
+APP_URL=$(az deployment group show \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$DEPLOYMENT_NAME" \
+    --query 'properties.outputs.appUrl.value' \
+    --output tsv)
+
+SQL_FQDN=$(az deployment group show \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$DEPLOYMENT_NAME" \
+    --query 'properties.outputs.sqlServerFqdn.value' \
+    --output tsv)
+
+DB_NAME=$(az deployment group show \
+    --resource-group "$RESOURCE_GROUP" \
+    --name "$DEPLOYMENT_NAME" \
+    --query 'properties.outputs.databaseName.value' \
+    --output tsv)
 
 echo "Infrastructure provisioned."
 echo "App URL: $APP_URL"
@@ -162,7 +196,7 @@ echo "App URL: $APP_URL"
 # -----------------------------------------------------------------------
 # STEP 5 - Bootstrap database
 # -----------------------------------------------------------------------
-step 5 "Database bootstrap + seed"
+step 5 6 "Database bootstrap + seed"
 
 SQL_CONN="Driver={ODBC Driver 18 for SQL Server};Server=tcp:${SQL_FQDN},1433;Database=${DB_NAME};Uid=${SQL_LOGIN};Pwd=${SQL_PASSWORD};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30"
 
@@ -188,22 +222,19 @@ trap cleanup_firewall EXIT
 
 echo "Running schema init + seed..."
 docker run --rm \
-    --entrypoint python \
     -e AZURE_SQL_CONNECTION_STRING="$SQL_CONN" \
     "$APP_IMAGE" \
-    -c "from engine.db import init_db; init_db(); print('Schema OK')"
+    python -c "from engine.db import init_db; init_db(); print('Schema OK')"
 
 docker run --rm \
-    --entrypoint python \
     -e AZURE_SQL_CONNECTION_STRING="$SQL_CONN" \
     "$APP_IMAGE" \
-    scripts/seed_guerbet.py
+    python scripts/seed_guerbet.py
 
 docker run --rm \
-    --entrypoint python \
     -e AZURE_SQL_CONNECTION_STRING="$SQL_CONN" \
     "$APP_IMAGE" \
-    scripts/seed_tier_ab_suppliers.py
+    python scripts/seed_tier_ab_suppliers.py
 
 echo "Database bootstrapped."
 
@@ -213,22 +244,22 @@ trap - EXIT
 # -----------------------------------------------------------------------
 # STEP 6 - Summary
 # -----------------------------------------------------------------------
-step 6 "Deployment complete"
+step 6 6 "Deployment complete"
 
 echo ""
-echo "========================================================="
-echo " DEPLOYMENT COMPLETE"
-echo "========================================================="
+green "========================================================="
+green " DEPLOYMENT COMPLETE"
+green "========================================================="
 echo ""
 echo "  App URL        : $APP_URL"
 echo "  SQL Server     : $SQL_FQDN"
 echo "  Database       : $DB_NAME"
 echo "  ACR            : $ACR_LOGIN_SERVER"
 echo ""
-echo "SAVE THESE CREDENTIALS:"
+yellow "SAVE THESE CREDENTIALS:"
 echo "  SQL login      : $SQL_LOGIN"
 echo "  SQL password   : (from \$SQL_ADMIN_PASSWORD)"
 echo "  ACR username   : $ACR_USERNAME"
 echo ""
-echo "NOTE: Restrict access via IP allowlist or Easy Auth before sharing."
+yellow "NOTE: Restrict access via IP allowlist or Easy Auth before sharing."
 echo ""
