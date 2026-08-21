@@ -30,16 +30,19 @@ from .constants import (
     CANONICAL_CONTRACT_NUMBER, CANONICAL_ENTITY_CODE_HINT, CANONICAL_ACCOUNT_ID_HINT,
     STATUS_PROCESSING, STATUS_COMPLETED, STATUS_FAILED, STATUS_NEEDS_REVIEW,
     ROW_MATCHED, ROW_UNMATCHED, ROW_ALIAS_MATCHED,
-    MATCH_UNMATCHED, MATCH_JDE_HISTORY, MATCH_ALIAS,
+    MATCH_UNMATCHED, MATCH_JDE_HISTORY, MATCH_ALIAS, MATCH_PIVOT_ALLOCATION,
     EXC_UNMATCHED_CUSTOMER, EXC_PAYMENT_NOT_FOUND,
     EXC_REVENUE_MISMATCH, EXC_PROCESSING_ERROR,
-    REVIEW_PENDING,
+    EXC_EXTRACTION_NOT_FOUND, EXC_ALLOCATION_INCOMPLETE,
+    REVIEW_PENDING, JOB_TYPE_PIVOT_ALLOCATION,
 )
 from .db import execute_upsert, execute_insert_ignore, get_last_insert_id
 from .file_reader import read_supplier_file
 from .member_matcher import MemberMatcher
 from .normalizer import parse_date, first_of_month, get_quarter_label, parse_deposit_amount_from_filename, parse_date_from_filename
 from .payment_resolver import resolve_payment_id
+from .pivot_extractor import extract_totals, ExtractionError
+from .allocation_engine import allocate, AllocationError
 
 
 def _safe_float(val) -> Optional[float]:
@@ -94,6 +97,8 @@ def process_job(
     conn.commit()
 
     try:
+        if supplier.get("job_type") == JOB_TYPE_PIVOT_ALLOCATION:
+            return _run_pivot_allocation_pipeline(conn, job, supplier, file_path, manual_payment_id)
         return _run_pipeline(conn, job, supplier, file_path, manual_payment_id)
     except Exception as e:
         conn.execute(
@@ -358,6 +363,181 @@ def _run_pipeline(
         "deposit_amount":   deposit_amount,
         "payment_id":       payment_id,
         "payment_id_source": pid_source,
+    }
+
+
+def _run_pivot_allocation_pipeline(
+    conn: object,
+    job: dict,
+    supplier: dict,
+    file_path: str,
+    manual_payment_id: Optional[str],
+) -> dict:
+    """
+    Tier C pipeline for supplier_profile.job_type = 'pivot_allocation':
+    aggregate/pivot workpapers with no facility-level rows. Extracts one or
+    more dollar totals (supplier_extraction_rule) and allocates each to
+    pre-known facilities (supplier_allocation_rule) instead of running
+    MemberMatcher. Produces the same revenue_row / revenue_output_row shapes
+    as the row-level pipeline so export/ledger-linking/Admin views work
+    unmodified.
+    """
+    job_id = job["id"]
+    supplier_id = supplier["id"]
+
+    # ------------------------------------------------------------------
+    # Step 1: Resolve Payment ID (identical to row-level pipeline)
+    # ------------------------------------------------------------------
+    payment_id, deposit_amount, pid_source = resolve_payment_id(
+        conn=conn,
+        supplier_profile_id=supplier_id,
+        filename=job.get("original_file_name") or Path(file_path).name,
+        payor_filter=supplier.get("payor_filter_name"),
+        manual_payment_id=manual_payment_id or job.get("payment_id"),
+    )
+    if not payment_id:
+        _job_log(
+            conn, job_id, EXC_PAYMENT_NOT_FOUND,
+            f"Could not resolve Payment ID from ledger for deposit amount "
+            f"{deposit_amount}. Set manually in job record.",
+            "warning",
+        )
+    conn.execute(
+        "UPDATE revenue_job SET payment_id = ?, payment_id_source = ?, deposit_amount = ? WHERE id = ?",
+        (payment_id, pid_source, deposit_amount, job_id),
+    )
+    conn.commit()
+
+    # ------------------------------------------------------------------
+    # Step 2: Extract totals from the pivot/summary sheet
+    # ------------------------------------------------------------------
+    extraction = extract_totals(file_path, supplier_id, conn)
+    for w in extraction.warnings:
+        _job_log(conn, job_id, EXC_EXTRACTION_NOT_FOUND, w, "error")
+
+    if extraction.manual_entry_rules:
+        for name in extraction.manual_entry_rules:
+            _job_log(
+                conn, job_id, EXC_EXTRACTION_NOT_FOUND,
+                f"Extraction rule {name!r} is configured as manual_entry — "
+                f"a reviewer must enter the confirmed total before this job can complete.",
+                "warning",
+            )
+
+    # ------------------------------------------------------------------
+    # Step 3: Allocate each extracted total to its configured facilities
+    # ------------------------------------------------------------------
+    allocations, alloc_warnings = [], []
+    if extraction.values:
+        try:
+            allocations, alloc_warnings = allocate(
+                conn, supplier_id, extraction.values, extraction.is_sales_amount
+            )
+        except AllocationError as e:
+            _job_log(conn, job_id, EXC_ALLOCATION_INCOMPLETE, str(e), "error")
+    for w in alloc_warnings:
+        _job_log(conn, job_id, EXC_ALLOCATION_INCOMPLETE, w, "warning")
+
+    # ------------------------------------------------------------------
+    # Step 4: Persist one synthetic revenue_row per allocation
+    # ------------------------------------------------------------------
+    process_date = job.get("date_received") or date.today().replace(day=1)
+    row_num = 0
+    for a in allocations:
+        row_num += 1
+        member = conn.execute("SELECT * FROM member WHERE id = ?", (a.member_id,)).fetchone()
+        if not member:
+            _job_log(
+                conn, job_id, EXC_ALLOCATION_INCOMPLETE,
+                f"Allocation for {a.extraction_rule_name!r} references member_id={a.member_id}, "
+                f"which no longer exists in the member table — skipped.",
+                "error",
+            )
+            continue
+        member = dict(member)
+        raw_json = json.dumps(
+            {"extraction_rule_name": a.extraction_rule_name, "amount": a.amount, **extraction.values},
+            default=str,
+        )
+        conn.execute(
+            """
+            INSERT INTO revenue_row (
+                job_id, row_number, raw_row_json,
+                customer_name, process_date,
+                sales_amount, fee_amount, product_line, contract_number,
+                matched_member_id, match_method, match_score,
+                entity_code, account_id, account_name_db,
+                match_status, validation_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                job_id, row_num, raw_json,
+                member["name"], process_date,
+                a.amount if a.is_sales_amount else None,
+                None if a.is_sales_amount else a.amount,
+                a.product_line, a.contract_number or supplier.get("contract_id"),
+                member["id"], MATCH_PIVOT_ALLOCATION, 100,
+                member["entity_code"], member["account_id"], member["name"],
+                ROW_MATCHED, "valid",
+            ),
+        )
+    conn.commit()
+
+    # ------------------------------------------------------------------
+    # Step 5: Aggregate → revenue_output_row (reuses the row-level function)
+    # ------------------------------------------------------------------
+    total_revenue, total_volume = _aggregate_output(conn, job_id, job, supplier, payment_id)
+
+    # ------------------------------------------------------------------
+    # Step 6: Revenue reconciliation check (identical to row-level pipeline)
+    # ------------------------------------------------------------------
+    if deposit_amount and total_revenue:
+        diff = abs(total_revenue - deposit_amount)
+        if diff > 1.00:
+            _job_log(
+                conn, job_id, EXC_REVENUE_MISMATCH,
+                f"Total allocated revenue ${total_revenue:.2f} differs from "
+                f"deposit amount ${deposit_amount:.2f} by ${diff:.2f}.",
+                "warning",
+            )
+
+    # ------------------------------------------------------------------
+    # Step 7: Finalize job status
+    # ------------------------------------------------------------------
+    has_open_exceptions = bool(extraction.warnings or extraction.manual_entry_rules or alloc_warnings)
+    needs_confirmation = bool(supplier.get("requires_manual_confirmation"))
+    final_status = STATUS_NEEDS_REVIEW if (has_open_exceptions or needs_confirmation) else STATUS_COMPLETED
+
+    conn.execute(
+        """
+        UPDATE revenue_job SET
+            status = ?, matched_count = ?, unmatched_count = ?,
+            total_volume = ?, total_revenue = ?,
+            earned_period_start = ?, earned_period_end = ?,
+            completed_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+        """,
+        (
+            final_status, len(allocations), 0,
+            total_volume, total_revenue,
+            process_date, process_date,
+            job_id,
+        ),
+    )
+    conn.commit()
+
+    return {
+        "job_id":           job_id,
+        "status":           final_status,
+        "row_count":        len(allocations),
+        "matched_count":    len(allocations),
+        "unmatched_count":  0,
+        "total_volume":     total_volume,
+        "total_revenue":    total_revenue,
+        "deposit_amount":   deposit_amount,
+        "payment_id":       payment_id,
+        "payment_id_source": pid_source,
+        "extracted_values": extraction.values,
     }
 
 

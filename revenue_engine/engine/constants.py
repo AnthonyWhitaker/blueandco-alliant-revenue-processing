@@ -60,6 +60,31 @@ MATCH_NATIONWIDE    = "nationwide"
 MATCH_UNMATCHED     = "unmatched"
 MATCH_ENTITY_CODE   = "entity_code_exact"
 MATCH_ACCOUNT_ID    = "account_id_exact"
+MATCH_PIVOT_ALLOCATION = "pivot_allocation"
+
+# ---------------------------------------------------------------------------
+# Supplier job types (supplier_profile.job_type) — selects which pipeline
+# process_job() runs. Declarative dispatch only; never branch on supplier name.
+# ---------------------------------------------------------------------------
+JOB_TYPE_ROW_LEVEL       = "row_level"
+JOB_TYPE_PIVOT_ALLOCATION = "pivot_allocation"
+
+# ---------------------------------------------------------------------------
+# Extraction methods (supplier_extraction_rule.extraction_method)
+# ---------------------------------------------------------------------------
+EXTRACT_NAMED_CELL      = "named_cell"
+EXTRACT_LABEL_LOOKUP    = "label_lookup"
+EXTRACT_LABEL_RANGE_SUM = "label_range_sum"
+EXTRACT_COLUMN_SUM      = "column_sum"
+EXTRACT_FORMULA         = "formula"
+EXTRACT_MANUAL_ENTRY    = "manual_entry"
+
+# ---------------------------------------------------------------------------
+# Allocation types (supplier_allocation_rule.allocation_type)
+# ---------------------------------------------------------------------------
+ALLOC_PERCENT       = "percent"
+ALLOC_FIXED_AMOUNT  = "fixed_amount"
+ALLOC_REMAINDER     = "remainder"
 
 # ---------------------------------------------------------------------------
 # Job status values
@@ -98,6 +123,9 @@ EXC_PAYMENT_NOT_FOUND   = "payment_id_not_found"
 EXC_REVENUE_MISMATCH    = "revenue_reconciliation_mismatch"
 EXC_DATE_PARSE          = "date_parse_error"
 EXC_PROCESSING_ERROR    = "processing_error"
+EXC_EXTRACTION_NOT_FOUND  = "extraction_not_found"
+EXC_EXTRACTION_AMBIGUOUS  = "extraction_ambiguous"
+EXC_ALLOCATION_INCOMPLETE = "allocation_incomplete"
 
 # ---------------------------------------------------------------------------
 # Export artifact types

@@ -30,6 +30,15 @@ CREATE TABLE IF NOT EXISTS supplier_profile (
     -- Payment ID resolution
     payment_id_source       TEXT NOT NULL DEFAULT 'ledger', -- 'ledger' | 'manual' | 'column'
     payor_filter_name       TEXT,                          -- name to filter ledger on (e.g., "Guerbet")
+    -- Job type: which processing pipeline this supplier's files go through.
+    --   'row_level'        : one row per facility per period (MemberMatcher) — the default
+    --   'pivot_allocation'  : aggregate/pivot workpapers with no facility-level detail —
+    --                        extract totals (supplier_extraction_rule) and allocate to
+    --                        pre-known facilities (supplier_allocation_rule) instead of matching
+    job_type                TEXT NOT NULL DEFAULT 'row_level',
+    requires_manual_confirmation INTEGER NOT NULL DEFAULT 0,
+    -- 1 = job always lands in needs_review for a human sign-off even if extraction/
+    -- allocation succeeded cleanly (default true for pivot_allocation suppliers)
     created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -49,6 +58,73 @@ CREATE TABLE IF NOT EXISTS supplier_column_map (
     is_required             INTEGER NOT NULL DEFAULT 0,  -- 1=required, 0=optional
     created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(supplier_profile_id, source_column)
+);
+
+-- ---------------------------------------------------------------------------
+-- SUPPLIER EXTRACTION RULES  (Tier C — pivot_allocation job_type)
+-- Declares WHERE to find each dollar total in an arbitrarily-shaped pivot /
+-- summary workpaper. Generalization of supplier_column_map for suppliers
+-- with no facility-level rows to map columns against.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS supplier_extraction_rule (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_profile_id     INTEGER NOT NULL REFERENCES supplier_profile(id) ON DELETE CASCADE,
+    rule_name               TEXT NOT NULL,          -- label for this figure, e.g. "Total Rebate"
+    sheet_name              TEXT,                   -- NULL = first sheet
+    extraction_method       TEXT NOT NULL,
+    -- 'named_cell'      : fixed cell address, e.g. "E8"
+    -- 'label_lookup'     : find a cell matching label_text, read the value at a
+    --                      fixed (row, col) offset from it
+    -- 'label_range_sum'  : find a labeled column/row, sum numeric cells along it
+    --                      until a blank or stop_label_text is hit
+    -- 'column_sum'       : sum a fixed column (by index or letter) across all data rows
+    -- 'formula'          : simple +/-/* arithmetic referencing other rule_names
+    --                      already extracted this run (e.g. "Gross - Fees Withheld")
+    -- 'manual_entry'     : no automated parsing — a human enters the confirmed
+    --                      total in the Upload/Confirm UI (documented fallback
+    --                      for pivot layouts too irregular for the methods above)
+    cell_address            TEXT,                   -- for 'named_cell', e.g. "E8"
+    label_text              TEXT,                   -- for 'label_lookup' / 'label_range_sum'
+    label_match_mode        TEXT DEFAULT 'exact',    -- 'exact' | 'contains' | 'startswith' | 'fuzzy'
+    label_match_threshold   INTEGER DEFAULT 90,      -- used when label_match_mode='fuzzy'
+    value_row_offset        INTEGER DEFAULT 1,       -- rows below the matched label cell
+    value_col_offset        INTEGER DEFAULT 0,       -- columns right of the matched label cell
+    range_axis              TEXT DEFAULT 'column',   -- 'column' (sum downward) | 'row' (sum rightward), for label_range_sum
+    column_index            INTEGER,                 -- for 'column_sum' (0-based)
+    column_letter           TEXT,                    -- alt spec for 'column_sum', e.g. "F"
+    header_row              INTEGER DEFAULT 0,       -- for 'column_sum'
+    stop_label_text         TEXT,                    -- optional boundary for 'label_range_sum'
+    formula_expression      TEXT,                    -- for 'formula', e.g. "Gross - Fees Withheld"
+    is_sales_amount         INTEGER NOT NULL DEFAULT 0, -- 1 = feeds volume instead of fee_amount
+    sort_order              INTEGER NOT NULL DEFAULT 0,
+    created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(supplier_profile_id, rule_name)
+);
+
+-- ---------------------------------------------------------------------------
+-- SUPPLIER ALLOCATION RULES  (Tier C — pivot_allocation job_type)
+-- Declares WHO each extracted total belongs to: a fixed single facility, or a
+-- fixed split (percent / fixed-amount / remainder) across a small known set.
+-- member_id is resolved once at onboarding time against the same member
+-- master every other supplier matches against — Tier C never invents a
+-- parallel facility concept.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS supplier_allocation_rule (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_profile_id     INTEGER NOT NULL REFERENCES supplier_profile(id) ON DELETE CASCADE,
+    extraction_rule_name    TEXT NOT NULL,          -- which extracted total this allocates
+    member_id               INTEGER NOT NULL REFERENCES member(id),
+    allocation_type         TEXT NOT NULL DEFAULT 'percent',
+    -- 'percent'      : allocation_value is a percentage (0-100) of the total
+    -- 'fixed_amount' : allocation_value is a flat dollar amount
+    -- 'remainder'    : gets whatever is left after other rows for this
+    --                  extraction_rule_name are applied (at most one per rule_name)
+    allocation_value        REAL,                   -- NULL for 'remainder'
+    contract_number         TEXT,                   -- optional override of supplier_profile.contract_id
+    product_line            TEXT,
+    is_active               INTEGER NOT NULL DEFAULT 1,
+    created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(supplier_profile_id, extraction_rule_name, member_id)
 );
 
 -- ---------------------------------------------------------------------------

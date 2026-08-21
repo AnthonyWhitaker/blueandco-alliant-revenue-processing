@@ -23,6 +23,16 @@ def _normalize_col(name: str) -> str:
     return " ".join(str(name).strip().lower().split())
 
 
+def read_raw_grid(file_path: str, sheet_name: Optional[str] = None) -> pd.DataFrame:
+    """
+    Read a sheet with no header interpretation — every cell as a grid position
+    (row index, column index). Used by pivot_extractor.py for Tier C
+    aggregate/pivot workpapers, where headers/labels can be anywhere on the
+    sheet rather than a fixed header row.
+    """
+    return pd.read_excel(file_path, sheet_name=sheet_name or 0, header=None)
+
+
 def load_supplier_column_map(
     conn: object,
     supplier_profile_id: int,

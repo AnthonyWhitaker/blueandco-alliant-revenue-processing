@@ -211,6 +211,47 @@ customer name + state — verified no regression on Guerbet/Carolon.
 Remaining Bon Secours gap needs alias curation via the review queue (same
 pattern as the Electro Medical near-misses below), not a formula fix.
 
+## Tier C: Aggregate / Pivot-Workpaper Suppliers
+
+Some supplier files have **no facility-level rows at all** — just a lump-sum
+total (or a small pivot by region/contract) that a human has to manually
+split across facilities. `MemberMatcher` can't help with these, so they need
+a different job type, added generically (no per-supplier code):
+
+- `supplier_profile.job_type` (`row_level` default | `pivot_allocation`) —
+  the single dispatch point in `processor.py`.
+- `supplier_extraction_rule` — declares *where* the total(s) live in the
+  workpaper: `named_cell`, `label_lookup` (fuzzy/exact label search + row/col
+  offset), `label_range_sum` (sum a column/row until blank or a stop label),
+  `column_sum`, `formula` (whitelisted arithmetic over other rules' results),
+  or `manual_entry` as a documented fallback for one-off layouts.
+- `supplier_allocation_rule` — declares *who* gets the money: `percent`,
+  `fixed_amount`, or `remainder`, against the existing `member` table.
+- Implementation: `engine/pivot_extractor.py` + `engine/allocation_engine.py`.
+  Allocated amounts become synthetic `revenue_row` inserts, then the existing
+  `_aggregate_output()` / exporter / payment resolver run unchanged. Jobs
+  land in `needs_review` (or `supplier_profile.requires_manual_confirmation`)
+  for sign-off before export.
+
+Verified with `scripts/test_tier_c_engine.py`: a synthetic fixture exercises
+all 5 extraction methods plus percent/remainder allocation and reconciles
+exactly, and a real file (`Komet 2025.10.29 595.76 Ledger.xlsx`,
+`Alliant Rebate Summary` sheet, `label_lookup` on "Rebate $") extracts
+$595.7631, matching the deposit amount in the filename. No regression on
+Guerbet (same 286/287 baseline), Carolon ($1,219.79 exact), or Bon Secours
+(717/994, $114,258.96 — same as before).
+
+**Not yet done**: no real Tier C supplier is onboarded (extraction rules +
+allocation rules configured) yet, because *who* should receive each
+supplier's allocated dollars is a business fact, not something to guess —
+same lesson as the Bon Secours fee-formula mistake earlier this project.
+That needs Brandi's confirmation per supplier before seeding. Also, several
+suppliers on the original "Tier C" candidate list (Airgas, CME, WellLink)
+turned out on inspection to have facility-level detail sheets after all —
+they may only need Tier A/B column-map onboarding, not this pipeline;
+re-triage needed. `db/schema_mssql.sql` was not updated to mirror the new
+tables/columns (SQLite-only so far in this environment).
+
 ## Known Issues / Future Work
 
 ### Immediate
@@ -218,9 +259,11 @@ pattern as the Electro Medical near-misses below), not a formula fix.
 - [ ] Electro Medical match rate needs review-queue triage / threshold tuning
 - [ ] The two recurring Guerbet unmatched customers (JDE 854488, 766089) — fixed via `seed_guerbet.py` known-alias linking (now resolves by entity code instead of a broken heuristic); a 3rd/4th customer (PEC 825384, TX0238) still needs manual review per month
 - [ ] Payment ID column-based resolution (for suppliers that include it in the file) is implemented but untested
+- [ ] Onboard a real Tier C supplier (extraction + allocation rules) once Brandi confirms allocation targets — Komet is the leading candidate (extraction already verified against a real file)
+- [ ] Re-triage Airgas / CME / WellLink — they have facility-level detail sheets, may belong in Tier A/B instead of Tier C
+- [ ] Mirror the new `supplier_profile` columns and `supplier_extraction_rule`/`supplier_allocation_rule` tables into `db/schema_mssql.sql` before any Azure SQL deployment
 
 ### Near-term
-- [ ] Tier C suppliers (aggregate workpapers with no facility-level rows — Airgas, Aramark, CME, Komet, McKesson, Amerisource, etc.) need a different "manual allocation" job type; the matcher can't help with these
 - [ ] Carolon needs its own onboarding pass — its raw "Contract ID" column is actually a facility code, not the real Salesforce Contract ID, so a straight column-map won't work
 - [ ] Batch processing: watch a folder and auto-process new files
 - [ ] Medline support: item-level rows needing heavy rollup before matching
