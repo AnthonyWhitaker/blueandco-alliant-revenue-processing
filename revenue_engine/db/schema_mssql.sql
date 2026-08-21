@@ -308,7 +308,7 @@ BEGIN
     CREATE TABLE exception (
         id                      INT IDENTITY(1,1) PRIMARY KEY,
         job_id                  INT NOT NULL REFERENCES revenue_job(id) ON DELETE CASCADE,
-        row_id                  INT REFERENCES revenue_row(id) ON DELETE SET NULL,
+        row_id                  INT REFERENCES revenue_row(id),
         exception_type          NVARCHAR(500) NOT NULL,
         message                 NVARCHAR(MAX) NOT NULL,
         severity                NVARCHAR(500) NOT NULL DEFAULT 'warning',
