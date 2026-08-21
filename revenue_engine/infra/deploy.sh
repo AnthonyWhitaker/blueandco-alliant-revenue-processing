@@ -193,6 +193,21 @@ DB_NAME=$(az deployment group show \
 echo "Infrastructure provisioned."
 echo "App URL: $APP_URL"
 
+# Container Apps only creates a new revision when the template changes.
+# Since the image tag is always ":latest" (same string every deploy), a
+# fresh az acr build push is invisible to it, so the app can keep running
+# a stale pod. Force it to re-pull and restart on every deploy.
+echo "Forcing Container App to pick up the latest image..."
+CONTAINER_APP_NAME=$(az containerapp list --resource-group "$RESOURCE_GROUP" --query "[?properties.configuration.ingress.fqdn=='${APP_URL#https://}'].name" -o tsv)
+if [ -n "$CONTAINER_APP_NAME" ]; then
+    az containerapp update --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --image "$APP_IMAGE" >/dev/null
+    ACTIVE_REVISION=$(az containerapp revision list --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --query "[?properties.active].name" -o tsv | head -n1)
+    az containerapp revision restart --name "$CONTAINER_APP_NAME" --resource-group "$RESOURCE_GROUP" --revision "$ACTIVE_REVISION" >/dev/null
+    echo "Container App restarted on the freshly pushed image."
+else
+    echo "WARNING: could not resolve Container App name to force a restart; verify the app picked up the new image manually."
+fi
+
 # -----------------------------------------------------------------------
 # STEP 5 - Bootstrap database
 # -----------------------------------------------------------------------
