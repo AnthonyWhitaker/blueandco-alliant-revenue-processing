@@ -304,6 +304,45 @@ they may only need Tier A/B column-map onboarding, not this pipeline;
 re-triage needed. `db/schema_mssql.sql` was not updated to mirror the new
 tables/columns (SQLite-only so far in this environment).
 
+## Streamlit UI Check (this pass)
+
+Checked whether the UI alone (no scripts) can onboard a new supplier and
+safely process/export a job, especially for Tier C.
+
+**Fixed:**
+- Admin → Suppliers form was missing `header_row`, `max_read_columns`,
+  `job_type`, and `requires_manual_confirmation` — real `supplier_profile`
+  columns the engine already used (e.g. CME needs `header_row=1`, Carolon
+  needs `max_read_columns=22`) but that had no UI field at all. Added.
+- No exceptions/warnings were visible anywhere in the UI — a `needs_review`
+  job could be downloaded from Export with zero indication of *why* it
+  needed review. Added an exceptions panel to the Export page (reads the
+  `exception` table for the selected job, auto-expanded when the job is
+  `needs_review`) — this matters most for Tier C, where a warning can mean
+  an extracted total or allocation wasn't fully verified.
+- Verified (standalone, outside the Streamlit runtime, which is broken in
+  this dev environment — see below) that the exact SQL/logic added runs
+  correctly against `init_db()`: the new supplier_profile columns insert
+  and read back correctly, and the `exception` table query used by the new
+  Export panel runs without error.
+
+**Not fixed / still a gap:**
+- There is still no UI editor for `supplier_extraction_rule` /
+  `supplier_allocation_rule` (Tier C config) — those still have to be
+  seeded via a script, the same way every supplier onboarded so far
+  (Guerbet, Viscot, Zier, Bon Secours, Harbinger, Propio, Electro Medical,
+  Medegen, Carolon, CME) was onboarded — via a seed script, not the Admin
+  form. Building a full rule editor (5 extraction methods x 3 allocation
+  types, with per-method fields) is a bigger UI project; flagging rather
+  than rushing it.
+- Could not actually launch `streamlit run ui/app.py` in this environment —
+  the installed `streamlit` package is broken (`ModuleNotFoundError:
+  streamlit.proto`), unrelated to this change. Also has no way to see
+  rendered UI (no browser tool). Changes were verified by syntax check +
+  standalone SQL/logic tests only, not by viewing the rendered pages —
+  reinstall/verify `streamlit` locally before trusting the UI renders as
+  described.
+
 ## Known Issues / Future Work
 
 ### Immediate

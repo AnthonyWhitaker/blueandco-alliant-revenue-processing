@@ -146,13 +146,21 @@ with tab_suppliers:
     if suppliers:
         df_sp = pd.DataFrame([dict(s) for s in suppliers])
         display_cols = ["id", "name", "contract_id", "revenue_type", "keep_return_default",
-                        "payor_filter_name", "payment_id_source"]
+                        "payor_filter_name", "payment_id_source", "job_type",
+                        "header_row", "max_read_columns", "requires_manual_confirmation"]
+        display_cols = [c for c in display_cols if c in df_sp.columns]
         st.dataframe(df_sp[display_cols], use_container_width=True, hide_index=True)
     else:
         st.info("No suppliers configured. Add one below or run `scripts/seed_guerbet.py`.")
 
     st.divider()
     st.markdown("### Add / Update Supplier Profile")
+    st.caption(
+        "For a pivot/aggregate-workpaper supplier (job_type = pivot_allocation), "
+        "also configure its extraction and allocation rules via "
+        "`scripts/seed_tier_ab_suppliers.py`-style seed script — there is no "
+        "rule editor in this UI yet."
+    )
 
     with st.form("supplier_form"):
         s_name      = st.text_input("Supplier Name *", placeholder="Guerbet")
@@ -164,6 +172,12 @@ with tab_suppliers:
         s_pid_src   = st.selectbox("Payment ID Source", ["ledger", "manual", "column"], index=0)
         s_skip_col  = st.text_input("Strip summary rows where column is blank", placeholder="JDE Customer Number")
         s_sheet     = st.text_input("Sheet name (blank = first sheet)")
+        s_header_row = st.number_input("Header row (0-indexed)", min_value=0, value=0, step=1)
+        s_max_cols  = st.number_input("Max columns to read (0 = no limit)", min_value=0, value=0, step=1)
+        s_job_type  = st.selectbox("Job Type", ["row_level", "pivot_allocation"], index=0,
+                                    help="row_level = facility-level rows matched by MemberMatcher (Tier A/B). "
+                                         "pivot_allocation = aggregate/pivot workpaper with no facility rows (Tier C).")
+        s_needs_confirm = st.checkbox("Requires manual confirmation before completing (recommended for new Tier C suppliers)")
         submitted   = st.form_submit_button("Save Supplier", type="primary")
 
     if submitted and s_name:
@@ -173,8 +187,9 @@ with tab_suppliers:
                 """
                 INSERT INTO supplier_profile
                     (name, description, contract_id, revenue_type, keep_return_default,
-                     payor_filter_name, payment_id_source, skip_rows_where_col_null, sheet_name)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     payor_filter_name, payment_id_source, skip_rows_where_col_null, sheet_name,
+                     header_row, max_read_columns, job_type, requires_manual_confirmation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(name) DO UPDATE SET
                     description             = excluded.description,
                     contract_id             = excluded.contract_id,
@@ -184,10 +199,15 @@ with tab_suppliers:
                     payment_id_source       = excluded.payment_id_source,
                     skip_rows_where_col_null = excluded.skip_rows_where_col_null,
                     sheet_name              = excluded.sheet_name,
+                    header_row              = excluded.header_row,
+                    max_read_columns        = excluded.max_read_columns,
+                    job_type                = excluded.job_type,
+                    requires_manual_confirmation = excluded.requires_manual_confirmation,
                     updated_at              = CURRENT_TIMESTAMP
                 """,
                 (s_name, s_desc, s_contract or None, s_rev_type, s_keep,
-                 s_payor or None, s_pid_src, s_skip_col or None, s_sheet or None),
+                 s_payor or None, s_pid_src, s_skip_col or None, s_sheet or None,
+                 int(s_header_row), int(s_max_cols) or None, s_job_type, int(s_needs_confirm)),
             )
             conn.commit()
             st.success(f"Supplier '{s_name}' saved.")

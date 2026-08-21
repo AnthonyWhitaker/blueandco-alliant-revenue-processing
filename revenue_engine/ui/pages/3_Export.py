@@ -67,6 +67,32 @@ else:
         conn.commit()
         st.success("Payment ID saved.")
 
+exceptions = conn.execute(
+    "SELECT exception_type, message, severity, status, created_at FROM exception "
+    "WHERE job_id = ? ORDER BY created_at",
+    (job_id,),
+).fetchall()
+if exceptions:
+    st.divider()
+    n_errors = sum(1 for e in exceptions if e["severity"] == "error")
+    n_warnings = sum(1 for e in exceptions if e["severity"] == "warning")
+    label = f"⚠️ {len(exceptions)} exception(s) logged for this job"
+    if n_errors:
+        label += f" — {n_errors} error(s)"
+    if n_warnings:
+        label += f" — {n_warnings} warning(s)"
+    with st.expander(label, expanded=(selected["status"] == "needs_review")):
+        st.caption(
+            "Review these before exporting/downloading, especially for "
+            "aggregate/pivot-workpaper (Tier C) suppliers — a warning here "
+            "can mean an extracted total or allocation could not be fully verified."
+        )
+        st.dataframe(
+            pd.DataFrame([dict(e) for e in exceptions]),
+            use_container_width=True,
+            hide_index=True,
+        )
+
 st.divider()
 
 # Preview tabs
