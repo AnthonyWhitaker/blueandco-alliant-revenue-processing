@@ -39,6 +39,7 @@ FILENAME_PREFIXES = {
     "Propio": ["Propio"],
     "Electro Medical": ["Electro Medical"],
     "Medegen": ["Medegen"],
+    "CME": ["CME"],
 }
 
 

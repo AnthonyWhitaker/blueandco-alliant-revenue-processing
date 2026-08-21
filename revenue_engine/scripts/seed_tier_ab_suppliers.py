@@ -213,6 +213,30 @@ SUPPLIERS = [
     },
     {
         "profile": dict(
+            name="CME",
+            description="CME (Continuing Medical Education / medical supplies) — "
+                        "small ledger, Entity Code supplied per row, no date "
+                        "column (earned period comes from the filename date). "
+                        "fee_amount is the file's own pre-computed 'total due' "
+                        "(= Admin Fee=.5% on non-contracted sales + Rebate=1.5% "
+                        "on total services, both already summed by the supplier).",
+            contract_id=None,
+            revenue_type="Admin Fee",
+            keep_return_default="Keep",
+            header_row=1,
+            sheet_name=None,
+            skip_rows_where_col_null="total due",
+            payor_filter_name="CME",
+        ),
+        "column_map": [
+            ("Entity Codes",               "entity_code_hint", True),
+            ("Customer",                   "customer_name",    True),
+            ("Total NON CONTRACTED SALES", "sales_amount",     False),
+            ("total due",                  "fee_amount",       True),
+        ],
+    },
+    {
+        "profile": dict(
             name="Carolon",
             description="Carolon — supplier rebate ledger. Column layout is "
                         "non-standard: the header labels 'Total Revenue' and "

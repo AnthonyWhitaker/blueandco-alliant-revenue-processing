@@ -211,6 +211,58 @@ customer name + state — verified no regression on Guerbet/Carolon.
 Remaining Bon Secours gap needs alias curation via the review queue (same
 pattern as the Electro Medical near-misses below), not a formula fix.
 
+## Tier A/B Survey (this pass)
+
+Surveyed every remaining un-onboarded file in `2026 Original/2026 Complete`
+for facility-level rows (Tier A/B candidates) vs. true lump-sum/pivot totals
+(Tier C candidates — see below).
+
+**Onboarded**: **CME** — Entity Code per row (Tier A), `total due` column is
+the supplier's own pre-computed fee (Admin Fee=.5% on non-contracted sales +
+Rebate=1.5% on total services, already summed). Reconciles to the penny
+against the one sample file ($345.64) — `scripts/test_tier_ab_suppliers.py`.
+
+**Identified but NOT onboarded** — each is blocked by a real gap, not
+guessed around:
+- **Healthcare Procurement** — has GPO ID (entity code) and Admin Fee per
+  row, but the deposit is only 50% of the sum of `ADMIN FEE` across rows
+  ($9.06 vs. $18.11) — the file's own SUMMARY tab confirms a "FEE SHARE
+  (50%)" split. Needs (a) a per-supplier fee multiplier, which the column
+  map doesn't support today (it's direct passthrough only), and (b)
+  confirmation from Brandi that 50% is the standing split, not a one-off.
+- **Avel Med** — same shape of problem: `Rev Share amount` sums to exactly
+  2× the deposit ($1,411.80 vs. $705.90). Needs the same multiplier
+  capability + confirmation.
+- **Premier** — has a genuinely clean flat `raw` sheet (Facility Entity
+  Code, Facility Name, city/state/zip, Final Amount) consistent across 3
+  sample periods — but that sheet covers a wider date range than the
+  specific deposit (e.g. Dec file's `raw` sheet sums to $31,688 against a
+  $10,414.50 deposit). Needs row-level filtering by `Rebate Payment Date`
+  against the deposit period, which the column-map system doesn't support
+  yet (it can select/rename columns but not filter rows by date range).
+- **Amsino** (Ship-to Name/City/State per row) — sums to $4,327.56 vs.
+  deposit $4,158.22, ~4% off with no obvious column-level explanation.
+- **Aramark** (Customer Name/City/State per row) — neither "Rental" sheet's
+  `Grand Total` column ($299k / $293k) is remotely close to the $4,654.49
+  deposit; the true fee is derived some other way not visible in either
+  sheet at face value.
+- **Mediserve** (facility_key/city/state per row) — `net_billed` sums to
+  $92,393.77 vs. a $1,365.42 deposit; the fee must be a percentage of
+  net_billed or computed elsewhere, not shown directly in the one sheet
+  checked.
+- **Mindray, Amerisource, US Pay Group** — have facility/customer rows but
+  weren't checked for reconciliation this pass (Amerisource and US Pay
+  Group also lack any entity code or city/state, so would be pure
+  name-only fuzzy matching — higher mismatch risk even once a formula is
+  confirmed).
+
+None of these were guessed at and onboarded — same rule as the Bon Secours
+fee-formula lesson: a wrong assumption here would silently misstate real
+client revenue. Each needs either a small **generic** engine capability
+(row filtering by date range, or a fee multiplier field in the column map —
+not per-supplier code) or Brandi's confirmation of the underlying formula
+before it can be seeded.
+
 ## Tier C: Aggregate / Pivot-Workpaper Suppliers
 
 Some supplier files have **no facility-level rows at all** — just a lump-sum
