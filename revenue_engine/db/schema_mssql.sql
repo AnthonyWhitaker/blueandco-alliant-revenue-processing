@@ -22,8 +22,16 @@ BEGIN
         header_row                  INT NOT NULL DEFAULT 0,
         sheet_name                  NVARCHAR(500),
         skip_rows_where_col_null    NVARCHAR(500),
+        max_read_columns            INT,
         payment_id_source           NVARCHAR(500) NOT NULL DEFAULT 'ledger',
         payor_filter_name           NVARCHAR(500),
+        -- Job type: which processing pipeline this supplier's files go through.
+        --   'row_level'        : one row per facility per period (MemberMatcher) — the default
+        --   'pivot_allocation' : aggregate/pivot workpapers with no facility-level detail —
+        --                        extract totals (supplier_extraction_rule) and allocate to
+        --                        pre-known facilities (supplier_allocation_rule) instead of matching
+        job_type                    NVARCHAR(50) NOT NULL DEFAULT 'row_level',
+        requires_manual_confirmation INT NOT NULL DEFAULT 0,
         created_at                  DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
         updated_at                  DATETIME2 NOT NULL DEFAULT GETUTCDATE()
     );
@@ -87,6 +95,66 @@ GO
 
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_member_state')
     CREATE INDEX ix_member_state ON member(norm_state);
+GO
+
+-- ---------------------------------------------------------------------------
+-- SUPPLIER EXTRACTION RULES  (Tier C — pivot_allocation job_type)
+-- Declares WHERE to find each dollar total in an arbitrarily-shaped pivot /
+-- summary workpaper. Generalization of supplier_column_map for suppliers
+-- with no facility-level rows to map columns against.
+-- ---------------------------------------------------------------------------
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'supplier_extraction_rule')
+BEGIN
+    CREATE TABLE supplier_extraction_rule (
+        id                      INT IDENTITY(1,1) PRIMARY KEY,
+        supplier_profile_id     INT NOT NULL REFERENCES supplier_profile(id) ON DELETE CASCADE,
+        rule_name               NVARCHAR(500) NOT NULL,
+        sheet_name              NVARCHAR(500),
+        extraction_method       NVARCHAR(50) NOT NULL,
+        -- 'named_cell' | 'label_lookup' | 'label_range_sum' | 'column_sum' |
+        -- 'formula' | 'manual_entry' — see schema.sql for full method docs
+        cell_address            NVARCHAR(50),
+        label_text              NVARCHAR(500),
+        label_match_mode        NVARCHAR(50) DEFAULT 'exact',
+        label_match_threshold   INT DEFAULT 90,
+        value_row_offset        INT DEFAULT 1,
+        value_col_offset        INT DEFAULT 0,
+        range_axis              NVARCHAR(50) DEFAULT 'column',
+        column_index            INT,
+        column_letter           NVARCHAR(10),
+        header_row              INT DEFAULT 0,
+        stop_label_text         NVARCHAR(500),
+        formula_expression      NVARCHAR(MAX),
+        is_sales_amount         INT NOT NULL DEFAULT 0,
+        sort_order              INT NOT NULL DEFAULT 0,
+        created_at              DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        UNIQUE(supplier_profile_id, rule_name)
+    );
+END
+GO
+
+-- ---------------------------------------------------------------------------
+-- SUPPLIER ALLOCATION RULES  (Tier C — pivot_allocation job_type)
+-- Declares WHO each extracted total belongs to. member_id resolves against
+-- the same member master every other supplier matches against.
+-- ---------------------------------------------------------------------------
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'supplier_allocation_rule')
+BEGIN
+    CREATE TABLE supplier_allocation_rule (
+        id                      INT IDENTITY(1,1) PRIMARY KEY,
+        supplier_profile_id     INT NOT NULL REFERENCES supplier_profile(id) ON DELETE CASCADE,
+        extraction_rule_name    NVARCHAR(500) NOT NULL,
+        member_id               INT NOT NULL REFERENCES member(id),
+        allocation_type         NVARCHAR(50) NOT NULL DEFAULT 'percent',
+        -- 'percent' | 'fixed_amount' | 'remainder' — see schema.sql for full docs
+        allocation_value        FLOAT,
+        contract_number         NVARCHAR(500),
+        product_line            NVARCHAR(500),
+        is_active               INT NOT NULL DEFAULT 1,
+        created_at              DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
+        UNIQUE(supplier_profile_id, extraction_rule_name, member_id)
+    );
+END
 GO
 
 -- ---------------------------------------------------------------------------
