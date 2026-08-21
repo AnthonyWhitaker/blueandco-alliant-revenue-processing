@@ -1,6 +1,10 @@
 -- =============================================================================
 -- Alliant Revenue Processing Engine — Database Schema (Azure SQL / T-SQL)
 -- Converted from SQLite schema.sql
+--
+-- IMPORTANT: this file must stay in sync with schema.sql (engine/db.py picks
+-- one or the other based on AZURE_SQL_CONNECTION_STRING). Any table or
+-- column added/changed in schema.sql MUST be mirrored here in the same change.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------

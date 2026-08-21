@@ -2,6 +2,10 @@
 -- Alliant Revenue Processing Engine — Database Schema
 -- Compatible with SQLite (prototype) and Azure SQL (production)
 -- Based on alliant-purchasing-solutions schema patterns
+--
+-- IMPORTANT: schema_mssql.sql is the T-SQL mirror of this file (engine/db.py
+-- picks one or the other based on AZURE_SQL_CONNECTION_STRING). Any table or
+-- column added/changed here MUST be mirrored there in the same change.
 -- =============================================================================
 
 -- ---------------------------------------------------------------------------

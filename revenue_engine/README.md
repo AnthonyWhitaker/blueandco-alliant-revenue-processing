@@ -301,8 +301,9 @@ That needs Brandi's confirmation per supplier before seeding. Also, several
 suppliers on the original "Tier C" candidate list (Airgas, CME, WellLink)
 turned out on inspection to have facility-level detail sheets after all —
 they may only need Tier A/B column-map onboarding, not this pipeline;
-re-triage needed. `db/schema_mssql.sql` was not updated to mirror the new
-tables/columns (SQLite-only so far in this environment).
+re-triage needed. `db/schema_mssql.sql` is now kept in sync with
+`schema.sql` (mirrored in the same pass) — the two must never be allowed
+to diverge; any future schema change goes into both files together.
 
 ## Streamlit UI Check (this pass)
 
@@ -352,7 +353,7 @@ safely process/export a job, especially for Tier C.
 - [ ] Payment ID column-based resolution (for suppliers that include it in the file) is implemented but untested
 - [ ] Onboard a real Tier C supplier (extraction + allocation rules) once Brandi confirms allocation targets — Komet is the leading candidate (extraction already verified against a real file)
 - [ ] Re-triage Airgas / CME / WellLink — they have facility-level detail sheets, may belong in Tier A/B instead of Tier C
-- [ ] Mirror the new `supplier_profile` columns and `supplier_extraction_rule`/`supplier_allocation_rule` tables into `db/schema_mssql.sql` before any Azure SQL deployment
+- [x] `db/schema_mssql.sql` mirrored to match `schema.sql` (Tier C tables/columns, plus a pre-existing `max_read_columns` gap found while doing so) — keep both in sync on every future schema change, never let them diverge
 
 ### Near-term
 - [ ] Carolon needs its own onboarding pass — its raw "Contract ID" column is actually a facility code, not the real Salesforce Contract ID, so a straight column-map won't work
