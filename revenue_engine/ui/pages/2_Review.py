@@ -77,7 +77,7 @@ for item in review_items:
     with st.expander(
         f"**{item['customer_name_sample']}**  —  "
         f"JDE: `{item.get('jde_number') or '—'}`  |  "
-        f"Fee: `${item['total_fee']:.2f}`  |  "
+        f"Fee: `${(item['total_fee'] or 0):.2f}`  |  "
         f"{item['affected_row_count']} row(s)",
         expanded=True,
     ):
@@ -88,7 +88,7 @@ for item in review_items:
             st.markdown(f"- **Name:** {item['customer_name_sample']}")
             st.markdown(f"- **JDE #:** {item.get('jde_number') or '—'}")
             st.markdown(f"- **Location:** {item.get('city') or ''}, {item.get('state') or ''} {item.get('zip') or ''}")
-            st.markdown(f"- **Fee Amount:** ${item['total_fee']:,.2f}")
+            st.markdown(f"- **Fee Amount:** ${(item['total_fee'] or 0):,.2f}")
             st.markdown(f"- **Rows Affected:** {item['affected_row_count']}")
 
         with col_right:
