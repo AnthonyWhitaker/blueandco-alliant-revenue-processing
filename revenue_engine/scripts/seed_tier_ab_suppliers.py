@@ -14,6 +14,14 @@ Tier B — no entity code in the file; matched via the existing fuzzy
     - Propio            (has Facility_Premier_Entity_Code -> Tier 0 fast path)
     - Electro Medical   (name + city/state/zip only -> pure fuzzy match)
     - Medegen           (name + city/state only -> pure fuzzy match)
+    - CME               (has Entity Codes -> Tier 0 fast path)
+    - Carolon           (has Contract ID/PEC -> Tier 0 fast path)
+    - Airgas            (name + city/state only -> pure fuzzy match; re-triaged
+                         from a suspected Tier C candidate — has a genuine
+                         facility-level detail sheet, ZNA_ITEMDETAILS)
+    - WellLink          (name + contract only -> pure fuzzy match; re-triaged
+                         from a suspected Tier C candidate — Sheet3 is a clean
+                         facility-level detail table)
 
 Run from the revenue_engine/ directory:
     python scripts/seed_tier_ab_suppliers.py
@@ -233,6 +241,59 @@ SUPPLIERS = [
             ("Customer",                   "customer_name",    True),
             ("Total NON CONTRACTED SALES", "sales_amount",     False),
             ("total due",                  "fee_amount",       True),
+        ],
+    },
+    {
+        "profile": dict(
+            name="Airgas",
+            description="Airgas — item-level rebate detail on the 'ZNA_ITEMDETAILS' "
+                        "sheet (the 'SUMMARY' sheet is a by-region pivot with no "
+                        "facility names and is not used). Real header is row 2 "
+                        "(0-indexed 1) — row 1 is a title/spacer row. 'Rebate $' "
+                        "is the supplier's own pre-computed per-line fee; reconciles "
+                        "to the penny against the file's deposit amount.",
+            contract_id=None,
+            revenue_type="Admin Fee",
+            keep_return_default="Keep",
+            header_row=1,
+            sheet_name="ZNA_ITEMDETAILS",
+            skip_rows_where_col_null="Payer Name",
+            payor_filter_name="Airgas",
+        ),
+        "column_map": [
+            ("Payer Name",     "customer_name",   True),
+            ("Ship-To City",   "city",            False),
+            ("Ship-To State",  "state",           False),
+            ("Billing Date",   "process_date",    True),
+            ("Extended Price", "sales_amount",    False),
+            ("Rebate $",       "fee_amount",      True),
+        ],
+    },
+    {
+        "profile": dict(
+            name="WellLink",
+            description="WellLink — quarterly Primary Sponsor Detail. Uses "
+                        "'Sheet3' (a clean tabular restatement of Sheet1's "
+                        "facility+line-item layout); Sheet1/Sheet2 are the same "
+                        "data in a messier multi-row-per-facility / pivot form "
+                        "and are not used. Real header is row 7 (0-indexed 6). "
+                        "'Admin Fee' is the supplier's own pre-computed per-line "
+                        "fee; sums to $53.7966 vs. the file's $53.80 deposit "
+                        "(a $0.0034 rounding gap, immaterial).",
+            contract_id=None,
+            revenue_type="Admin Fee",
+            keep_return_default="Keep",
+            header_row=6,
+            sheet_name="Sheet3",
+            skip_rows_where_col_null="Facility",
+            payor_filter_name="WellLink",
+        ),
+        "column_map": [
+            ("Facility",         "customer_name",    True),
+            ("Contract Number",  "contract_number",  False),
+            ("Sale Date",        "process_date",     True),
+            ("Volume",           "sales_amount",     False),
+            ("Admin Fee",        "fee_amount",       True),
         ],
     },
     {

@@ -40,6 +40,8 @@ FILENAME_PREFIXES = {
     "Electro Medical": ["Electro Medical"],
     "Medegen": ["Medegen"],
     "CME": ["CME"],
+    "Airgas": ["Airgas"],
+    "WellLink": ["WellLink"],
 }
 
 
