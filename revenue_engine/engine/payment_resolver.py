@@ -10,6 +10,7 @@ Resolves a Salesforce Payment ID for each job using:
 from typing import Optional
 
 from .normalizer import parse_deposit_amount_from_filename
+from .db import execute_select
 
 
 def resolve_payment_id(
@@ -74,7 +75,7 @@ def lookup_payment_id_from_ledger(
         params.append(f"%{payor_filter}%")
     sql += " ORDER BY payment_received_date DESC LIMIT 1"
 
-    row = conn.execute(sql, params).fetchone()
+    row = execute_select(conn, sql, params).fetchone()
     return row["sf_payment_id"] if row else None
 
 

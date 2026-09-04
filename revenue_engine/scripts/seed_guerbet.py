@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from engine.db import init_db, execute_upsert, execute_insert_ignore
+from engine.db import init_db, execute_upsert, execute_insert_ignore, execute_select
 from engine.normalizer import normalize_key
 
 # ---------------------------------------------------------------------------
@@ -159,7 +159,8 @@ def seed_guerbet(
             canon = normalize_key(raw_name)
             member_row = None
             if target_entity_code:
-                member_row = conn.execute(
+                member_row = execute_select(
+                    conn,
                     "SELECT id FROM member WHERE entity_code = ? AND is_active = 1 LIMIT 1",
                     (target_entity_code,),
                 ).fetchone()

@@ -10,6 +10,7 @@ Both backends expose the same cursor/row interface: rows support
 """
 
 import os
+import re
 import sqlite3
 from pathlib import Path
 from typing import Optional
@@ -186,7 +187,21 @@ def init_db(db_path: Optional[str] = None):
 
 
 def _safe_add_column(conn, table: str, column: str, col_type: str) -> None:
-    """Add a column to a table if it doesn't already exist (SQLite only)."""
+    """Add a column to a table if it doesn't already exist."""
+    if is_mssql():
+        exists = conn.execute(
+            "SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = ? AND COLUMN_NAME = ?",
+            (table, column),
+        ).fetchone()
+        if exists:
+            return
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD {column} {col_type}")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        return
+
     try:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
         conn.commit()
@@ -198,10 +213,40 @@ def _safe_add_column(conn, table: str, column: str, col_type: str) -> None:
 # Cross-DB helpers
 # ---------------------------------------------------------------------------
 
+def execute_select(conn, sql_sqlite: str, params=None):
+    """
+    Execute a SELECT that may end in a SQLite-style trailing ``LIMIT N``.
+    For MSSQL, ``LIMIT N`` is not valid syntax, so it's rewritten as
+    ``SELECT TOP N ...`` automatically. For SQLite the SQL runs unchanged.
+    """
+    sql = sql_sqlite
+    if is_mssql():
+        m = re.search(r"\bLIMIT\s+(\d+)\s*$", sql.strip(), re.IGNORECASE)
+        if m:
+            n = m.group(1)
+            stripped = sql[: m.start()].rstrip()
+            sql = re.sub(
+                r"^(\s*SELECT\s+)(DISTINCT\s+)?",
+                lambda mo: f"{mo.group(1)}TOP {n} {mo.group(2) or ''}",
+                stripped,
+                count=1,
+                flags=re.IGNORECASE,
+            )
+    if params:
+        return conn.execute(sql, params)
+    return conn.execute(sql)
+
+
 def get_last_insert_id(conn, cursor) -> int:
     """Get the auto-generated ID from the most recent INSERT."""
     if is_mssql():
-        row = conn.execute("SELECT SCOPE_IDENTITY() AS id").fetchone()
+        # SCOPE_IDENTITY() is scoped to the SQL *batch* that produced it, so
+        # it comes back NULL once called from a separate conn.execute() call
+        # (a new batch). @@IDENTITY is session-scoped instead of
+        # batch-scoped, which is what we need here since there are no
+        # triggers in this schema that could insert into another identity
+        # column and make @@IDENTITY point at the wrong table.
+        row = conn.execute("SELECT @@IDENTITY AS id").fetchone()
         return int(row[0])
     return cursor.lastrowid
 

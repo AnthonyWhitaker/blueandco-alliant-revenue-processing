@@ -16,7 +16,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from engine.db import init_db
+from engine.db import init_db, execute_select
 from engine.processor import apply_review_decision
 from engine.member_loader import create_member
 
@@ -114,7 +114,8 @@ for item in review_items:
         )
 
         if search_term and len(search_term) >= 2:
-            search_results = conn.execute(
+            search_results = execute_select(
+                conn,
                 """
                 SELECT id, name, entity_code, billing_city, billing_state
                 FROM member

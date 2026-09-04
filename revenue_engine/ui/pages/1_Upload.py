@@ -11,7 +11,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from engine.db import init_db, get_last_insert_id
+from engine.db import init_db, get_last_insert_id, execute_select
 from engine.processor import process_job
 from engine.normalizer import parse_date_from_filename, guess_supplier_from_filename
 
@@ -43,7 +43,8 @@ if not uploaded_file:
     st.info("Upload a file to continue — supplier and date received will be inferred from the filename.")
     st.divider()
     st.subheader("Recent Jobs")
-    recent_jobs = conn.execute(
+    recent_jobs = execute_select(
+        conn,
         """
         SELECT rj.id, sp.name AS supplier, rj.original_file_name,
                rj.status, rj.row_count, rj.matched_count, rj.unmatched_count,
@@ -176,7 +177,8 @@ if st.button("Process File", type="primary", disabled=not ready_to_process):
 st.divider()
 st.subheader("Recent Jobs")
 
-recent_jobs = conn.execute(
+recent_jobs = execute_select(
+    conn,
     """
     SELECT rj.id, sp.name AS supplier, rj.original_file_name,
            rj.status, rj.row_count, rj.matched_count, rj.unmatched_count,

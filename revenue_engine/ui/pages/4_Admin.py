@@ -18,7 +18,7 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from engine.db import init_db, execute_upsert, execute_insert_ignore, execute_insert_or_replace
+from engine.db import init_db, execute_upsert, execute_insert_ignore, execute_insert_or_replace, execute_select
 from engine.member_loader import load_account_list, create_member
 from engine.payment_resolver import load_ledger_from_excel
 from engine.file_reader import infer_column_map
@@ -64,7 +64,8 @@ with tab_members:
 
     st.divider()
     if st.button("Show sample members"):
-        rows = conn.execute(
+        rows = execute_select(
+            conn,
             "SELECT entity_code, name, billing_city, billing_state FROM member LIMIT 50"
         ).fetchall()
         st.dataframe(pd.DataFrame([dict(r) for r in rows]), use_container_width=True, hide_index=True)
@@ -130,7 +131,8 @@ with tab_ledger:
 
     st.divider()
     if st.button("Show recent ledger entries"):
-        rows = conn.execute(
+        rows = execute_select(
+            conn,
             "SELECT payor, payment_received_date, deposit_amount, sf_payment_id FROM payment_ledger ORDER BY payment_received_date DESC LIMIT 30"
         ).fetchall()
         st.dataframe(pd.DataFrame([dict(r) for r in rows]), use_container_width=True, hide_index=True)
@@ -310,7 +312,8 @@ with tab_aliases:
     st.subheader("Member Aliases")
     st.caption("Alternate names for members — used in Tier 2 matching (before fuzzy).")
 
-    aliases = conn.execute(
+    aliases = execute_select(
+        conn,
         """
         SELECT a.id, m.name AS member_name, m.entity_code, a.raw_name,
                sp.name AS supplier, a.approved_by, a.approved_at
@@ -335,7 +338,8 @@ with tab_aliases:
     st.markdown("#### Add Manual Alias")
     member_search = st.text_input("Search member by name or entity code", key="alias_member_search")
     if member_search and len(member_search) >= 2:
-        members_found = conn.execute(
+        members_found = execute_select(
+            conn,
             "SELECT id, name, entity_code FROM member WHERE lower(name) LIKE lower(?) OR lower(entity_code) LIKE lower(?) ORDER BY name LIMIT 20",
             (f"%{member_search}%", f"%{member_search}%"),
         ).fetchall()
