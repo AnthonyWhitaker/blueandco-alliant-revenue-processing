@@ -161,6 +161,13 @@ for item in review_items:
                         "Premier/Alliant Entity Code (optional)",
                         key=f"nm_ec_{item['id']}",
                     )
+                    if not nm_entity_code.strip():
+                        st.caption(
+                            "⚠️ Without an entity code, this facility's revenue "
+                            "will still count toward the job total, but the "
+                            "output row will use a placeholder PEC until a "
+                            "real one is added in Admin > Members."
+                        )
                     nm_col3, nm_col4, nm_col5 = st.columns(3)
                     nm_city = nm_col3.text_input(
                         "City", value=item.get("city") or "", key=f"nm_city_{item['id']}",

@@ -84,7 +84,9 @@ with tab_members:
         "For a real facility that's missing from the Account List (e.g. a "
         "zero-match customer from a supplier file) — a full Account List "
         "refresh will still override this row's city/state/zip if it later "
-        "appears there."
+        "appears there. Without an entity code, matched revenue for this "
+        "facility still counts toward job totals, but its output row will "
+        "use a placeholder PEC until a real one is added here."
     )
     with st.form("add_member_form"):
         am_col1, am_col2 = st.columns(2)

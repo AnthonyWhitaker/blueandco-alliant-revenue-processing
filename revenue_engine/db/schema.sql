@@ -353,7 +353,7 @@ CREATE TABLE IF NOT EXISTS exception (
     exception_type          TEXT NOT NULL,
     -- Types: missing_required_column | unmatched_customer | ambiguous_match
     --        | payment_id_not_found | revenue_reconciliation_mismatch
-    --        | date_parse_error | processing_error
+    --        | date_parse_error | processing_error | missing_entity_code
     message                 TEXT NOT NULL,
     severity                TEXT NOT NULL DEFAULT 'warning',
     -- Values: info | warning | error

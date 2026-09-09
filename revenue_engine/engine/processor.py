@@ -34,6 +34,7 @@ from .constants import (
     EXC_UNMATCHED_CUSTOMER, EXC_PAYMENT_NOT_FOUND,
     EXC_REVENUE_MISMATCH, EXC_PROCESSING_ERROR,
     EXC_EXTRACTION_NOT_FOUND, EXC_ALLOCATION_INCOMPLETE,
+    EXC_MISSING_ENTITY_CODE,
     REVIEW_PENDING, JOB_TYPE_PIVOT_ALLOCATION,
 )
 from .db import execute_upsert, execute_insert_ignore, get_last_insert_id
@@ -610,15 +611,21 @@ def _aggregate_output(
     Groups by (entity_code, earned_period).
     Returns (total_revenue, total_volume).
     """
+    # NOTE: entity_code can be NULL for a member created via the "add new
+    # facility" flow (Review page / Admin > Members) before a real Premier
+    # Entity Code has been assigned. Those rows must still count toward
+    # total_revenue and appear in the output (with a PENDING-<member_id>
+    # placeholder PEC) rather than being silently dropped — previously the
+    # "AND entity_code IS NOT NULL" filter here made matched revenue vanish
+    # from the job total with no warning anywhere.
     rows = conn.execute(
         """
-        SELECT entity_code, account_id, process_date, contract_number,
+        SELECT entity_code, account_id, matched_member_id, process_date, contract_number,
                SUM(sales_amount) AS volume,
                SUM(fee_amount)   AS total_revenue
         FROM revenue_row
         WHERE job_id = ? AND match_status IN ('matched', 'alias_matched')
-          AND entity_code IS NOT NULL
-        GROUP BY entity_code, account_id, process_date, contract_number
+        GROUP BY entity_code, account_id, matched_member_id, process_date, contract_number
         ORDER BY entity_code, process_date
         """,
         (job_id,),
@@ -641,6 +648,18 @@ def _aggregate_output(
         total_volume  += vol
         row_contract_id = r["contract_number"] or default_contract_id
 
+        pec = r["entity_code"]
+        if not pec:
+            pec = f"PENDING-{r['matched_member_id']}"
+            _job_log(
+                conn, job_id, EXC_MISSING_ENTITY_CODE,
+                f"Matched member id={r['matched_member_id']} has no Premier "
+                f"Entity Code — ${rev:.2f} is included in the job total but "
+                f"output row uses placeholder PEC '{pec}'. Assign a real "
+                f"entity code in Admin > Members before disbursement.",
+                "warning",
+            )
+
         conn.execute(
             """
             INSERT INTO revenue_output_row (
@@ -651,7 +670,7 @@ def _aggregate_output(
             """,
             (
                 job_id,
-                r["entity_code"],
+                pec,
                 r["account_id"],
                 row_contract_id,
                 payment_id,
