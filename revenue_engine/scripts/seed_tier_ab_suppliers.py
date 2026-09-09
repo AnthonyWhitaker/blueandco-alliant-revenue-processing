@@ -22,6 +22,16 @@ Tier B — no entity code in the file; matched via the existing fuzzy
     - WellLink          (name + contract only -> pure fuzzy match; re-triaged
                          from a suspected Tier C candidate — Sheet3 is a clean
                          facility-level detail table)
+    - Amerisource       (name only -> pure fuzzy match; 'Actual Rebate $'
+                         reconciles to the penny against the file's deposit)
+    - Avel Med          (name only -> pure fuzzy match, name string embeds a
+                         GPO code prefix e.g. 'SCHLEI100 Schleicher County
+                         Medical Center'; 'Rev Share amount' reconciles
+                         exactly once the trailing total row is excluded)
+    - Henry Schein      (name + city/state -> pure fuzzy match on Ship To;
+                         'Fee Amount' reconciles to the penny; per-quarter
+                         sheet name varies (Q2, Q4, ...) so sheet_name=None
+                         reads whichever single sheet the file has)
 
 Run from the revenue_engine/ directory:
     python scripts/seed_tier_ab_suppliers.py
@@ -323,6 +333,101 @@ SUPPLIERS = [
             ("Total Revenue", "sales_amount",      False),
             ("Unnamed: 19",   "product_line",      False),
             ("Unnamed: 20",   "fee_amount",        True),
+        ],
+    },
+    {
+        "profile": dict(
+            name="Amerisource",
+            description="Amerisource (AmerisourceBergen) — rebate summary, "
+                        "matched purely by customer name (no entity code, "
+                        "no city/state). Real header is row 2 (0-indexed 1). "
+                        "The fee column's name varies by file — seen as "
+                        "'Actual Rebate $' on older deposits and 'Rebate "
+                        "Amount' on newer ones (both mapped; whichever is "
+                        "present in a given file is used). Newer files also "
+                        "carry a duplicate ' Final Rebate' column with the "
+                        "identical value — deliberately NOT mapped, since "
+                        "mapping two source columns to the same canonical "
+                        "field when both are present in one file produces a "
+                        "duplicate-named column and breaks the sum. "
+                        "Reconciles to the penny against the deposit when "
+                        "the customer-name match rate is high; roster "
+                        "coverage for Amerisource facility names is "
+                        "currently partial (~60% matched on the sample "
+                        "file) and may need alias cleanup. No date column — "
+                        "earned period comes from the filename date.",
+            contract_id=None,
+            revenue_type="Admin Fee",
+            keep_return_default="Keep",
+            header_row=1,
+            sheet_name=None,
+            skip_rows_where_col_null="Customer Descr.",
+            payor_filter_name="Amerisource",
+        ),
+        "column_map": [
+            ("Customer Descr.", "customer_name",  True),
+            ("Net Sales",       "sales_amount",   False),
+            ("Actual Rebate $", "fee_amount",     True),
+            ("Rebate Amount",   "fee_amount",     True),
+        ],
+    },
+    {
+        "profile": dict(
+            name="Avel Med",
+            description="Avel Med — quarterly revenue-share ledger, matched "
+                        "purely by customer name (the name string embeds a "
+                        "GPO code prefix, e.g. 'SCHLEI100 Schleicher County "
+                        "Medical Center' — fuzzy matcher tolerates the extra "
+                        "token but this is a known risk to watch). Real "
+                        "header is row 2 (0-indexed 1). 'Rev Share amount' is "
+                        "the supplier's own pre-computed per-line fee; the "
+                        "file also carries a trailing 'Cumulative Quarterly "
+                        "Balance for customer' column (a repeated constant, "
+                        "not per-line — not used) and a trailing total row "
+                        "with a blank Customer, which skip_rows_where_col_null "
+                        "drops (without it the total row double-counts the "
+                        "deposit).",
+            contract_id=None,
+            revenue_type="Admin Fee",
+            keep_return_default="Keep",
+            header_row=1,
+            sheet_name=None,
+            skip_rows_where_col_null="Customer ",
+            payor_filter_name="Avel Med",
+        ),
+        "column_map": [
+            ("Customer ",                              "customer_name", True),
+            ("Invoice Date",                            "process_date",  True),
+            ("Service Fee subject to Rev share",        "sales_amount",  False),
+            ("Rev Share amount",                        "fee_amount",    True),
+        ],
+    },
+    {
+        "profile": dict(
+            name="Henry Schein",
+            description="Henry Schein — large item-level invoice detail, "
+                        "matched on Ship To name + city/state (more granular "
+                        "than Bill To). 'Fee Amount' is the supplier's own "
+                        "pre-computed per-line fee; reconciles to the penny "
+                        "against the file's deposit amount. The single data "
+                        "sheet is named after the fiscal quarter (Q2, Q4, "
+                        "...) and varies per file, so sheet_name=None reads "
+                        "whichever single sheet is present.",
+            contract_id=None,
+            revenue_type="Admin Fee",
+            keep_return_default="Keep",
+            header_row=0,
+            sheet_name=None,
+            skip_rows_where_col_null="Ship To Name",
+            payor_filter_name="Henry Schein",
+        ),
+        "column_map": [
+            ("Ship To Name",  "customer_name",  True),
+            ("Ship To City",  "city",           False),
+            ("Ship To State", "state",          False),
+            ("Invoice Date",  "process_date",   True),
+            ("Sales",         "sales_amount",   False),
+            ("Fee Amount",    "fee_amount",     True),
         ],
     },
 ]

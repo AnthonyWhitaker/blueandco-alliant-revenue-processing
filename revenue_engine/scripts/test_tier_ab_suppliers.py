@@ -42,6 +42,9 @@ FILENAME_PREFIXES = {
     "CME": ["CME"],
     "Airgas": ["Airgas"],
     "WellLink": ["WellLink"],
+    "Amerisource": ["Amerisource"],
+    "Avel Med": ["Avel Med"],
+    "Henry Schein": ["Henry Schein"],
 }
 
 
