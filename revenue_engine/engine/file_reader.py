@@ -33,18 +33,55 @@ def read_raw_grid(file_path: str, sheet_name: Optional[str] = None) -> pd.DataFr
     return pd.read_excel(file_path, sheet_name=sheet_name or 0, header=None)
 
 
+_PATTERN_PREFIX = "contains:"
+
+
 def load_supplier_column_map(
     conn: object,
     supplier_profile_id: int,
 ) -> dict[str, str]:
     """
     Load the column map for a supplier as {source_column_normalized: canonical_field}.
+
+    Exact-match entries only. Entries whose source_column starts with
+    "contains:" (see load_supplier_column_map_patterns) are excluded here.
     """
     rows = conn.execute(
         "SELECT source_column, canonical_field FROM supplier_column_map WHERE supplier_profile_id = ?",
         (supplier_profile_id,),
     ).fetchall()
-    return {_normalize_col(r["source_column"]): r["canonical_field"] for r in rows}
+    return {
+        _normalize_col(r["source_column"]): r["canonical_field"]
+        for r in rows
+        if not str(r["source_column"]).strip().lower().startswith(_PATTERN_PREFIX)
+    }
+
+
+def load_supplier_column_map_patterns(
+    conn: object,
+    supplier_profile_id: int,
+) -> list[tuple[str, str]]:
+    """
+    Load "contains:" pattern rules for a supplier as [(substring_normalized, canonical_field), ...].
+
+    Used for supplier files whose real header text changes between deposits
+    in a way exact-name mapping can't handle (e.g. Labcorp's revenue column
+    is literally named "3Q 2025 Total Revenue", "1Q 2026 Total Revenue", ...
+    — the quarter/year label is baked into the column name every period).
+    A column map row with source_column = "contains:Total Revenue" matches
+    any raw column whose normalized text contains "total revenue".
+    """
+    rows = conn.execute(
+        "SELECT source_column, canonical_field FROM supplier_column_map WHERE supplier_profile_id = ?",
+        (supplier_profile_id,),
+    ).fetchall()
+    patterns = []
+    for r in rows:
+        raw = str(r["source_column"]).strip()
+        if raw.lower().startswith(_PATTERN_PREFIX):
+            substring = _normalize_col(raw[len(_PATTERN_PREFIX):])
+            patterns.append((substring, r["canonical_field"]))
+    return patterns
 
 
 def read_supplier_file(
@@ -122,8 +159,12 @@ def read_supplier_file(
 
     # Build column map
     col_map = load_supplier_column_map(conn, supplier_id)
+    col_map_patterns = load_supplier_column_map_patterns(conn, supplier_id)
 
-    # Map raw columns → canonical names
+    # Map raw columns → canonical names. Exact matches take priority; if a
+    # raw column isn't an exact match, fall back to "contains:" pattern
+    # rules (e.g. Labcorp's fee column name embeds the quarter/year and
+    # changes every file, so an exact-name map can't cover every period).
     rename = {}
     found_canonical: set[str] = set()
     for raw_col in df.columns:
@@ -132,10 +173,33 @@ def read_supplier_file(
             canonical = col_map[norm]
             rename[raw_col] = canonical
             found_canonical.add(canonical)
+            continue
+        for substring, canonical in col_map_patterns:
+            if canonical in found_canonical:
+                continue
+            if substring in norm:
+                rename[raw_col] = canonical
+                found_canonical.add(canonical)
+                break
 
     # Keep original columns with 'raw_' prefix, add canonical columns
     df_out = df.copy()
     df_out.rename(columns=rename, inplace=True)
+
+    # If the file has no per-row fee column at all — only a per-row sales/
+    # revenue figure plus a single flat rate stated on the supplier's own
+    # ledger (e.g. Labcorp: "3% Admin. Fee due") — derive fee_amount from
+    # sales_amount * fee_rate rather than requiring an explicit fee column.
+    from .constants import CANONICAL_SALES_AMOUNT, CANONICAL_FEE_AMOUNT
+    fee_rate = supplier_profile.get("fee_rate")
+    if fee_rate and CANONICAL_FEE_AMOUNT not in found_canonical and CANONICAL_SALES_AMOUNT in found_canonical:
+        df_out[CANONICAL_FEE_AMOUNT] = pd.to_numeric(
+            df_out[CANONICAL_SALES_AMOUNT], errors="coerce"
+        ) * float(fee_rate)
+        found_canonical.add(CANONICAL_FEE_AMOUNT)
+        warnings.append(
+            f"fee_amount derived as sales_amount * {fee_rate} (no fee column in file)"
+        )
 
     # Check required canonical fields
     from .constants import REQUIRED_CANONICAL_FIELDS, REQUIRED_IDENTITY_FIELDS_ANY
@@ -151,7 +215,7 @@ def read_supplier_file(
         )
 
     # Warn about unmapped columns
-    unmapped = [c for c in df.columns if _normalize_col(str(c)) not in col_map]
+    unmapped = [c for c in df.columns if c not in rename and _normalize_col(str(c)) not in col_map]
     if unmapped:
         warnings.append(f"Unmapped columns (will be ignored): {unmapped}")
 

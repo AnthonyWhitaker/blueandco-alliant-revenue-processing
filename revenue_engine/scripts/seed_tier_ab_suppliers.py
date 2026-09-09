@@ -32,6 +32,22 @@ Tier B — no entity code in the file; matched via the existing fuzzy
                          'Fee Amount' reconciles to the penny; per-quarter
                          sheet name varies (Q2, Q4, ...) so sheet_name=None
                          reads whichever single sheet the file has)
+    - Labcorp           (GPO Member Number -> entity_code_hint, Tier 0 fast
+                         path; ~85% of rows match a known premier/alliant
+                         entity code). The file has no per-row fee column at
+                         all, only a per-row revenue figure whose column
+                         name embeds the quarter/year (e.g. "3Q 2025 Total
+                         Revenue", "4Q 2025 Total Revenue" — a different
+                         string every file) plus a flat rate stated on the
+                         ledger itself ("3% Admin. Fee due"). Uses two new
+                         engine capabilities added for this supplier:
+                         (1) a "contains:" column-map pattern so the
+                         revenue column matches regardless of the quarter
+                         label baked into its name, and (2) supplier_profile
+                         .fee_rate, which derives fee_amount = sales_amount
+                         * fee_rate when the file has no explicit fee
+                         column. Reconciles to the penny against the
+                         deposit on both sample files.
 
 Run from the revenue_engine/ directory:
     python scripts/seed_tier_ab_suppliers.py
@@ -430,6 +446,41 @@ SUPPLIERS = [
             ("Fee Amount",    "fee_amount",     True),
         ],
     },
+    {
+        "profile": dict(
+            name="Labcorp",
+            description="Labcorp — quarterly per-facility revenue report. "
+                        "'GPO Member Number' is a real Premier/Alliant "
+                        "Entity Code (Tier 0 fast path). Real header is row "
+                        "6 (0-indexed 5); the single data sheet is named "
+                        "after the quarter (e.g. '3Q25 Alliant Purchasing') "
+                        "and varies per file, so sheet_name=None reads "
+                        "whichever single sheet is present. The file has no "
+                        "per-row fee column — only a per-row revenue column "
+                        "whose name embeds the quarter/year (e.g. '3Q 2025 "
+                        "Total Revenue') and changes every file, matched via "
+                        "the 'contains:' pattern rule. fee_rate=0.03 derives "
+                        "fee_amount = sales_amount * 0.03, matching the flat "
+                        "rate stated directly on the ledger ('3% Admin. Fee "
+                        "due'); reconciles to the penny on both sample "
+                        "files.",
+            contract_id=None,
+            revenue_type="Admin Fee",
+            keep_return_default="Keep",
+            header_row=5,
+            sheet_name=None,
+            skip_rows_where_col_null="labcorp Account Name",
+            payor_filter_name="Labcorp",
+            fee_rate=0.03,
+        ),
+        "column_map": [
+            ("GPO Member Number",     "entity_code_hint", False),
+            ("labcorp Account Name",  "customer_name",    True),
+            ("Report City",           "city",              False),
+            ("Report St",             "state",             False),
+            ("contains:Total Revenue", "sales_amount",     True),
+        ],
+    },
 ]
 
 
@@ -442,14 +493,15 @@ def seed_supplier(conn, definition: dict) -> int:
             name, description, contract_id,
             revenue_type, keep_return_default,
             header_row, sheet_name,
-            skip_rows_where_col_null, max_read_columns,
+            skip_rows_where_col_null, max_read_columns, fee_rate,
             payment_id_source, payor_filter_name
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'ledger', ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ledger', ?)
         ON CONFLICT(name) DO UPDATE SET
             description               = excluded.description,
             contract_id               = excluded.contract_id,
             skip_rows_where_col_null  = excluded.skip_rows_where_col_null,
             max_read_columns          = excluded.max_read_columns,
+            fee_rate                  = excluded.fee_rate,
             payor_filter_name         = excluded.payor_filter_name,
             updated_at                = CURRENT_TIMESTAMP
         """,
@@ -459,6 +511,7 @@ def seed_supplier(conn, definition: dict) -> int:
             p["header_row"], p.get("sheet_name"),
             p["skip_rows_where_col_null"],
             p.get("max_read_columns"),
+            p.get("fee_rate"),
             p["payor_filter_name"],
         ),
     )

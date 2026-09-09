@@ -27,6 +27,7 @@ BEGIN
         sheet_name                  NVARCHAR(500),
         skip_rows_where_col_null    NVARCHAR(500),
         max_read_columns            INT,
+        fee_rate                    FLOAT,
         payment_id_source           NVARCHAR(500) NOT NULL DEFAULT 'ledger',
         payor_filter_name           NVARCHAR(500),
         -- Job type: which processing pipeline this supplier's files go through.

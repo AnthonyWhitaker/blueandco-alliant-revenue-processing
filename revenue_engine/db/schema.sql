@@ -31,6 +31,9 @@ CREATE TABLE IF NOT EXISTS supplier_profile (
     sheet_name              TEXT,                          -- NULL = first sheet
     skip_rows_where_col_null TEXT,                         -- strip summary rows (e.g., "JDE Customer Number")
     max_read_columns        INTEGER,                       -- limit columns read (e.g. 22 for Carolon's wide stray-fill files)
+    fee_rate                REAL,                          -- flat rate applied to sales_amount when the file has
+                                                            -- no per-row fee column, only a per-row revenue figure
+                                                            -- plus a single stated rate (e.g. Labcorp: "3% Admin. Fee due")
     -- Payment ID resolution
     payment_id_source       TEXT NOT NULL DEFAULT 'ledger', -- 'ledger' | 'manual' | 'column'
     payor_filter_name       TEXT,                          -- name to filter ledger on (e.g., "Guerbet")

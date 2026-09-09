@@ -45,6 +45,7 @@ FILENAME_PREFIXES = {
     "Amerisource": ["Amerisource"],
     "Avel Med": ["Avel Med"],
     "Henry Schein": ["Henry Schein"],
+    "Labcorp": ["Labcorp"],
 }
 
 
