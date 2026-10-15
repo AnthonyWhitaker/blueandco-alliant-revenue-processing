@@ -784,14 +784,16 @@ def apply_review_decision(
         (resolved_member_id, resolution_scope, resolved_by, notes, review_item_id),
     )
 
+    # A job_only decision applies to this job's rows and nothing else: no
+    # alias and no JDE history, so future jobs don't inherit it.
+    remember = resolution_scope != "job_only"
+
     # Create alias if requested
-    if create_alias and item.get("customer_name_sample"):
+    if create_alias and remember and item.get("customer_name_sample"):
         from .normalizer import normalize_key
         raw_name = item["customer_name_sample"]
         canon_key = normalize_key(raw_name)
-        sp_id = supplier_profile_id if resolution_scope in ("supplier", "global") else None
-        if resolution_scope == "global":
-            sp_id = None
+        sp_id = supplier_profile_id if resolution_scope == "supplier" else None
         try:
             execute_insert_ignore(
                 conn,
@@ -810,7 +812,7 @@ def apply_review_decision(
             pass
 
     # Also update JDE history if we have a JDE number
-    if item.get("jde_number") and supplier_profile_id:
+    if remember and item.get("jde_number") and supplier_profile_id:
         execute_upsert(
             conn,
             """
