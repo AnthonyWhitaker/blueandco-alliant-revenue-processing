@@ -1,0 +1,9 @@
+/* Figures line up in columns of money and counts. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv11', 'ss01';
+}
