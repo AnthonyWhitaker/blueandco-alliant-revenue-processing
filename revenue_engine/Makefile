@@ -1,4 +1,4 @@
-.PHONY: install initdb seed ui api openapi test test-real-data check-mssql compose-up compose-down clean deploy
+.PHONY: install initdb seed ui api web openapi test test-real-data check-mssql compose-up compose-down clean deploy
 
 PYTHON ?= python3
 PY     ?= .venv/bin/python
@@ -21,6 +21,10 @@ ui:
 
 api:
 	.venv/bin/uvicorn api.main:app --reload --port 8000
+
+# Vite dev server on :5173, proxying /api to `make api` on :8000.
+web:
+	cd frontend && npm run dev
 
 openapi:
 	$(PY) scripts/export_openapi.py
