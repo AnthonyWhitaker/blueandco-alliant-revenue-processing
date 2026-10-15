@@ -15,6 +15,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from engine.db import init_db
+from core.misc import get_dashboard_stats
 
 st.set_page_config(
     page_title="Alliant Revenue Processing",
@@ -72,14 +73,11 @@ st.markdown(
 # Quick stats
 col1, col2, col3, col4 = st.columns(4)
 try:
-    n_members = conn.execute("SELECT COUNT(*) FROM member WHERE is_active=1").fetchone()[0]
-    n_jobs    = conn.execute("SELECT COUNT(*) FROM revenue_job").fetchone()[0]
-    n_pending = conn.execute("SELECT COUNT(*) FROM member_review_item WHERE status='pending'").fetchone()[0]
-    n_suppliers = conn.execute("SELECT COUNT(*) FROM supplier_profile").fetchone()[0]
-    col1.metric("Members Loaded", f"{n_members:,}")
-    col2.metric("Suppliers Configured", n_suppliers)
-    col3.metric("Jobs Processed", n_jobs)
-    col4.metric("Pending Reviews", n_pending, delta_color="inverse")
+    stats = get_dashboard_stats(conn)
+    col1.metric("Members Loaded", f"{stats.active_members:,}")
+    col2.metric("Suppliers Configured", stats.suppliers)
+    col3.metric("Jobs Processed", stats.jobs)
+    col4.metric("Pending Reviews", stats.pending_reviews, delta_color="inverse")
 except Exception:
     col1.metric("Members Loaded", "—")
     col2.metric("Suppliers Configured", "—")
