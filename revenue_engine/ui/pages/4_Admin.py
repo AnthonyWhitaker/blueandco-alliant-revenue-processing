@@ -426,7 +426,7 @@ with tab_tierc:
 
         if er_existing and er_del_col.button("Delete Extraction Rule", key="er_delete"):
             try:
-                tier_c.delete_extraction_rule(conn, er_existing.id)
+                tier_c.delete_extraction_rule(conn, tc_sp_id, er_existing.id)
                 st.success(f"Deleted extraction rule '{er_existing.rule_name}'.")
                 st.rerun()
             except CoreError as e:
@@ -515,7 +515,7 @@ with tab_tierc:
                         st.error(e.message)
 
             if ar_existing and ar_del_col.button("Delete Allocation Rule", key="ar_delete"):
-                tier_c.delete_allocation_rule(conn, ar_existing.id)
+                tier_c.delete_allocation_rule(conn, tc_sp_id, ar_existing.id)
                 st.success("Deleted allocation rule.")
                 st.rerun()
 
