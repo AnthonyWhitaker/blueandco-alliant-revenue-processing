@@ -552,9 +552,13 @@ def _build_review_items(
     For each unique unmatched customer in the job, create a member_review_item.
     Groups by JDE number (or customer name) and computes total fee impact.
     """
+    # Non-grouped columns must be aggregated: SQL Server rejects bare columns
+    # (SQLite silently picks an arbitrary row's value). MIN/MAX also make the
+    # representative name/location deterministic.
     rows = conn.execute(
         """
-        SELECT jde_number, customer_name, city, state, zip,
+        SELECT MAX(jde_number) AS jde_number, MIN(customer_name) AS customer_name,
+               MIN(city) AS city, MIN(state) AS state, MIN(zip) AS zip,
                COUNT(*) AS affected_rows,
                SUM(fee_amount) AS total_fee,
                SUM(sales_amount) AS total_sales

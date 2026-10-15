@@ -222,13 +222,15 @@ def execute_select(conn, sql_sqlite: str, params=None):
     """
     sql = sql_sqlite
     if is_mssql():
-        m = re.search(r"\bLIMIT\s+(\d+)\s*$", sql.strip(), re.IGNORECASE)
+        # Match offsets must index the same (stripped) string they were found in.
+        sql = sql.strip()
+        m = re.search(r"\bLIMIT\s+(\d+)\s*$", sql, re.IGNORECASE)
         if m:
             n = m.group(1)
             stripped = sql[: m.start()].rstrip()
             sql = re.sub(
                 r"^(\s*SELECT\s+)(DISTINCT\s+)?",
-                lambda mo: f"{mo.group(1)}TOP {n} {mo.group(2) or ''}",
+                lambda mo: f"{mo.group(1)}{mo.group(2) or ''}TOP {n} ",
                 stripped,
                 count=1,
                 flags=re.IGNORECASE,
@@ -302,7 +304,8 @@ def execute_upsert(conn, sql_sqlite: str, params=None):
     update_clause = re.sub(r"\bexcluded\.(\w+)", r"src.\1", update_clause)
     update_clause = re.sub(
         r"\b(?<!\.)occurrence_count\b",
-        f"{table}.occurrence_count",
+        # Inside MERGE the target is only addressable by its alias.
+        "tgt.occurrence_count",
         update_clause,
     )
     update_clause = update_clause.replace("CURRENT_TIMESTAMP", "GETUTCDATE()")
