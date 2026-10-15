@@ -1,0 +1,5538 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Alliant Revenue Processing API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": [
+          "reference"
+        ],
+        "summary": "Liveness probe (no dependencies)",
+        "operationId": "health_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health/ready": {
+      "get": {
+        "tags": [
+          "reference"
+        ],
+        "summary": "Readiness probe (checks the database)",
+        "operationId": "ready_api_health_ready_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthStatus"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/meta": {
+      "get": {
+        "tags": [
+          "reference"
+        ],
+        "summary": "Option lists for form selects",
+        "operationId": "meta_api_meta_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Meta"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dashboard": {
+      "get": {
+        "tags": [
+          "reference"
+        ],
+        "summary": "Home page counts",
+        "operationId": "dashboard_api_dashboard_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardStats"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "List jobs, newest first",
+        "operationId": "list_jobs_api_jobs_get",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": [
+                      "uploaded",
+                      "validating",
+                      "validated",
+                      "processing",
+                      "needs_review",
+                      "completed",
+                      "failed"
+                    ],
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "has_pending_reviews",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Has Pending Reviews"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 500,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Job"
+                  },
+                  "title": "Response List Jobs Api Jobs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Upload a supplier file and start processing",
+        "description": "Returns immediately with the job in 'uploaded' status. Poll GET /jobs/{job_id} until status is completed, needs_review, or failed.",
+        "operationId": "create_job_api_jobs_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_job_api_jobs_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/file-name-inference": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Guess supplier, date received and deposit amount from a file name",
+        "operationId": "infer_file_name_api_file_name_inference_get",
+        "parameters": [
+          {
+            "name": "file_name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "title": "File Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FileNameInference"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Get Job",
+        "operationId": "get_job_api_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Set the job's Salesforce Payment ID",
+        "operationId": "patch_job_api_jobs__job_id__patch",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/JobPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/confirmation": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Sign off a needs_review job that has no pending review items",
+        "operationId": "confirm_job_api_jobs__job_id__confirmation_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/exceptions": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "List Exceptions",
+        "operationId": "list_exceptions_api_jobs__job_id__exceptions_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobException"
+                  },
+                  "title": "Response List Exceptions Api Jobs  Job Id  Exceptions Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/preview": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "The four output tabs as rows",
+        "operationId": "preview_api_jobs__job_id__preview_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobPreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/export": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Download the Salesforce workbook",
+        "operationId": "export_api_jobs__job_id__export_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "4-tab XLSX",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/review-items": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Pending unmatched customers, highest fee first",
+        "operationId": "list_review_items_api_jobs__job_id__review_items_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ReviewItem"
+                  },
+                  "title": "Response List Review Items Api Jobs  Job Id  Review Items Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/review-items/{item_id}/approval": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Match an unmatched customer to a member",
+        "operationId": "approve_api_review_items__item_id__approval_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewApproval"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewDecisionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/review-items/{item_id}/dismissal": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Leave a customer unmatched (it stays on the Unmatched tab)",
+        "operationId": "dismiss_api_review_items__item_id__dismissal_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewDecisionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/suppliers": {
+      "get": {
+        "tags": [
+          "suppliers"
+        ],
+        "summary": "List Suppliers",
+        "operationId": "list_suppliers_api_suppliers_get",
+        "parameters": [
+          {
+            "name": "job_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "row_level",
+                    "pivot_allocation"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Job Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Supplier"
+                  },
+                  "title": "Response List Suppliers Api Suppliers Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "suppliers"
+        ],
+        "summary": "Create Supplier",
+        "operationId": "create_supplier_api_suppliers_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupplierInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Supplier"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/suppliers/{supplier_id}": {
+      "get": {
+        "tags": [
+          "suppliers"
+        ],
+        "summary": "Get Supplier",
+        "operationId": "get_supplier_api_suppliers__supplier_id__get",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Supplier"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "suppliers"
+        ],
+        "summary": "Update Supplier",
+        "operationId": "update_supplier_api_suppliers__supplier_id__put",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SupplierInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Supplier"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/suppliers/{supplier_id}/column-mappings": {
+      "get": {
+        "tags": [
+          "suppliers",
+          "column maps"
+        ],
+        "summary": "List Column Mappings",
+        "operationId": "list_column_mappings_api_suppliers__supplier_id__column_mappings_get",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ColumnMapping"
+                  },
+                  "title": "Response List Column Mappings Api Suppliers  Supplier Id  Column Mappings Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "suppliers",
+          "column maps"
+        ],
+        "summary": "Create or replace the mapping for a source column",
+        "operationId": "save_column_mapping_api_suppliers__supplier_id__column_mappings_post",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ColumnMappingInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ColumnMapping"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/suppliers/{supplier_id}/column-mappings/bulk": {
+      "post": {
+        "tags": [
+          "suppliers",
+          "column maps"
+        ],
+        "summary": "Save a reviewed set of inferred mappings",
+        "operationId": "save_inferred_mappings_api_suppliers__supplier_id__column_mappings_bulk_post",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/InferredMappingInput"
+                },
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ColumnMapping"
+                  },
+                  "title": "Response Save Inferred Mappings Api Suppliers  Supplier Id  Column Mappings Bulk Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/suppliers/{supplier_id}/column-mappings/inference": {
+      "post": {
+        "tags": [
+          "suppliers",
+          "column maps"
+        ],
+        "summary": "Suggest mappings from a sample file's headers (nothing is saved)",
+        "operationId": "infer_column_mappings_api_suppliers__supplier_id__column_mappings_inference_post",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_infer_column_mappings_api_suppliers__supplier_id__column_mappings_inference_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/InferredMapping"
+                  },
+                  "title": "Response Infer Column Mappings Api Suppliers  Supplier Id  Column Mappings Inference Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/suppliers/{supplier_id}/extraction-rules": {
+      "get": {
+        "tags": [
+          "suppliers",
+          "tier c"
+        ],
+        "summary": "List Extraction Rules",
+        "operationId": "list_extraction_rules_api_suppliers__supplier_id__extraction_rules_get",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ExtractionRule"
+                  },
+                  "title": "Response List Extraction Rules Api Suppliers  Supplier Id  Extraction Rules Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "suppliers",
+          "tier c"
+        ],
+        "summary": "Create Extraction Rule",
+        "operationId": "create_extraction_rule_api_suppliers__supplier_id__extraction_rules_post",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractionRuleInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractionRuleSaveResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/suppliers/{supplier_id}/extraction-rules/{rule_id}": {
+      "put": {
+        "tags": [
+          "suppliers",
+          "tier c"
+        ],
+        "summary": "Replace an extraction rule; a rename also renames referencing allocation rules",
+        "operationId": "update_extraction_rule_api_suppliers__supplier_id__extraction_rules__rule_id__put",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExtractionRuleInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractionRuleSaveResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "suppliers",
+          "tier c"
+        ],
+        "summary": "Delete an extraction rule (409 while allocation rules reference it)",
+        "operationId": "delete_extraction_rule_api_suppliers__supplier_id__extraction_rules__rule_id__delete",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/suppliers/{supplier_id}/allocation-rules": {
+      "get": {
+        "tags": [
+          "suppliers",
+          "tier c"
+        ],
+        "summary": "List Allocation Rules",
+        "operationId": "list_allocation_rules_api_suppliers__supplier_id__allocation_rules_get",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AllocationRule"
+                  },
+                  "title": "Response List Allocation Rules Api Suppliers  Supplier Id  Allocation Rules Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "suppliers",
+          "tier c"
+        ],
+        "summary": "Create Allocation Rule",
+        "operationId": "create_allocation_rule_api_suppliers__supplier_id__allocation_rules_post",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllocationRuleInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationRule"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/suppliers/{supplier_id}/allocation-rules/{rule_id}": {
+      "put": {
+        "tags": [
+          "suppliers",
+          "tier c"
+        ],
+        "summary": "Update Allocation Rule",
+        "operationId": "update_allocation_rule_api_suppliers__supplier_id__allocation_rules__rule_id__put",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllocationRuleInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AllocationRule"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "suppliers",
+          "tier c"
+        ],
+        "summary": "Delete Allocation Rule",
+        "operationId": "delete_allocation_rule_api_suppliers__supplier_id__allocation_rules__rule_id__delete",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/suppliers/{supplier_id}/allocation-rules/validation": {
+      "post": {
+        "tags": [
+          "suppliers",
+          "tier c"
+        ],
+        "summary": "Advisory warnings for an unsaved allocation rule (percent totals, duplicate remainder)",
+        "operationId": "validate_allocation_rule_api_suppliers__supplier_id__allocation_rules_validation_post",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AllocationRuleDraft"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Notice"
+                  },
+                  "title": "Response Validate Allocation Rule Api Suppliers  Supplier Id  Allocation Rules Validation Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/members": {
+      "get": {
+        "tags": [
+          "members"
+        ],
+        "summary": "Search members by name or entity code",
+        "operationId": "search_members_api_members_get",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "active_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Active Only"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_Member_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "members"
+        ],
+        "summary": "Create Member",
+        "operationId": "create_member_api_members_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemberInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Member"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/member-imports": {
+      "post": {
+        "tags": [
+          "members"
+        ],
+        "summary": "Load an Account List workbook in the background",
+        "operationId": "import_members_api_member_imports_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_members_api_member_imports_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ledger-entries": {
+      "get": {
+        "tags": [
+          "ledger"
+        ],
+        "summary": "Most recent payment ledger entries",
+        "operationId": "list_ledger_entries_api_ledger_entries_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 30,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_LedgerEntry_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/ledger-imports": {
+      "post": {
+        "tags": [
+          "ledger"
+        ],
+        "summary": "Load a Ledger workbook in the background",
+        "operationId": "import_ledger_api_ledger_imports_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_import_ledger_api_ledger_imports_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/tasks/{task_id}": {
+      "get": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Status of a background import",
+        "operationId": "get_task_api_tasks__task_id__get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/aliases": {
+      "get": {
+        "tags": [
+          "aliases"
+        ],
+        "summary": "List Aliases",
+        "operationId": "list_aliases_api_aliases_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Alias"
+                  },
+                  "title": "Response List Aliases Api Aliases Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "aliases"
+        ],
+        "summary": "Create Alias",
+        "operationId": "create_alias_api_aliases_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AliasInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Alias"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Alias": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "member_id": {
+            "type": "integer",
+            "title": "Member Id"
+          },
+          "member_name": {
+            "type": "string",
+            "title": "Member Name"
+          },
+          "entity_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Code"
+          },
+          "raw_name": {
+            "type": "string",
+            "title": "Raw Name"
+          },
+          "jde_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jde Number"
+          },
+          "supplier_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Profile Id"
+          },
+          "supplier_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Name"
+          },
+          "approved_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved By"
+          },
+          "approved_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "member_id",
+          "member_name",
+          "entity_code",
+          "raw_name",
+          "jde_number",
+          "supplier_profile_id",
+          "supplier_name",
+          "approved_by",
+          "approved_at"
+        ],
+        "title": "Alias"
+      },
+      "AliasInput": {
+        "properties": {
+          "member_id": {
+            "type": "integer",
+            "title": "Member Id"
+          },
+          "raw_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Raw Name"
+          },
+          "jde_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jde Number"
+          },
+          "supplier_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Profile Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "member_id",
+          "raw_name"
+        ],
+        "title": "AliasInput"
+      },
+      "AllocationRule": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "supplier_profile_id": {
+            "type": "integer",
+            "title": "Supplier Profile Id"
+          },
+          "extraction_rule_name": {
+            "type": "string",
+            "title": "Extraction Rule Name"
+          },
+          "member_id": {
+            "type": "integer",
+            "title": "Member Id"
+          },
+          "member_name": {
+            "type": "string",
+            "title": "Member Name"
+          },
+          "entity_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Code"
+          },
+          "allocation_type": {
+            "type": "string",
+            "enum": [
+              "percent",
+              "fixed_amount",
+              "remainder"
+            ],
+            "title": "Allocation Type"
+          },
+          "allocation_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allocation Value"
+          },
+          "contract_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Number"
+          },
+          "product_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Line"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "supplier_profile_id",
+          "extraction_rule_name",
+          "member_id",
+          "member_name",
+          "entity_code",
+          "allocation_type",
+          "allocation_value",
+          "contract_number",
+          "product_line",
+          "is_active"
+        ],
+        "title": "AllocationRule"
+      },
+      "AllocationRuleDraft": {
+        "properties": {
+          "allocation_type": {
+            "type": "string",
+            "enum": [
+              "percent",
+              "fixed_amount",
+              "remainder"
+            ],
+            "title": "Allocation Type"
+          },
+          "extraction_rule_name": {
+            "type": "string",
+            "title": "Extraction Rule Name"
+          },
+          "allocation_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allocation Value"
+          },
+          "rule_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rule Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "allocation_type",
+          "extraction_rule_name"
+        ],
+        "title": "AllocationRuleDraft",
+        "description": "An unsaved allocation rule, checked against the saved ones for warnings."
+      },
+      "AllocationRuleInput": {
+        "properties": {
+          "allocation_type": {
+            "type": "string",
+            "enum": [
+              "percent",
+              "fixed_amount",
+              "remainder"
+            ],
+            "title": "Allocation Type"
+          },
+          "extraction_rule_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Extraction Rule Name"
+          },
+          "member_id": {
+            "type": "integer",
+            "title": "Member Id"
+          },
+          "allocation_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Allocation Value"
+          },
+          "contract_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Number"
+          },
+          "product_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Line"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "allocation_type",
+          "extraction_rule_name",
+          "member_id"
+        ],
+        "title": "AllocationRuleInput"
+      },
+      "Body_create_job_api_jobs_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "Supplier remittance file (.xlsx, .xls, .xlsm, .csv)"
+          },
+          "supplier_profile_id": {
+            "type": "integer",
+            "title": "Supplier Profile Id"
+          },
+          "date_received": {
+            "type": "string",
+            "format": "date",
+            "title": "Date Received"
+          },
+          "manual_payment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Payment Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "supplier_profile_id",
+          "date_received"
+        ],
+        "title": "Body_create_job_api_jobs_post"
+      },
+      "Body_import_ledger_api_ledger_imports_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "Ledger.xlsx"
+          },
+          "sheet_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Sheet Name",
+            "default": "Ledger"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_ledger_api_ledger_imports_post"
+      },
+      "Body_import_members_api_member_imports_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "Account List.xlsx"
+          },
+          "replace_all": {
+            "type": "boolean",
+            "title": "Replace All",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_import_members_api_member_imports_post"
+      },
+      "Body_infer_column_mappings_api_suppliers__supplier_id__column_mappings_inference_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_infer_column_mappings_api_suppliers__supplier_id__column_mappings_inference_post"
+      },
+      "ColumnMapping": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "supplier_profile_id": {
+            "type": "integer",
+            "title": "Supplier Profile Id"
+          },
+          "source_column": {
+            "type": "string",
+            "title": "Source Column"
+          },
+          "canonical_field": {
+            "type": "string",
+            "enum": [
+              "customer_name",
+              "jde_number",
+              "process_date",
+              "city",
+              "state",
+              "zip",
+              "address",
+              "sales_amount",
+              "fee_amount",
+              "product_line",
+              "contract_number",
+              "entity_code_hint",
+              "account_id_hint"
+            ],
+            "title": "Canonical Field"
+          },
+          "is_required": {
+            "type": "boolean",
+            "title": "Is Required"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "supplier_profile_id",
+          "source_column",
+          "canonical_field",
+          "is_required"
+        ],
+        "title": "ColumnMapping"
+      },
+      "ColumnMappingInput": {
+        "properties": {
+          "source_column": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Source Column"
+          },
+          "canonical_field": {
+            "type": "string",
+            "enum": [
+              "customer_name",
+              "jde_number",
+              "process_date",
+              "city",
+              "state",
+              "zip",
+              "address",
+              "sales_amount",
+              "fee_amount",
+              "product_line",
+              "contract_number",
+              "entity_code_hint",
+              "account_id_hint"
+            ],
+            "title": "Canonical Field"
+          },
+          "is_required": {
+            "type": "boolean",
+            "title": "Is Required",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_column",
+          "canonical_field"
+        ],
+        "title": "ColumnMappingInput"
+      },
+      "DashboardStats": {
+        "properties": {
+          "active_members": {
+            "type": "integer",
+            "title": "Active Members"
+          },
+          "suppliers": {
+            "type": "integer",
+            "title": "Suppliers"
+          },
+          "jobs": {
+            "type": "integer",
+            "title": "Jobs"
+          },
+          "pending_reviews": {
+            "type": "integer",
+            "title": "Pending Reviews"
+          }
+        },
+        "type": "object",
+        "required": [
+          "active_members",
+          "suppliers",
+          "jobs",
+          "pending_reviews"
+        ],
+        "title": "DashboardStats"
+      },
+      "ExtractionRule": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "supplier_profile_id": {
+            "type": "integer",
+            "title": "Supplier Profile Id"
+          },
+          "rule_name": {
+            "type": "string",
+            "title": "Rule Name"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Name"
+          },
+          "extraction_method": {
+            "type": "string",
+            "enum": [
+              "named_cell",
+              "label_lookup",
+              "label_range_sum",
+              "column_sum",
+              "formula",
+              "manual_entry"
+            ],
+            "title": "Extraction Method"
+          },
+          "cell_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cell Address"
+          },
+          "label_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Text"
+          },
+          "label_match_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "exact",
+                  "contains",
+                  "startswith",
+                  "fuzzy"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Match Mode"
+          },
+          "label_match_threshold": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Match Threshold"
+          },
+          "value_row_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Row Offset"
+          },
+          "value_col_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value Col Offset"
+          },
+          "range_axis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "column",
+                  "row"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Range Axis"
+          },
+          "column_index": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Index"
+          },
+          "column_letter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Letter"
+          },
+          "header_row": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Header Row"
+          },
+          "stop_label_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Label Text"
+          },
+          "formula_expression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formula Expression"
+          },
+          "is_sales_amount": {
+            "type": "boolean",
+            "title": "Is Sales Amount"
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "supplier_profile_id",
+          "rule_name",
+          "sheet_name",
+          "extraction_method",
+          "cell_address",
+          "label_text",
+          "label_match_mode",
+          "label_match_threshold",
+          "value_row_offset",
+          "value_col_offset",
+          "range_axis",
+          "column_index",
+          "column_letter",
+          "header_row",
+          "stop_label_text",
+          "formula_expression",
+          "is_sales_amount",
+          "sort_order"
+        ],
+        "title": "ExtractionRule"
+      },
+      "ExtractionRuleInput": {
+        "properties": {
+          "extraction_method": {
+            "type": "string",
+            "enum": [
+              "named_cell",
+              "label_lookup",
+              "label_range_sum",
+              "column_sum",
+              "formula",
+              "manual_entry"
+            ],
+            "title": "Extraction Method"
+          },
+          "rule_name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Rule Name"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Name"
+          },
+          "cell_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cell Address"
+          },
+          "label_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label Text"
+          },
+          "label_match_mode": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "contains",
+              "startswith",
+              "fuzzy"
+            ],
+            "title": "Label Match Mode",
+            "default": "exact"
+          },
+          "label_match_threshold": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Label Match Threshold",
+            "default": 90
+          },
+          "value_row_offset": {
+            "type": "integer",
+            "title": "Value Row Offset",
+            "default": 1
+          },
+          "value_col_offset": {
+            "type": "integer",
+            "title": "Value Col Offset",
+            "default": 0
+          },
+          "range_axis": {
+            "type": "string",
+            "enum": [
+              "column",
+              "row"
+            ],
+            "title": "Range Axis",
+            "default": "column"
+          },
+          "column_letter": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z]{1,3}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Letter"
+          },
+          "column_index": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column Index"
+          },
+          "header_row": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Header Row",
+            "default": 0
+          },
+          "stop_label_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stop Label Text"
+          },
+          "formula_expression": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formula Expression"
+          },
+          "is_sales_amount": {
+            "type": "boolean",
+            "title": "Is Sales Amount",
+            "default": false
+          },
+          "sort_order": {
+            "type": "integer",
+            "title": "Sort Order",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "extraction_method",
+          "rule_name"
+        ],
+        "title": "ExtractionRuleInput"
+      },
+      "ExtractionRuleSaveResult": {
+        "properties": {
+          "rule": {
+            "$ref": "#/components/schemas/ExtractionRule"
+          },
+          "renamed_allocation_refs": {
+            "type": "integer",
+            "title": "Renamed Allocation Refs"
+          },
+          "notices": {
+            "items": {
+              "$ref": "#/components/schemas/Notice"
+            },
+            "type": "array",
+            "title": "Notices"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rule",
+          "renamed_allocation_refs",
+          "notices"
+        ],
+        "title": "ExtractionRuleSaveResult"
+      },
+      "FieldError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Loc"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "FieldError"
+      },
+      "FileNameInference": {
+        "properties": {
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "supplier_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Profile Id"
+          },
+          "supplier_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Name"
+          },
+          "date_received": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Received"
+          },
+          "deposit_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Amount"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file_name",
+          "supplier_profile_id",
+          "supplier_name",
+          "date_received",
+          "deposit_amount"
+        ],
+        "title": "FileNameInference"
+      },
+      "HealthStatus": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "HealthStatus"
+      },
+      "InferredMapping": {
+        "properties": {
+          "source_column": {
+            "type": "string",
+            "title": "Source Column"
+          },
+          "canonical_field": {
+            "type": "string",
+            "enum": [
+              "customer_name",
+              "jde_number",
+              "process_date",
+              "city",
+              "state",
+              "zip",
+              "address",
+              "sales_amount",
+              "fee_amount",
+              "product_line",
+              "contract_number",
+              "entity_code_hint",
+              "account_id_hint"
+            ],
+            "title": "Canonical Field"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_column",
+          "canonical_field"
+        ],
+        "title": "InferredMapping"
+      },
+      "InferredMappingInput": {
+        "properties": {
+          "source_column": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Source Column"
+          },
+          "canonical_field": {
+            "type": "string",
+            "enum": [
+              "customer_name",
+              "jde_number",
+              "process_date",
+              "city",
+              "state",
+              "zip",
+              "address",
+              "sales_amount",
+              "fee_amount",
+              "product_line",
+              "contract_number",
+              "entity_code_hint",
+              "account_id_hint"
+            ],
+            "title": "Canonical Field"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "source_column",
+          "canonical_field"
+        ],
+        "title": "InferredMappingInput"
+      },
+      "JdeMappingSheetRow": {
+        "properties": {
+          "jde_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jde Number"
+          },
+          "supplier_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Name"
+          },
+          "entity_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Code"
+          },
+          "account_list_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account List Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "jde_number",
+          "supplier_name",
+          "entity_code",
+          "account_list_name"
+        ],
+        "title": "JdeMappingSheetRow"
+      },
+      "Job": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "supplier_profile_id": {
+            "type": "integer",
+            "title": "Supplier Profile Id"
+          },
+          "supplier_name": {
+            "type": "string",
+            "title": "Supplier Name"
+          },
+          "job_type": {
+            "type": "string",
+            "enum": [
+              "row_level",
+              "pivot_allocation"
+            ],
+            "title": "Job Type"
+          },
+          "original_file_name": {
+            "type": "string",
+            "title": "Original File Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "uploaded",
+              "validating",
+              "validated",
+              "processing",
+              "needs_review",
+              "completed",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "payment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Id"
+          },
+          "payment_id_source": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ledger_auto",
+                  "manual",
+                  "column"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Id Source"
+          },
+          "deposit_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deposit Amount"
+          },
+          "date_received": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Received"
+          },
+          "earned_period_start": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Earned Period Start"
+          },
+          "earned_period_end": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Earned Period End"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          },
+          "row_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Count"
+          },
+          "matched_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Count"
+          },
+          "unmatched_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unmatched Count"
+          },
+          "total_volume": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Volume"
+          },
+          "total_revenue": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Revenue"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "pending_review_count": {
+            "type": "integer",
+            "title": "Pending Review Count"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "supplier_profile_id",
+          "supplier_name",
+          "job_type",
+          "original_file_name",
+          "status",
+          "payment_id",
+          "payment_id_source",
+          "deposit_amount",
+          "date_received",
+          "earned_period_start",
+          "earned_period_end",
+          "contract_id",
+          "row_count",
+          "matched_count",
+          "unmatched_count",
+          "total_volume",
+          "total_revenue",
+          "error_message",
+          "pending_review_count",
+          "created_at",
+          "completed_at"
+        ],
+        "title": "Job"
+      },
+      "JobException": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "exception_type": {
+            "type": "string",
+            "title": "Exception Type"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ],
+            "title": "Severity"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "exception_type",
+          "message",
+          "severity",
+          "status",
+          "created_at"
+        ],
+        "title": "JobException"
+      },
+      "JobPatch": {
+        "properties": {
+          "payment_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Payment Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "payment_id"
+        ],
+        "title": "JobPatch"
+      },
+      "JobPreview": {
+        "properties": {
+          "upload": {
+            "items": {
+              "$ref": "#/components/schemas/UploadSheetRow"
+            },
+            "type": "array",
+            "title": "Upload"
+          },
+          "validation": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationSheetRow"
+            },
+            "type": "array",
+            "title": "Validation"
+          },
+          "unmatched": {
+            "items": {
+              "$ref": "#/components/schemas/UnmatchedSheetRow"
+            },
+            "type": "array",
+            "title": "Unmatched"
+          },
+          "jde_mapping": {
+            "items": {
+              "$ref": "#/components/schemas/JdeMappingSheetRow"
+            },
+            "type": "array",
+            "title": "Jde Mapping"
+          }
+        },
+        "type": "object",
+        "required": [
+          "upload",
+          "validation",
+          "unmatched",
+          "jde_mapping"
+        ],
+        "title": "JobPreview",
+        "description": "The four tabs of the exported workbook, as rows."
+      },
+      "LedgerEntry": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "payor": {
+            "type": "string",
+            "title": "Payor"
+          },
+          "payment_received_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Received Date"
+          },
+          "deposit_amount": {
+            "type": "number",
+            "title": "Deposit Amount"
+          },
+          "sf_payment_id": {
+            "type": "string",
+            "title": "Sf Payment Id"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "payor",
+          "payment_received_date",
+          "deposit_amount",
+          "sf_payment_id",
+          "contract_id"
+        ],
+        "title": "LedgerEntry"
+      },
+      "LedgerImportResult": {
+        "properties": {
+          "inserted": {
+            "type": "integer",
+            "title": "Inserted"
+          }
+        },
+        "type": "object",
+        "required": [
+          "inserted"
+        ],
+        "title": "LedgerImportResult"
+      },
+      "Member": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "entity_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Code"
+          },
+          "premier_entity_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Premier Entity Code"
+          },
+          "alliant_entity_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alliant Entity Code"
+          },
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "billing_city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billing City"
+          },
+          "billing_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billing State"
+          },
+          "billing_zip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Billing Zip"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "entity_code",
+          "premier_entity_code",
+          "alliant_entity_code",
+          "account_id",
+          "billing_city",
+          "billing_state",
+          "billing_zip",
+          "is_active"
+        ],
+        "title": "Member"
+      },
+      "MemberImportResult": {
+        "properties": {
+          "inserted": {
+            "type": "integer",
+            "title": "Inserted"
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped"
+          }
+        },
+        "type": "object",
+        "required": [
+          "inserted",
+          "skipped"
+        ],
+        "title": "MemberImportResult"
+      },
+      "MemberInput": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "premier_entity_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Premier Entity Code"
+          },
+          "account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Id"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "zip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zip"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "MemberInput"
+      },
+      "Meta": {
+        "properties": {
+          "canonical_fields": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "customer_name",
+                "jde_number",
+                "process_date",
+                "city",
+                "state",
+                "zip",
+                "address",
+                "sales_amount",
+                "fee_amount",
+                "product_line",
+                "contract_number",
+                "entity_code_hint",
+                "account_id_hint"
+              ]
+            },
+            "type": "array",
+            "title": "Canonical Fields"
+          },
+          "revenue_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Revenue Types"
+          },
+          "keep_return_options": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Keep Return Options"
+          },
+          "payment_id_sources": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "ledger",
+                "manual",
+                "column"
+              ]
+            },
+            "type": "array",
+            "title": "Payment Id Sources"
+          },
+          "job_types": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "row_level",
+                "pivot_allocation"
+              ]
+            },
+            "type": "array",
+            "title": "Job Types"
+          },
+          "extraction_methods": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "named_cell",
+                "label_lookup",
+                "label_range_sum",
+                "column_sum",
+                "formula",
+                "manual_entry"
+              ]
+            },
+            "type": "array",
+            "title": "Extraction Methods"
+          },
+          "label_match_modes": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "exact",
+                "contains",
+                "startswith",
+                "fuzzy"
+              ]
+            },
+            "type": "array",
+            "title": "Label Match Modes"
+          },
+          "range_axes": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "column",
+                "row"
+              ]
+            },
+            "type": "array",
+            "title": "Range Axes"
+          },
+          "allocation_types": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "percent",
+                "fixed_amount",
+                "remainder"
+              ]
+            },
+            "type": "array",
+            "title": "Allocation Types"
+          },
+          "alias_scopes": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "supplier",
+                "global",
+                "job_only"
+              ]
+            },
+            "type": "array",
+            "title": "Alias Scopes"
+          },
+          "upload_extensions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Upload Extensions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "canonical_fields",
+          "revenue_types",
+          "keep_return_options",
+          "payment_id_sources",
+          "job_types",
+          "extraction_methods",
+          "label_match_modes",
+          "range_axes",
+          "allocation_types",
+          "alias_scopes",
+          "upload_extensions"
+        ],
+        "title": "Meta",
+        "description": "Option lists for selects. Static for the life of a deployment."
+      },
+      "Notice": {
+        "properties": {
+          "level": {
+            "type": "string",
+            "enum": [
+              "info",
+              "warning"
+            ],
+            "title": "Level"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "level",
+          "message"
+        ],
+        "title": "Notice"
+      },
+      "Page_LedgerEntry_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/LedgerEntry"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "Page[LedgerEntry]"
+      },
+      "Page_Member_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/Member"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "Page[Member]"
+      },
+      "Problem": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "default": "about:blank"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "status": {
+            "type": "integer",
+            "title": "Status"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "instance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Instance"
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FieldError"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errors"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "status"
+        ],
+        "title": "Problem"
+      },
+      "ReviewApproval": {
+        "properties": {
+          "member_id": {
+            "type": "integer",
+            "title": "Member Id"
+          },
+          "create_alias": {
+            "type": "boolean",
+            "title": "Create Alias",
+            "default": true
+          },
+          "alias_scope": {
+            "type": "string",
+            "enum": [
+              "supplier",
+              "global",
+              "job_only"
+            ],
+            "title": "Alias Scope",
+            "default": "supplier"
+          },
+          "notes": {
+            "type": "string",
+            "title": "Notes",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "member_id"
+        ],
+        "title": "ReviewApproval"
+      },
+      "ReviewDecisionResult": {
+        "properties": {
+          "updated_rows": {
+            "type": "integer",
+            "title": "Updated Rows"
+          },
+          "job": {
+            "$ref": "#/components/schemas/Job"
+          }
+        },
+        "type": "object",
+        "required": [
+          "updated_rows",
+          "job"
+        ],
+        "title": "ReviewDecisionResult"
+      },
+      "ReviewItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "job_id": {
+            "type": "integer",
+            "title": "Job Id"
+          },
+          "jde_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jde Number"
+          },
+          "customer_name_sample": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name Sample"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "zip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zip"
+          },
+          "total_fee": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Fee"
+          },
+          "total_sales": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Sales"
+          },
+          "affected_row_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Affected Row Count"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "dismissed",
+              "skipped"
+            ],
+            "title": "Status"
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReviewSuggestion"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "job_id",
+          "jde_number",
+          "customer_name_sample",
+          "city",
+          "state",
+          "zip",
+          "total_fee",
+          "total_sales",
+          "affected_row_count",
+          "status",
+          "suggestion"
+        ],
+        "title": "ReviewItem"
+      },
+      "ReviewSuggestion": {
+        "properties": {
+          "member_id": {
+            "type": "integer",
+            "title": "Member Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "entity_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Code"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "score": {
+            "type": "integer",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "member_id",
+          "name",
+          "entity_code",
+          "city",
+          "state",
+          "score"
+        ],
+        "title": "ReviewSuggestion"
+      },
+      "Supplier": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          },
+          "revenue_type": {
+            "type": "string",
+            "title": "Revenue Type"
+          },
+          "keep_return_default": {
+            "type": "string",
+            "title": "Keep Return Default"
+          },
+          "payor_filter_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payor Filter Name"
+          },
+          "payment_id_source": {
+            "type": "string",
+            "enum": [
+              "ledger",
+              "manual",
+              "column"
+            ],
+            "title": "Payment Id Source"
+          },
+          "skip_rows_where_col_null": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skip Rows Where Col Null"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Name"
+          },
+          "header_row": {
+            "type": "integer",
+            "title": "Header Row"
+          },
+          "max_read_columns": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Read Columns"
+          },
+          "fee_rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fee Rate"
+          },
+          "job_type": {
+            "type": "string",
+            "enum": [
+              "row_level",
+              "pivot_allocation"
+            ],
+            "title": "Job Type"
+          },
+          "requires_manual_confirmation": {
+            "type": "boolean",
+            "title": "Requires Manual Confirmation"
+          },
+          "fuzzy_zip_state_threshold": {
+            "type": "integer",
+            "title": "Fuzzy Zip State Threshold"
+          },
+          "fuzzy_city_state_threshold": {
+            "type": "integer",
+            "title": "Fuzzy City State Threshold"
+          },
+          "fuzzy_state_threshold": {
+            "type": "integer",
+            "title": "Fuzzy State Threshold"
+          },
+          "fuzzy_nationwide_threshold": {
+            "type": "integer",
+            "title": "Fuzzy Nationwide Threshold"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "contract_id",
+          "revenue_type",
+          "keep_return_default",
+          "payor_filter_name",
+          "payment_id_source",
+          "skip_rows_where_col_null",
+          "sheet_name",
+          "header_row",
+          "max_read_columns",
+          "fee_rate",
+          "job_type",
+          "requires_manual_confirmation",
+          "fuzzy_zip_state_threshold",
+          "fuzzy_city_state_threshold",
+          "fuzzy_state_threshold",
+          "fuzzy_nationwide_threshold",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "Supplier"
+      },
+      "SupplierInput": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          },
+          "revenue_type": {
+            "type": "string",
+            "title": "Revenue Type",
+            "default": "Admin Fee"
+          },
+          "keep_return_default": {
+            "type": "string",
+            "title": "Keep Return Default",
+            "default": "Keep"
+          },
+          "payor_filter_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payor Filter Name"
+          },
+          "payment_id_source": {
+            "type": "string",
+            "enum": [
+              "ledger",
+              "manual",
+              "column"
+            ],
+            "title": "Payment Id Source",
+            "default": "ledger"
+          },
+          "skip_rows_where_col_null": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Skip Rows Where Col Null"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Name"
+          },
+          "header_row": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Header Row",
+            "default": 0
+          },
+          "max_read_columns": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Read Columns"
+          },
+          "job_type": {
+            "type": "string",
+            "enum": [
+              "row_level",
+              "pivot_allocation"
+            ],
+            "title": "Job Type",
+            "default": "row_level"
+          },
+          "requires_manual_confirmation": {
+            "type": "boolean",
+            "title": "Requires Manual Confirmation",
+            "default": false
+          },
+          "fee_rate": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fee Rate"
+          },
+          "fuzzy_zip_state_threshold": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Fuzzy Zip State Threshold",
+            "default": 75
+          },
+          "fuzzy_city_state_threshold": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Fuzzy City State Threshold",
+            "default": 75
+          },
+          "fuzzy_state_threshold": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Fuzzy State Threshold",
+            "default": 80
+          },
+          "fuzzy_nationwide_threshold": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Fuzzy Nationwide Threshold",
+            "default": 85
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "SupplierInput"
+      },
+      "Task": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "member_import",
+              "ledger_import"
+            ],
+            "title": "Kind"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "member_import": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemberImportResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ledger_import": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LedgerImportResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "created_at",
+          "finished_at",
+          "error",
+          "member_import",
+          "ledger_import"
+        ],
+        "title": "Task"
+      },
+      "UnmatchedSheetRow": {
+        "properties": {
+          "row_number": {
+            "type": "integer",
+            "title": "Row Number"
+          },
+          "jde_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jde Number"
+          },
+          "customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Name"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "zip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zip"
+          },
+          "process_date": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Process Date"
+          },
+          "sales_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sales Amount"
+          },
+          "fee_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fee Amount"
+          },
+          "product_line": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Product Line"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row_number",
+          "jde_number",
+          "customer_name",
+          "address",
+          "city",
+          "state",
+          "zip",
+          "process_date",
+          "sales_amount",
+          "fee_amount",
+          "product_line"
+        ],
+        "title": "UnmatchedSheetRow"
+      },
+      "UploadSheetRow": {
+        "properties": {
+          "pec": {
+            "type": "string",
+            "title": "Pec"
+          },
+          "facility_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Facility Id"
+          },
+          "contract_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contract Id"
+          },
+          "payment_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payment Id"
+          },
+          "volume": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume"
+          },
+          "total_revenue": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Revenue"
+          },
+          "revenue_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revenue Type"
+          },
+          "keep_return": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Keep Return"
+          },
+          "earned_period": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Earned Period"
+          },
+          "pmt_for_time_frame": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pmt For Time Frame"
+          },
+          "date_received": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Received"
+          },
+          "comments": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comments"
+          },
+          "date_refunded": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Refunded"
+          },
+          "rebate_retained": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rebate Retained"
+          },
+          "amount_retained": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Retained"
+          },
+          "retained_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retained Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pec",
+          "facility_id",
+          "contract_id",
+          "payment_id",
+          "volume",
+          "total_revenue",
+          "revenue_type",
+          "keep_return",
+          "earned_period",
+          "pmt_for_time_frame",
+          "date_received",
+          "comments",
+          "date_refunded",
+          "rebate_retained",
+          "amount_retained",
+          "retained_reason"
+        ],
+        "title": "UploadSheetRow",
+        "description": "One row of the Salesforce Facility Revenue upload (exporter 'Upload' tab)."
+      },
+      "ValidationSheetRow": {
+        "properties": {
+          "jde_number": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jde Number"
+          },
+          "supplier_customer_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Supplier Customer Name"
+          },
+          "entity_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Code"
+          },
+          "salesforce_account_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Salesforce Account Id"
+          },
+          "account_list_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account List Name"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "match_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Match Method"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "jde_number",
+          "supplier_customer_name",
+          "entity_code",
+          "salesforce_account_id",
+          "account_list_name",
+          "city",
+          "state",
+          "match_method",
+          "score"
+        ],
+        "title": "ValidationSheetRow"
+      }
+    }
+  }
+}

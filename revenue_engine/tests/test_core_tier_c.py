@@ -74,9 +74,9 @@ def test_rename_cascades_and_delete_is_guarded(conn, pivot):
     assert [a.extraction_rule_name for a in tier_c.list_allocation_rules(conn, sid)] == ["Grand Total"]
 
     with pytest.raises(ConflictError, match="Delete those first"):
-        tier_c.delete_extraction_rule(conn, rule.id)
-    tier_c.delete_allocation_rule(conn, tier_c.list_allocation_rules(conn, sid)[0].id)
-    tier_c.delete_extraction_rule(conn, rule.id)
+        tier_c.delete_extraction_rule(conn, sid, rule.id)
+    tier_c.delete_allocation_rule(conn, sid, tier_c.list_allocation_rules(conn, sid)[0].id)
+    tier_c.delete_extraction_rule(conn, sid, rule.id)
     assert tier_c.list_extraction_rules(conn, sid) == []
 
 

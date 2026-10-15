@@ -157,8 +157,10 @@ def save_extraction_rule(
     )
 
 
-def delete_extraction_rule(conn, rule_id: int) -> None:
+def delete_extraction_rule(conn, supplier_id: int, rule_id: int) -> None:
     rule = get_extraction_rule(conn, rule_id)
+    if rule.supplier_profile_id != supplier_id:
+        raise NotFoundError(f"Extraction rule {rule_id} not found for supplier {supplier_id}.")
     n_refs = conn.execute(
         "SELECT COUNT(*) FROM supplier_allocation_rule WHERE supplier_profile_id = ? AND extraction_rule_name = ?",
         (rule.supplier_profile_id, rule.rule_name),
@@ -231,8 +233,9 @@ def save_allocation_rule(
     return get_allocation_rule(conn, saved_id)
 
 
-def delete_allocation_rule(conn, rule_id: int) -> None:
-    get_allocation_rule(conn, rule_id)
+def delete_allocation_rule(conn, supplier_id: int, rule_id: int) -> None:
+    if get_allocation_rule(conn, rule_id).supplier_profile_id != supplier_id:
+        raise NotFoundError(f"Allocation rule {rule_id} not found for supplier {supplier_id}.")
     conn.execute("DELETE FROM supplier_allocation_rule WHERE id = ?", (rule_id,))
     conn.commit()
 
