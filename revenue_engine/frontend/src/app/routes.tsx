@@ -4,6 +4,10 @@ import { NotFoundPage, RootErrorBoundary, RouteErrorBoundary } from '@/component
 import { AppLayout } from '@/components/layout/AppLayout';
 import { routes } from '@/lib/routes';
 import { AdminLayout } from '@/pages/admin/AdminLayout';
+import { AliasesTab } from '@/pages/admin/AliasesTab';
+import { LedgerTab } from '@/pages/admin/LedgerTab';
+import { MembersTab } from '@/pages/admin/MembersTab';
+import { SuppliersTab } from '@/pages/admin/SuppliersTab';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { AdminTabStub, ExportPage, ReviewPage, UploadPage } from '@/pages/stubs';
 
@@ -25,15 +29,12 @@ export const routeTree: RouteObject[] = [
             element: <AdminLayout />,
             children: [
               { index: true, element: <Navigate to={routes.admin.members} replace /> },
-              { path: routes.admin.members, element: <AdminTabStub feature="Members" /> },
-              { path: routes.admin.ledger, element: <AdminTabStub feature="The payment ledger" /> },
-              {
-                path: routes.admin.suppliers,
-                element: <AdminTabStub feature="Supplier profiles" />,
-              },
+              { path: routes.admin.members, element: <MembersTab /> },
+              { path: routes.admin.ledger, element: <LedgerTab /> },
+              { path: routes.admin.suppliers, element: <SuppliersTab /> },
               { path: routes.admin.columnMaps, element: <AdminTabStub feature="Column maps" /> },
               { path: routes.admin.tierC, element: <AdminTabStub feature="Tier C rules" /> },
-              { path: routes.admin.aliases, element: <AdminTabStub feature="Aliases" /> },
+              { path: routes.admin.aliases, element: <AliasesTab /> },
             ],
           },
           { path: '*', element: <NotFoundPage /> },
