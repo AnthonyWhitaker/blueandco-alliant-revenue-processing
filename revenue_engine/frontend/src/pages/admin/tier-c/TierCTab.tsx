@@ -77,7 +77,9 @@ function RuleEditor<R extends { id: number }>({
   return (
     <Paper p="lg">
       <Stack gap="md">
-        <Title order={3}>{title}</Title>
+        <Title order={2} size="h3">
+          {title}
+        </Title>
         {rules.length > 0 && (
           <SegmentedControl
             aria-label={noun}
@@ -156,7 +158,9 @@ function SupplierRules({ supplierId, meta }: { supplierId: number; meta: Meta })
   return (
     <Stack gap="lg">
       <Stack gap="sm">
-        <Title order={3}>Extraction rules</Title>
+        <Title order={2} size="h3">
+          Extraction rules
+        </Title>
         {extractionRules.length === 0 ? (
           <EmptyState title="No extraction rules yet" />
         ) : (
@@ -209,7 +213,9 @@ function SupplierRules({ supplierId, meta }: { supplierId: number; meta: Meta })
       </Stack>
 
       <Stack gap="sm">
-        <Title order={3}>Allocation rules</Title>
+        <Title order={2} size="h3">
+          Allocation rules
+        </Title>
         {allocationRules.length === 0 ? (
           <EmptyState title="No allocation rules yet" />
         ) : (
@@ -305,7 +311,7 @@ function SupplierRules({ supplierId, meta }: { supplierId: number; meta: Meta })
       <div id="allocation-editor">
         {ruleNames.length === 0 ? (
           <Paper p="lg">
-            <Title order={3} mb="xs">
+            <Title order={2} size="h3" mb="xs">
               Add or edit an allocation rule
             </Title>
             <Text size="sm" c="dimmed">
@@ -349,7 +355,9 @@ export function TierCTab() {
 
   const intro = (
     <div>
-      <Title order={3}>Tier C extraction and allocation rules</Title>
+      <Title order={2} size="h3">
+        Tier C extraction and allocation rules
+      </Title>
       <Text size="sm" c="dimmed">
         For pivot_allocation suppliers only: where to find each dollar total on an aggregate
         workpaper, and who it is allocated to.

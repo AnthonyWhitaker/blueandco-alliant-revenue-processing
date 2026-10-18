@@ -53,7 +53,9 @@ export function LedgerTab() {
       <Paper p="lg">
         <Stack gap="md">
           <div>
-            <Title order={3}>Import the payment ledger</Title>
+            <Title order={2} size="h3">
+              Import the payment ledger
+            </Title>
             <Text size="sm" c="dimmed" mt={4}>
               Upload Ledger.xlsx to import the Salesforce Payment IDs for deposit amounts.
             </Text>
@@ -99,7 +101,9 @@ export function LedgerTab() {
 
       <Stack gap="sm">
         <Group justify="space-between">
-          <Title order={3}>Recent entries</Title>
+          <Title order={2} size="h3">
+            Recent entries
+          </Title>
           <Button
             variant="default"
             onClick={() => {

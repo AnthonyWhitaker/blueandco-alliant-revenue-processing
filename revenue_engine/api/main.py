@@ -14,6 +14,7 @@ from typing import AsyncIterator, Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import PlainTextResponse
 
@@ -65,6 +66,8 @@ def create_app() -> FastAPI:
     )
     app.state.settings = settings
     install_error_handlers(app)
+    # Container Apps ingress doesn't compress; the SPA bundle and JSON lists shrink ~70%.
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
 
     if settings.cors_allow_origins:
         app.add_middleware(

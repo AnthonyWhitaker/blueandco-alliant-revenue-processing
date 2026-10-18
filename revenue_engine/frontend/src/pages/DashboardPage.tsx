@@ -71,7 +71,7 @@ export function DashboardPage() {
       )}
 
       <Card maw={720}>
-        <Title order={3} mb="sm">
+        <Title order={2} size="h3" mb="sm">
           Getting started
         </Title>
         <List type="ordered" spacing="xs" size="sm">

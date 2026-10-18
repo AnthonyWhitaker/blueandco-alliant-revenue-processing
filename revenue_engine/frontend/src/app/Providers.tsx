@@ -4,7 +4,7 @@ import { Notifications } from '@mantine/notifications';
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
-import { theme as appTheme } from '@/theme';
+import { theme as appTheme, cssVariablesResolver } from '@/theme';
 
 interface ProvidersProps {
   queryClient: QueryClient;
@@ -16,7 +16,11 @@ interface ProvidersProps {
 /** Everything except the router, so tests can wrap a memory router in the same providers. */
 export function Providers({ queryClient, children, theme = appTheme }: ProvidersProps) {
   return (
-    <MantineProvider theme={theme} defaultColorScheme="auto">
+    <MantineProvider
+      theme={theme}
+      defaultColorScheme="auto"
+      cssVariablesResolver={cssVariablesResolver}
+    >
       <QueryClientProvider client={queryClient}>
         <ModalsProvider>
           <Notifications position="top-right" />

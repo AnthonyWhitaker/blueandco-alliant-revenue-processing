@@ -278,3 +278,9 @@ def test_api_only_without_a_built_frontend(conn, tmp_path, monkeypatch):
     with TestClient(create_app()) as c:
         assert c.get("/api/health").status_code == 200
         assert c.get("/review").status_code == 404
+
+
+def test_responses_are_gzipped_when_the_client_accepts_it(spa_client):
+    (spa_client.app.state.settings.static_dir / "assets" / "big.js").write_text("x" * 5000)
+    r = spa_client.get("/assets/big.js", headers={"Accept-Encoding": "gzip"})
+    assert r.headers["content-encoding"] == "gzip"

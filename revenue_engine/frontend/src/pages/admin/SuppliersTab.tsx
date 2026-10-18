@@ -345,7 +345,9 @@ export function SuppliersTab() {
     <Stack gap="md">
       <Group justify="space-between">
         <div>
-          <Title order={3}>Supplier profiles</Title>
+          <Title order={2} size="h3">
+            Supplier profiles
+          </Title>
           <Text size="sm" c="dimmed">
             For a pivot/aggregate-workpaper supplier (job type pivot_allocation), also set up its
             rules in the Tier C Rules tab.

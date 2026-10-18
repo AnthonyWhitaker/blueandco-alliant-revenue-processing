@@ -91,7 +91,9 @@ function InferFromSample({ supplierId }: { supplierId: number }) {
     <Paper p="lg">
       <Stack gap="md">
         <div>
-          <Title order={3}>Auto-infer from a sample file</Title>
+          <Title order={2} size="h3">
+            Auto-infer from a sample file
+          </Title>
           <Text size="sm" c="dimmed" mt={4}>
             Suggests mappings from the file&apos;s headers. Nothing is saved until you save the
             suggestions.
@@ -232,7 +234,9 @@ function SingleMappingForm({
       >
         <Stack gap="md">
           <div>
-            <Title order={3}>Add or update a single mapping</Title>
+            <Title order={2} size="h3">
+              Add or update a single mapping
+            </Title>
             <Text size="sm" c="dimmed" mt={4}>
               Use the exact header text from the supplier file, or{' '}
               <Code>contains:&lt;text&gt;</Code> to match any header containing that text. Saving an
@@ -346,7 +350,9 @@ export function ColumnMapsTab() {
   return (
     <Stack gap="lg">
       <div>
-        <Title order={3}>Supplier column mappings</Title>
+        <Title order={2} size="h3">
+          Supplier column mappings
+        </Title>
         <Text size="sm" c="dimmed">
           Maps each supplier&apos;s raw file headers to the engine&apos;s canonical fields.
         </Text>

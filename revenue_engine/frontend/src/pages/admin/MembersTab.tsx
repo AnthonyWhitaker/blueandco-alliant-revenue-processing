@@ -80,7 +80,9 @@ function AccountListImport() {
     <Paper p="lg">
       <Stack gap="md">
         <div>
-          <Title order={3}>Load the Account List</Title>
+          <Title order={2} size="h3">
+            Load the Account List
+          </Title>
           <Text size="sm" c="dimmed" mt={4}>
             Upload Account List.xlsx to load or refresh the member database. Existing members are
             updated by Salesforce Account ID.
@@ -194,7 +196,9 @@ function AddMemberForm() {
       >
         <Stack gap="md">
           <div>
-            <Title order={3}>Add a single member</Title>
+            <Title order={2} size="h3">
+              Add a single member
+            </Title>
             <Text size="sm" c="dimmed" mt={4}>
               For a real facility that&apos;s missing from the Account List. A later full refresh
               still overrides this row&apos;s city, state and zip if it appears there. Without an
@@ -257,7 +261,9 @@ export function MembersTab() {
 
       <Stack gap="sm">
         <Group justify="space-between">
-          <Title order={3}>Sample members</Title>
+          <Title order={2} size="h3">
+            Sample members
+          </Title>
           <Button
             variant="default"
             aria-expanded={showSample}

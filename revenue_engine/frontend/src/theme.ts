@@ -4,6 +4,7 @@ import {
   Card,
   InputWrapper,
   createTheme,
+  type CSSVariablesResolver,
   NavLink,
   Paper,
   Table,
@@ -42,9 +43,24 @@ const slate: MantineColorsTuple = [
   '#4d5d6f',
 ];
 
+/**
+ * Mantine's default "dimmed" grey misses WCAG AA (4.5:1) for small text in both
+ * schemes; use a darker slate on light and a lighter grey on dark.
+ */
+export const cssVariablesResolver: CSSVariablesResolver = () => ({
+  variables: {},
+  light: { '--mantine-color-dimmed': 'var(--mantine-color-slate-8)' },
+  dark: {
+    '--mantine-color-dimmed': 'var(--mantine-color-dark-1)',
+    // Links on dark surfaces (alerts, cards) need a lighter teal than the buttons.
+    '--mantine-color-anchor': 'var(--mantine-color-ledger-3)',
+  },
+});
+
 export const theme = createTheme({
   primaryColor: 'ledger',
-  primaryShade: { light: 7, dark: 5 },
+  // Dark: shade 8 keeps white button text above 4.5:1 (shade 5 was 3.3:1).
+  primaryShade: { light: 7, dark: 8 },
   colors: { ledger, slate },
   autoContrast: true,
   cursorType: 'pointer',

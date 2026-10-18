@@ -106,7 +106,9 @@ function AddAliasForm() {
         })}
       >
         <Stack gap="md">
-          <Title order={3}>Add a manual alias</Title>
+          <Title order={2} size="h3">
+            Add a manual alias
+          </Title>
           {formError && (
             <Alert color="red" title="Couldn't save the alias">
               {formError}
@@ -180,7 +182,9 @@ export function AliasesTab() {
     <Stack gap="lg">
       <Stack gap="sm">
         <div>
-          <Title order={3}>Member aliases</Title>
+          <Title order={2} size="h3">
+            Member aliases
+          </Title>
           <Text size="sm" c="dimmed">
             Alternate names for members, used in matching before fuzzy search. Review approvals
             create them automatically.
