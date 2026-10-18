@@ -9,10 +9,10 @@ import { ColumnMapsTab } from '@/pages/admin/ColumnMapsTab';
 import { LedgerTab } from '@/pages/admin/LedgerTab';
 import { MembersTab } from '@/pages/admin/MembersTab';
 import { SuppliersTab } from '@/pages/admin/SuppliersTab';
+import { TierCTab } from '@/pages/admin/tier-c/TierCTab';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { ExportPage } from '@/pages/export/ExportPage';
 import { ReviewPage } from '@/pages/review/ReviewPage';
-import { AdminTabStub } from '@/pages/stubs';
 import { UploadPage } from '@/pages/upload/UploadPage';
 
 export const routeTree: RouteObject[] = [
@@ -37,7 +37,7 @@ export const routeTree: RouteObject[] = [
               { path: routes.admin.ledger, element: <LedgerTab /> },
               { path: routes.admin.suppliers, element: <SuppliersTab /> },
               { path: routes.admin.columnMaps, element: <ColumnMapsTab /> },
-              { path: routes.admin.tierC, element: <AdminTabStub feature="Tier C rules" /> },
+              { path: routes.admin.tierC, element: <TierCTab /> },
               { path: routes.admin.aliases, element: <AliasesTab /> },
             ],
           },

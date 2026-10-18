@@ -1,4 +1,4 @@
-import type { QueryParams } from '@/api/types';
+import type { QueryParams, Schemas } from '@/api/types';
 
 /**
  * Every Query key, in one place so mutations invalidate by prefix
@@ -27,6 +27,9 @@ export const queryKeys = {
     columnMappings: (supplierId: number) => ['suppliers', supplierId, 'column-mappings'] as const,
     extractionRules: (supplierId: number) => ['suppliers', supplierId, 'extraction-rules'] as const,
     allocationRules: (supplierId: number) => ['suppliers', supplierId, 'allocation-rules'] as const,
+    /** Advisory notices for an unsaved rule; under allocationRules so saves invalidate it. */
+    allocationDraftNotices: (supplierId: number, draft: Schemas['AllocationRuleDraft']) =>
+      ['suppliers', supplierId, 'allocation-rules', 'validation', draft] as const,
   },
 
   members: {

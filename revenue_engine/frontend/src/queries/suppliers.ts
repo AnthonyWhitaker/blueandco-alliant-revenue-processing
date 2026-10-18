@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query';
+import { keepPreviousData, queryOptions } from '@tanstack/react-query';
 
 import { api, unwrap } from '@/api/client';
 import type { QueryParams, Schemas } from '@/api/types';
@@ -34,4 +34,21 @@ export const allocationRulesQuery = (supplierId: number) =>
     queryKey: queryKeys.suppliers.allocationRules(supplierId),
     queryFn: () =>
       unwrap(api.GET('/api/suppliers/{supplier_id}/allocation-rules', path(supplierId))),
+  });
+
+export const allocationDraftNoticesQuery = (
+  supplierId: number,
+  draft: Schemas['AllocationRuleDraft'],
+) =>
+  queryOptions({
+    queryKey: queryKeys.suppliers.allocationDraftNotices(supplierId, draft),
+    // A side-effect-free check, so it's a query even though it is a POST.
+    queryFn: () =>
+      unwrap(
+        api.POST('/api/suppliers/{supplier_id}/allocation-rules/validation', {
+          ...path(supplierId),
+          body: draft,
+        }),
+      ),
+    placeholderData: keepPreviousData,
   });
