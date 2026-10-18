@@ -1,4 +1,5 @@
-streamlit>=1.30,<2
+# Runtime dependencies of the API image. The legacy Streamlit UI's extra
+# dependency lives in requirements-legacy.txt.
 pandas>=2.0
 openpyxl>=3.1
 xlsxwriter>=3.1

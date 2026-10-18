@@ -1,0 +1,3 @@
+# The legacy Streamlit UI (ui/), kept runnable locally until it is retired.
+-r requirements.txt
+streamlit>=1.30,<2
