@@ -18,33 +18,47 @@ A **supplier-agnostic revenue reconciliation engine** for Alliant Purchasing Sol
 
 ## Architecture
 
+One deployable: a FastAPI service that serves a React single-page app on the same origin (`DEPLOYMENT.md` at the repo root explains why).
+
+```
+browser ──► React SPA (frontend/, built to frontend/dist)
+              │  TanStack Query + typed client generated from openapi.json
+              ▼
+            FastAPI (api/)          HTTP: routing, validation, problem+json errors,
+              │                     uploads, background jobs, serves the SPA
+              ▼
+            core/                   use cases (list jobs, approve a review item, save a rule…)
+              │                     framework-free; also used by the legacy Streamlit UI
+              ▼
+            engine/                 matching pipeline, exporter, DB dialect shims
+              ▼
+            SQLite (local) / Azure SQL (production)
+```
+
 ```
 revenue_engine/
-├── db/
-│   └── schema.sql              Database schema (SQLite / Azure SQL compatible)
-├── engine/
-│   ├── constants.py            Canonical field names, thresholds, status values
-│   ├── normalizer.py           Name/ZIP/state/city normalization utilities
-│   ├── db.py                   Database connection and initialization
-│   ├── member_loader.py        Load Account List.xlsx → member table
-│   ├── member_matcher.py       5-tier geographic + fuzzy matching engine
-│   ├── payment_resolver.py     Payment ID lookup from payment_ledger table
-│   ├── file_reader.py          Read supplier files, apply column maps
-│   ├── processor.py            Main orchestration pipeline (per job)
-│   └── exporter.py             Generate 4-tab XLSX output
-├── ui/
-│   ├── app.py                  Streamlit app entry point + home dashboard
-│   └── pages/
-│       ├── 1_Upload.py         Upload supplier file, run processing
-│       ├── 2_Review.py         Resolve unmatched customers
-│       ├── 3_Export.py         Preview and download output files
-│       └── 4_Admin.py          Manage suppliers, members, aliases, ledger
-├── scripts/
-│   └── seed_guerbet.py         Seeds Guerbet as supplier profile #1
-├── data/                       Created at runtime — contains revenue.db
-├── requirements.txt
-└── README.md
+├── api/                  FastAPI app: main.py, routers/, errors.py (RFC 7807), background.py, spa.py
+├── core/                 Use cases shared by the API and the legacy UI (no HTTP, no Streamlit)
+├── models/               Pydantic v2 request/response models (the API contract)
+├── engine/               Processing pipeline: file_reader, member_matcher, processor, exporter, db
+├── db/                   schema.sql (SQLite) and schema_mssql.sql (Azure SQL); keep them in sync
+├── frontend/             React 19 + TypeScript (strict) + Mantine + TanStack Query + Zustand (Vite)
+│   ├── src/api/          Typed client (client.ts) and generated schema.d.ts
+│   ├── src/app/          Providers and the route tree (pages load lazily)
+│   ├── src/pages/        One folder per page; Admin tabs under pages/admin/
+│   ├── src/components/   Shared building blocks (DataTable, MemberPicker, FileDropzone…)
+│   ├── src/queries/      Query options and the query-key factory
+│   ├── src/stores/       Zustand slices + README.md (where every piece of state lives)
+│   └── e2e/              Playwright specs (npm run e2e)
+├── legacy/               The retired Streamlit UI (see legacy/README.md)
+├── scripts/              Seeds, OpenAPI export, SQL Server smoke check, regression scripts
+├── tests/                pytest: engine, core, API, SQL dialect, legacy UI
+├── infra/                deploy.sh + main.bicep (Azure Container Apps)
+├── Dockerfile            Node build stage → Python runtime serving API + SPA on :8501
+└── docker-compose.yml    Local dev: API with reload + Vite dev server
 ```
+
+Where state lives in the UI (server data in TanStack Query, selections in the URL, drafts in Zustand) is documented in `frontend/src/stores/README.md`.
 
 ---
 
@@ -71,33 +85,67 @@ Adapted from `alliant-purchasing-solutions` (same architectural patterns, adapte
 
 ## Getting Started
 
-### 1. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 2. Seed Guerbet (first supplier)
+Requires Python 3.12 and Node ≥ 22.22.2 (`frontend/.nvmrc`).
 
 ```bash
 cd revenue_engine
-python scripts/seed_guerbet.py \
+make install                       # .venv with runtime + dev + legacy deps
+(cd frontend && npm ci)
+make seed                          # create data/revenue.db, seed Guerbet + Tier A/B suppliers
+```
+
+Optionally load real reference data while seeding Guerbet:
+
+```bash
+.venv/bin/python scripts/seed_guerbet.py \
     --account-list "../Uploads/Account List.xlsx" \
     --ledger "../Uploads/Ledger.xlsx"
 ```
 
-### 3. Run the app
+Run it (two terminals):
 
 ```bash
-streamlit run ui/app.py
+make api      # FastAPI on :8000 (docs at /api/docs)
+make web      # Vite on :5173, proxying /api to :8000
 ```
 
-### 4. First-time setup in the UI
+…or everything in Docker with hot reload: `docker compose up`. The production image: `make docker-run` (http://localhost:8501).
 
-- **Admin → Members**: Load `Account List.xlsx` (if not done in step 2)
-- **Admin → Payment Ledger**: Load `Ledger.xlsx` (if not done in step 2)
-- **Admin → Suppliers**: Verify Guerbet profile is configured
-- **Upload**: Select Guerbet, upload a raw Guerbet ledger file
+First-time setup in the UI:
+
+- **Admin › Members**: load `Account List.xlsx`
+- **Admin › Payment Ledger**: load `Ledger.xlsx`
+- **Admin › Suppliers**: check the supplier profiles
+- **Upload**: upload a supplier file (supplier and date are inferred from the file name)
+
+### Tests and checks
+
+| Command | What |
+|---|---|
+| `make test` | pytest (engine, core, API, SQL dialect, legacy UI) |
+| `cd frontend && npm test` | Vitest component tests |
+| `cd frontend && npm run e2e` | Playwright against the production build on a fresh synthetic DB |
+| `make check` | Everything `deploy.sh` gates on (pytest, OpenAPI snapshot, frontend types/typecheck/lint/format/tests/build) |
+| `make check-mssql` | The core flows against a throwaway SQL Server 2022 container |
+
+### Regenerating the API types
+
+The frontend never hand-writes API types. After changing a Pydantic model or a route:
+
+```bash
+cd frontend && npm run api:sync   # = make openapi (writes ../openapi.json) + npm run api:types
+```
+
+Commit `openapi.json` and `src/api/schema.d.ts` together; `make check` fails if either is stale.
+
+### Adding a page
+
+1. **API first.** Add the use case in `core/`, the models in `models/`, the route in `api/routers/` (declare its error statuses with `problems(...)`), and a pytest. Then `npm run api:sync`.
+2. **Queries.** Add keys to `src/queries/keys.ts` and query options next to the others in `src/queries/` (`queryOptions({ queryKey, queryFn: () => unwrap(api.GET(...)) })`). Mutations invalidate by key prefix; see the table in `src/stores/README.md`.
+3. **Page.** Create `src/pages/<name>/<Name>Page.tsx`. Compose Mantine plus `src/components/` (`DataTable`, `StatCard`, `EmptyState`, `QueryError`, `FileDropzone`, `MemberPicker`). Handle loading (skeleton), empty, error (`QueryError` with retry) and populated states. Forms use `@mantine/form` + a Zod schema (`schemaResolver`) and `applyServerErrors` for 422s.
+4. **State.** Selected ids and filters go in the URL (`useSearchParamState`, names in `searchParamNames`). Only drafts that must outlive the component go in a Zustand slice (add it to `src/stores/` and the README mapping).
+5. **Route.** Add the path to `src/lib/routes.ts`, a lazy entry in `src/app/routes.tsx` (`lazy: page(() => import('@/pages/...'), 'NamePage')`), and a nav item in `components/layout/AppLayout.tsx` if it's top-level.
+6. **Tests.** A Vitest file next to the page (`renderRoute('/path')` + `stubFetch({...})`), and a Playwright step in `e2e/` if it's a critical path.
 
 ---
 
@@ -122,11 +170,11 @@ Key difference from the Guerbet prototype: matched JDE numbers are **persisted t
 
 ### Via Admin UI
 
-1. Go to **Admin → Suppliers** — click "Add Supplier"
-2. Fill in: name, Salesforce contract ID, revenue type, payor filter name
-3. Go to **Admin → Column Maps** — select the new supplier
+1. Go to **Admin › Suppliers** and click **Add supplier**
+2. Fill in: name, Salesforce contract ID, revenue type, payor filter name (fee rate and fuzzy thresholds are under "Fee rate and fuzzy-match thresholds")
+3. Go to **Admin › Column Maps** and select the new supplier
 4. Upload a sample file to **auto-infer column mappings**, then review and save
-5. Adjust thresholds if needed (higher for less-reliable name data)
+5. For a pivot/aggregate workpaper (job type `pivot_allocation`), set up its rules in **Admin › Tier C Rules**
 
 ### Via seed script (copy `seed_guerbet.py`)
 
@@ -305,7 +353,7 @@ re-triage needed. `db/schema_mssql.sql` is now kept in sync with
 `schema.sql` (mirrored in the same pass) — the two must never be allowed
 to diverge; any future schema change goes into both files together.
 
-## Streamlit UI Check (this pass)
+## Streamlit UI Check (historical: the Streamlit UI is now in `legacy/`)
 
 Checked whether the UI alone (no scripts) can onboard a new supplier and
 safely process/export a job, especially for Tier C.
