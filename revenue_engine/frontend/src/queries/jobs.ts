@@ -35,6 +35,8 @@ export const jobQuery = (jobId: number) =>
       const status = query.state.data?.status;
       return status && isInProgress(status) ? 1500 : false;
     },
+    // Keep following the job while the user is in another tab; polling stops when it finishes.
+    refetchIntervalInBackground: true,
   });
 
 export const jobExceptionsQuery = (jobId: number) =>

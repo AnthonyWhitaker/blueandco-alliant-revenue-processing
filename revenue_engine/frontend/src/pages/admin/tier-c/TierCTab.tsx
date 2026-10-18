@@ -162,6 +162,7 @@ function SupplierRules({ supplierId, meta }: { supplierId: number; meta: Meta })
         ) : (
           <DataTable
             label="Extraction rules"
+            pinLastColumn
             records={extractionRules}
             columns={[
               { accessor: 'rule_name', title: 'Rule' },
@@ -214,6 +215,7 @@ function SupplierRules({ supplierId, meta }: { supplierId: number; meta: Meta })
         ) : (
           <DataTable
             label="Allocation rules"
+            pinLastColumn
             records={allocationRules}
             columns={[
               { accessor: 'extraction_rule_name', title: 'Extraction rule' },

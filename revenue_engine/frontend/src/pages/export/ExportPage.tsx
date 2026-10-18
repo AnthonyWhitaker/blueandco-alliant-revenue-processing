@@ -195,7 +195,7 @@ function Exceptions({ job }: { job: Job }) {
             records={rows}
             columns={[
               { accessor: 'exception_type', title: 'Type' },
-              { accessor: 'message', title: 'Message' },
+              { accessor: 'message', title: 'Message', noWrap: false },
               {
                 accessor: 'severity',
                 title: 'Severity',

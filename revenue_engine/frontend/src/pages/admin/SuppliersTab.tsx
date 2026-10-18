@@ -375,6 +375,7 @@ export function SuppliersTab() {
       ) : (
         <DataTable
           label="Supplier profiles"
+          pinLastColumn
           fetching={suppliers.isPending}
           records={suppliers.data}
           columns={[

@@ -2,6 +2,7 @@ import {
   Badge,
   Button,
   Card,
+  InputWrapper,
   createTheme,
   NavLink,
   Paper,
@@ -96,5 +97,9 @@ export const theme = createTheme({
     Badge: Badge.extend({ defaultProps: { variant: 'light', radius: 'sm' } }),
     Tooltip: Tooltip.extend({ defaultProps: { withArrow: true, openDelay: 300 } }),
     NavLink: NavLink.extend({ defaultProps: { variant: 'light' } }),
+    // Descriptions under the input, so inputs side by side line up whether or not they have one.
+    InputWrapper: InputWrapper.extend({
+      defaultProps: { inputWrapperOrder: ['label', 'input', 'description', 'error'] },
+    }),
   },
 });

@@ -3,7 +3,7 @@ import { render } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 
 import { Providers } from '@/app/Providers';
-import { routeTree } from '@/app/routes';
+import { providerFuture, routeTree, routerFuture } from '@/app/routes';
 import { createQueryClient } from '@/lib/queryClient';
 import { theme } from '@/theme';
 
@@ -19,13 +19,13 @@ const testTheme = mergeThemeOverrides(theme, {
 export function renderRoute(path: string) {
   const queryClient = createQueryClient();
   queryClient.setDefaultOptions({ queries: { retry: false } });
-  const router = createMemoryRouter(routeTree, { initialEntries: [path] });
+  const router = createMemoryRouter(routeTree, { initialEntries: [path], future: routerFuture });
   return {
     router,
     queryClient,
     ...render(
       <Providers queryClient={queryClient} theme={testTheme}>
-        <RouterProvider router={router} />
+        <RouterProvider router={router} future={providerFuture} />
       </Providers>,
     ),
   };

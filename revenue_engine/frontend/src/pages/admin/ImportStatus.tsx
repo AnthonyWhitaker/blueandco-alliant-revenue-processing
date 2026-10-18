@@ -57,7 +57,7 @@ export function ImportStatus({ kind, describeSuccess, onSucceeded }: ImportStatu
   if (!task || status === 'queued' || status === 'running') {
     return (
       <Alert color="ledger" variant="light" role="status">
-        <Group gap="sm">
+        <Group gap="sm" wrap="nowrap">
           <Loader size="xs" />
           <Text size="sm">
             {status === 'queued' ? 'Waiting to start…' : 'Importing… you can leave this page.'}

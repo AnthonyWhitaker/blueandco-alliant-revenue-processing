@@ -33,7 +33,15 @@ export function AdminLayout() {
         mb="lg"
         keepMounted={false}
       >
-        <Tabs.List>
+        {/* One row that scrolls sideways on narrow screens, rather than wrapping. */}
+        <Tabs.List
+          style={{
+            flexWrap: 'nowrap',
+            overflowX: 'auto',
+            overflowY: 'hidden',
+            scrollbarWidth: 'thin',
+          }}
+        >
           {ADMIN_TABS.map((t) => (
             <Tabs.Tab key={t.to} value={t.to}>
               {t.label}

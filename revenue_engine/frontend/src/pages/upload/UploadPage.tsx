@@ -68,6 +68,7 @@ interface UploadFormProps {
 
 /** Mounted once per picked file, so the filename guesses become the form's defaults. */
 function UploadForm({ file, suppliers, inference, onSubmitted }: UploadFormProps) {
+  const queryClient = useQueryClient();
   const [formError, setFormError] = useState<string | null>(null);
   const guessedSupplier = suppliers.find((s) => s.id === inference?.supplier_profile_id);
   const form = useForm<UploadValues>({
@@ -96,7 +97,11 @@ function UploadForm({ file, suppliers, inference, onSubmitted }: UploadFormProps
           bodySerializer: formData,
         }),
       ),
-    onSuccess: onSubmitted,
+    onSuccess: (job) => {
+      // The new job appears in Recent jobs straight away, as "uploaded".
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jobs.lists });
+      onSubmitted(job);
+    },
     onError: (error) => {
       setFormError(applyServerErrors(form, error));
     },
@@ -128,7 +133,6 @@ function UploadForm({ file, suppliers, inference, onSubmitted }: UploadFormProps
                 ? `Inferred from the file name: ${guessedSupplier.name}`
                 : 'Could not infer the supplier from the file name. Please pick one.'
             }
-            inputWrapperOrder={['label', 'input', 'description', 'error']}
             {...form.getInputProps('supplier_id')}
           />
           <TextInput
@@ -140,7 +144,6 @@ function UploadForm({ file, suppliers, inference, onSubmitted }: UploadFormProps
                 ? `Inferred from the file name: ${inference.date_received}`
                 : 'Could not infer the date from the file name. Please enter it.'
             }
-            inputWrapperOrder={['label', 'input', 'description', 'error']}
             {...form.getInputProps('date_received')}
           />
         </SimpleGrid>
@@ -204,7 +207,7 @@ function JobResult({ jobId }: { jobId: number }) {
   if (isInProgress(j.status)) {
     return (
       <Paper p="lg" role="status">
-        <Group gap="sm">
+        <Group gap="sm" wrap="nowrap">
           <Loader size="sm" />
           <div>
             <Text fw={600}>Processing job #{j.id}…</Text>
@@ -234,7 +237,7 @@ function JobResult({ jobId }: { jobId: number }) {
         title={
           complete
             ? `Processing complete (job #${j.id})`
-            : `Processing complete: ${pluralize(j.unmatched_count ?? 0, 'unmatched customer')} need review (job #${j.id})`
+            : `Processing complete: ${pluralize(j.unmatched_count ?? 0, 'unmatched customer')} ${(j.unmatched_count ?? 0) === 1 ? 'needs' : 'need'} review (job #${j.id})`
         }
       >
         <Group gap="md">

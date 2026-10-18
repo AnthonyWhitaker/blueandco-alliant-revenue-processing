@@ -18,7 +18,7 @@ export function StatCard({ label, value, hint }: StatCardProps) {
       {value === undefined ? (
         <Skeleton height={30} width="50%" mt={6} />
       ) : (
-        <Text fz={26} fw={650} mt={4} className="tabular" lh={1.25}>
+        <Text component="div" fz={26} fw={650} mt={4} className="tabular" lh={1.25}>
           {value}
         </Text>
       )}

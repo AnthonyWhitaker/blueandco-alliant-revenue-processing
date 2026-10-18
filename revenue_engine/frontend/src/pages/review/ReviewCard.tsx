@@ -15,7 +15,7 @@ import { IconCheck, IconUserPlus, IconX } from '@tabler/icons-react';
 
 import type { AliasScope, Schemas } from '@/api/types';
 import { MemberPicker } from '@/components/MemberPicker';
-import { formatCurrency, formatInteger, formatText } from '@/lib/format';
+import { formatCurrency, formatText, pluralize } from '@/lib/format';
 import { useAppStore } from '@/stores';
 import { useReviewDraft } from '@/stores/hooks';
 import { resolveReviewMemberId } from '@/stores/reviewSlice';
@@ -79,7 +79,7 @@ export function ReviewCard({ item }: { item: ReviewItem }) {
             </Badge>
             <Badge color="ledger">Fee {formatCurrency(item.total_fee ?? 0)}</Badge>
             <Badge variant="outline" color="slate">
-              {formatInteger(item.affected_row_count ?? 0)} rows
+              {pluralize(item.affected_row_count ?? 0, 'row')}
             </Badge>
           </Group>
         </Group>
@@ -154,6 +154,19 @@ export function ReviewCard({ item }: { item: ReviewItem }) {
             </Button>
           )}
         </Stack>
+
+        {selection.kind === 'none' && item.suggestion && (
+          <Button
+            variant="subtle"
+            size="compact-sm"
+            w="fit-content"
+            onClick={() => {
+              resetReviewSelection(item.id);
+            }}
+          >
+            Use the suggestion ({item.suggestion.name}) instead
+          </Button>
+        )}
 
         {memberId === null && <NewFacilityForm key={item.id} item={item} />}
 

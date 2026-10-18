@@ -15,10 +15,12 @@ class Settings:
     log_level: str
 
 
+# MAX_UPLOAD_MB defaults to 200, Streamlit's default per-file limit, so nothing the legacy
+# app accepted is rejected.
 def load_settings() -> Settings:
     origins = os.environ.get("CORS_ALLOW_ORIGINS", "")
     return Settings(
         cors_allow_origins=[o.strip() for o in origins.split(",") if o.strip()],
-        max_upload_bytes=int(os.environ.get("MAX_UPLOAD_MB", "50")) * 1024 * 1024,
+        max_upload_bytes=int(os.environ.get("MAX_UPLOAD_MB", "200")) * 1024 * 1024,
         log_level=os.environ.get("LOG_LEVEL", "INFO").upper(),
     )

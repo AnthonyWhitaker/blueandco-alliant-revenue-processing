@@ -36,4 +36,5 @@ export const taskQuery = (taskId: string) =>
       const status = query.state.data?.status;
       return status === 'succeeded' || status === 'failed' ? false : 1000;
     },
+    refetchIntervalInBackground: true,
   });

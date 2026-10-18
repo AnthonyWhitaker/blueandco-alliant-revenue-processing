@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 
+import { notifications } from '@mantine/notifications';
 import { cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
 
@@ -10,6 +11,9 @@ afterEach(() => {
   // One store per module; reset it so tests cannot leak client state into each other.
   useAppStore.setState(useAppStore.getInitialState(), true);
   sessionStorage.clear();
+  // The notifications store is module-level too; queued toasts would hide the next test's.
+  notifications.clean();
+  notifications.cleanQueue();
 });
 
 // jsdom lacks these browser APIs; Mantine uses them for color scheme and layout.

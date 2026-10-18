@@ -11,6 +11,8 @@ interface DataTableProps<T> {
   idAccessor?: keyof T | ((record: T) => React.Key);
   /** Scroll inside the table past this height (long previews). */
   maxHeight?: number;
+  /** Keep the last column (row actions) visible while the table scrolls sideways. */
+  pinLastColumn?: boolean;
 }
 
 /**
@@ -26,6 +28,7 @@ export function DataTable<T>({
   noRecordsText = 'No records',
   idAccessor,
   maxHeight,
+  pinLastColumn = false,
 }: DataTableProps<T>) {
   const empty = !records || records.length === 0;
   return (
@@ -37,11 +40,15 @@ export function DataTable<T>({
       aria-label={label}
       minHeight={empty ? 150 : 0}
       {...(maxHeight === undefined ? {} : { maxHeight })}
+      pinLastColumn={pinLastColumn}
       fetching={fetching}
       records={records ?? []}
       columns={columns}
       noRecordsText={noRecordsText}
       idAccessor={idAccessor ?? 'id'}
+      // Cells stay on one line and the table scrolls sideways; a column opts
+      // out with `noWrap: false` (long messages).
+      defaultColumnProps={{ noWrap: true }}
     />
   );
 }

@@ -143,6 +143,23 @@ describe('Review page', () => {
     expect(useAppStore.getState().reviewDrafts).toEqual({});
   });
 
+  it('can go back to the suggestion after choosing "none of these"', async () => {
+    const { approvals } = reviewApi([item()]);
+    const user = userEvent.setup();
+    renderRoute('/review?job=42');
+
+    const mercy = await screen.findByRole('article', { name: 'MERCY GEN HOSP' });
+    await user.click(within(mercy).getByRole('button', { name: /None of these/ }));
+    expect(within(mercy).getByLabelText(/Facility name/)).toBeInTheDocument();
+    expect(within(mercy).getByRole('button', { name: /Approve match/ })).toBeDisabled();
+
+    await user.click(within(mercy).getByRole('button', { name: /Use the suggestion/ }));
+    await user.click(within(mercy).getByRole('button', { name: /Approve match/ }));
+    await waitFor(() => {
+      expect(approvals).toEqual([{ member_id: 10, create_alias: true, alias_scope: 'supplier' }]);
+    });
+  });
+
   it('removes a card at once and brings it back if the decision fails', async () => {
     reviewApi([item(), item({ id: 2, customer_name_sample: 'ST LUKE', total_fee: 50 })], {
       'POST /api/review-items/1/dismissal': () =>
