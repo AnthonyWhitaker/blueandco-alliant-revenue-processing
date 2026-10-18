@@ -34,7 +34,7 @@ describe('Admin › Column Maps', () => {
       },
     });
     const user = userEvent.setup();
-    const { router } = renderRoute('/admin/column-maps');
+    const { router } = await renderRoute('/admin/column-maps');
 
     await waitFor(() => {
       expect(router.state.location.search).toBe('?supplier=1');
@@ -75,7 +75,7 @@ describe('Admin › Column Maps', () => {
       },
     });
     const user = userEvent.setup();
-    renderRoute('/admin/column-maps?supplier=2');
+    await renderRoute('/admin/column-maps?supplier=2');
 
     await user.click(await screen.findByRole('button', { name: 'Save mapping' }));
     expect(await screen.findByText(/Enter the column header/)).toBeInTheDocument();

@@ -1,5 +1,5 @@
 import { mergeThemeOverrides } from '@mantine/core';
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router-dom';
 
 import { Providers } from '@/app/Providers';
@@ -15,20 +15,25 @@ const testTheme = mergeThemeOverrides(theme, {
   components: { Popover: { defaultProps: { hideDetached: false } } },
 });
 
-/** Render the real route tree at `path` inside the real providers. */
-export function renderRoute(path: string) {
+/**
+ * Render the real route tree at `path` inside the real providers, and wait
+ * until the route's lazily loaded page module is in (the router is initialized).
+ */
+export async function renderRoute(path: string) {
   const queryClient = createQueryClient();
   queryClient.setDefaultOptions({ queries: { retry: false } });
   const router = createMemoryRouter(routeTree, { initialEntries: [path], future: routerFuture });
-  return {
-    router,
-    queryClient,
-    ...render(
-      <Providers queryClient={queryClient} theme={testTheme}>
-        <RouterProvider router={router} future={providerFuture} />
-      </Providers>,
-    ),
-  };
+  const view = render(
+    <Providers queryClient={queryClient} theme={testTheme}>
+      <RouterProvider router={router} future={providerFuture} />
+    </Providers>,
+  );
+  // The page module loads lazily, then (startTransition) commits a tick later.
+  await waitFor(() => {
+    if (!router.state.initialized) throw new Error('router still loading the page');
+    view.getByRole('main');
+  });
+  return { router, queryClient, ...view };
 }
 
 type Handler = (request: Request) => Response | Promise<Response>;

@@ -2,12 +2,22 @@
 import { fileURLToPath, URL } from 'node:url';
 
 import react from '@vitejs/plugin-react';
-import { defineConfig, loadEnv } from 'vite';
+import { visualizer } from 'rollup-plugin-visualizer';
+import { defineConfig, loadEnv, type PluginOption } from 'vite';
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   return {
-    plugins: [react()],
+    plugins: [
+      react(),
+      // `npm run analyze` writes dist/stats.html (treemap of what's in each chunk).
+      env.ANALYZE === '1' &&
+        (visualizer({
+          filename: 'dist/stats.html',
+          gzipSize: true,
+          template: 'treemap',
+        }) as PluginOption),
+    ],
     resolve: {
       alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
     },

@@ -1,19 +1,11 @@
+import type { ComponentType } from 'react';
 import { Navigate, type RouteObject } from 'react-router-dom';
 
 import { NotFoundPage, RootErrorBoundary, RouteErrorBoundary } from '@/components/ErrorViews';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { routes } from '@/lib/routes';
 import { AdminLayout } from '@/pages/admin/AdminLayout';
-import { AliasesTab } from '@/pages/admin/AliasesTab';
-import { ColumnMapsTab } from '@/pages/admin/ColumnMapsTab';
-import { LedgerTab } from '@/pages/admin/LedgerTab';
-import { MembersTab } from '@/pages/admin/MembersTab';
-import { SuppliersTab } from '@/pages/admin/SuppliersTab';
-import { TierCTab } from '@/pages/admin/tier-c/TierCTab';
 import { DashboardPage } from '@/pages/DashboardPage';
-import { ExportPage } from '@/pages/export/ExportPage';
-import { ReviewPage } from '@/pages/review/ReviewPage';
-import { UploadPage } from '@/pages/upload/UploadPage';
 
 /** Opt in to React Router v7 behaviour now, so the v7 upgrade changes nothing. */
 export const routerFuture = {
@@ -25,6 +17,18 @@ export const routerFuture = {
 } as const;
 export const providerFuture = { v7_startTransition: true } as const;
 
+/**
+ * Route-level code splitting: each page (and the table/upload libraries only
+ * pages use) loads on first visit. The dashboard and the shell stay in the
+ * main bundle so the landing page needs one request.
+ */
+function page<K extends string, M extends Record<K, ComponentType>>(
+  load: () => Promise<M>,
+  name: K,
+) {
+  return async () => ({ Component: (await load())[name] });
+}
+
 export const routeTree: RouteObject[] = [
   {
     element: <AppLayout />,
@@ -35,20 +39,47 @@ export const routeTree: RouteObject[] = [
         errorElement: <RouteErrorBoundary />,
         children: [
           { path: routes.dashboard, element: <DashboardPage /> },
-          { path: routes.upload, element: <UploadPage /> },
-          { path: routes.review, element: <ReviewPage /> },
-          { path: routes.export, element: <ExportPage /> },
+          {
+            path: routes.upload,
+            lazy: page(() => import('@/pages/upload/UploadPage'), 'UploadPage'),
+          },
+          {
+            path: routes.review,
+            lazy: page(() => import('@/pages/review/ReviewPage'), 'ReviewPage'),
+          },
+          {
+            path: routes.export,
+            lazy: page(() => import('@/pages/export/ExportPage'), 'ExportPage'),
+          },
           {
             path: routes.admin.root,
             element: <AdminLayout />,
             children: [
               { index: true, element: <Navigate to={routes.admin.members} replace /> },
-              { path: routes.admin.members, element: <MembersTab /> },
-              { path: routes.admin.ledger, element: <LedgerTab /> },
-              { path: routes.admin.suppliers, element: <SuppliersTab /> },
-              { path: routes.admin.columnMaps, element: <ColumnMapsTab /> },
-              { path: routes.admin.tierC, element: <TierCTab /> },
-              { path: routes.admin.aliases, element: <AliasesTab /> },
+              {
+                path: routes.admin.members,
+                lazy: page(() => import('@/pages/admin/MembersTab'), 'MembersTab'),
+              },
+              {
+                path: routes.admin.ledger,
+                lazy: page(() => import('@/pages/admin/LedgerTab'), 'LedgerTab'),
+              },
+              {
+                path: routes.admin.suppliers,
+                lazy: page(() => import('@/pages/admin/SuppliersTab'), 'SuppliersTab'),
+              },
+              {
+                path: routes.admin.columnMaps,
+                lazy: page(() => import('@/pages/admin/ColumnMapsTab'), 'ColumnMapsTab'),
+              },
+              {
+                path: routes.admin.tierC,
+                lazy: page(() => import('@/pages/admin/tier-c/TierCTab'), 'TierCTab'),
+              },
+              {
+                path: routes.admin.aliases,
+                lazy: page(() => import('@/pages/admin/AliasesTab'), 'AliasesTab'),
+              },
             ],
           },
           { path: '*', element: <NotFoundPage /> },

@@ -1,3 +1,5 @@
+import 'mantine-datatable/styles.css';
+
 import { DataTable as MantineDataTable, type DataTableColumn } from 'mantine-datatable';
 
 interface DataTableProps<T> {

@@ -72,7 +72,7 @@ function tierCApi(extra: Parameters<typeof stubFetch>[0] = {}) {
 describe('Admin › Tier C Rules', () => {
   it('only lists pivot_allocation suppliers', async () => {
     const fetchMock = tierCApi();
-    renderRoute('/admin/tier-c');
+    await renderRoute('/admin/tier-c');
     expect(await screen.findByRole('table', { name: 'Extraction rules' })).toBeInTheDocument();
     const call = fetchMock.mock.calls.find(([r]) => new URL(r.url).pathname === '/api/suppliers');
     expect(new URL(call?.[0].url ?? '').searchParams.get('job_type')).toBe('pivot_allocation');
@@ -91,7 +91,7 @@ describe('Admin › Tier C Rules', () => {
       },
     });
     const user = userEvent.setup();
-    const { router } = renderRoute('/admin/tier-c?supplier=3');
+    const { router } = await renderRoute('/admin/tier-c?supplier=3');
 
     await user.click(await screen.findByRole('button', { name: 'Edit extraction rule Gross' }));
     expect(router.state.location.search).toBe('?supplier=3&extractionRule=5');
@@ -120,7 +120,7 @@ describe('Admin › Tier C Rules', () => {
   it('switching rules loads that rule, and switching supplier clears the rule', async () => {
     tierCApi();
     const user = userEvent.setup();
-    const { router } = renderRoute('/admin/tier-c?supplier=3&extractionRule=5');
+    const { router } = await renderRoute('/admin/tier-c?supplier=3&extractionRule=5');
 
     expect(await screen.findByRole('textbox', { name: /Cell address/ })).toHaveValue('E8');
     await user.click(screen.getByRole('combobox', { name: 'Rule to edit' }));
@@ -139,7 +139,7 @@ describe('Admin › Tier C Rules', () => {
     const posted = vi.fn();
     tierCApi({ 'POST /api/suppliers/3/extraction-rules': posted });
     const user = userEvent.setup();
-    renderRoute('/admin/tier-c?supplier=3&extractionRule=new');
+    await renderRoute('/admin/tier-c?supplier=3&extractionRule=new');
 
     await user.type(await screen.findByLabelText(/Rule name/), 'Fees');
     await user.click(screen.getByRole('combobox', { name: 'Extraction method' }));
@@ -194,7 +194,7 @@ describe('Admin › Tier C Rules', () => {
         }),
     });
     const user = userEvent.setup();
-    const { router } = renderRoute('/admin/tier-c?supplier=3&allocationRule=new');
+    const { router } = await renderRoute('/admin/tier-c?supplier=3&allocationRule=new');
 
     const form = (await screen.findByRole('button', { name: 'Save allocation rule' })).closest(
       'form',
@@ -235,7 +235,7 @@ describe('Admin › Tier C Rules', () => {
         ),
     });
     const user = userEvent.setup();
-    renderRoute('/admin/tier-c?supplier=3&extractionRule=5');
+    await renderRoute('/admin/tier-c?supplier=3&extractionRule=5');
 
     await user.click(await screen.findByRole('button', { name: 'Delete extraction rule' }));
     await user.click(await screen.findByRole('button', { name: 'Delete' }));

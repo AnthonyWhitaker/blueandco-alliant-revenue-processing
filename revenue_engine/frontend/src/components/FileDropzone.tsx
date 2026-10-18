@@ -1,3 +1,5 @@
+import '@mantine/dropzone/styles.css';
+
 import { ActionIcon, Group, Paper, Text, Tooltip } from '@mantine/core';
 import { Dropzone } from '@mantine/dropzone';
 import { IconFileSpreadsheet, IconUpload, IconX } from '@tabler/icons-react';

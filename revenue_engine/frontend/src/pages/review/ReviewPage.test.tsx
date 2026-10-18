@@ -71,7 +71,7 @@ describe('Review page', () => {
   it('approves the engine suggestion with the default alias settings', async () => {
     const { approvals } = reviewApi([item()]);
     const user = userEvent.setup();
-    const { router } = renderRoute('/review');
+    const { router } = await renderRoute('/review');
 
     await waitFor(() => {
       expect(router.state.location.search).toBe('?job=42');
@@ -88,7 +88,7 @@ describe('Review page', () => {
   it('approves a searched member with a job-only scope', async () => {
     const { approvals } = reviewApi([item()]);
     const user = userEvent.setup();
-    renderRoute('/review?job=42');
+    await renderRoute('/review?job=42');
 
     const mercy = await screen.findByRole('article', { name: 'MERCY GEN HOSP' });
     await user.type(within(mercy).getByRole('combobox', { name: /different member/ }), 'Clinic');
@@ -110,7 +110,7 @@ describe('Review page', () => {
       },
     });
     const user = userEvent.setup();
-    renderRoute('/review?job=42');
+    await renderRoute('/review?job=42');
 
     const mercy = await screen.findByRole('article', { name: 'MERCY GEN HOSP' });
     expect(within(mercy).getByText('No suggestion available')).toBeInTheDocument();
@@ -146,7 +146,7 @@ describe('Review page', () => {
   it('can go back to the suggestion after choosing "none of these"', async () => {
     const { approvals } = reviewApi([item()]);
     const user = userEvent.setup();
-    renderRoute('/review?job=42');
+    await renderRoute('/review?job=42');
 
     const mercy = await screen.findByRole('article', { name: 'MERCY GEN HOSP' });
     await user.click(within(mercy).getByRole('button', { name: /None of these/ }));
@@ -166,7 +166,7 @@ describe('Review page', () => {
         json(problem(409, 'Review item 1 was already decided.'), 409),
     });
     const user = userEvent.setup();
-    renderRoute('/review?job=42');
+    await renderRoute('/review?job=42');
 
     const mercy = await screen.findByRole('article', { name: 'MERCY GEN HOSP' });
     await user.click(within(mercy).getByRole('button', { name: /Dismiss/ }));
@@ -179,7 +179,7 @@ describe('Review page', () => {
   it('keeps a draft when leaving the page and coming back', async () => {
     reviewApi([item()]);
     const user = userEvent.setup();
-    const { router } = renderRoute('/review?job=42');
+    const { router } = await renderRoute('/review?job=42');
 
     const mercy = await screen.findByRole('article', { name: 'MERCY GEN HOSP' });
     await user.click(within(mercy).getByLabelText(/All suppliers/));
@@ -191,7 +191,7 @@ describe('Review page', () => {
 
   it('says so when nothing is pending', async () => {
     stubFetch({ 'GET /api/jobs': () => json([]) });
-    renderRoute('/review');
+    await renderRoute('/review');
     expect(await screen.findByText('No pending reviews')).toBeInTheDocument();
   });
 });

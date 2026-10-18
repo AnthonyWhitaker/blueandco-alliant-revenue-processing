@@ -57,7 +57,7 @@ function api(
 describe('Export page', () => {
   it('opens the newest exportable job by default and puts it in the URL', async () => {
     const fetchMock = api([job({ id: 42 }), job({ id: 41 })]);
-    const { router } = renderRoute('/export');
+    const { router } = await renderRoute('/export');
 
     await waitFor(() => {
       expect(router.state.location.search).toBe('?job=42');
@@ -85,7 +85,7 @@ describe('Export page', () => {
       },
     }));
     const user = userEvent.setup();
-    renderRoute('/export?job=42');
+    await renderRoute('/export?job=42');
 
     const input = await screen.findByLabelText('Payment ID');
     const save = screen.getByRole('button', { name: 'Save Payment ID' });
@@ -107,7 +107,7 @@ describe('Export page', () => {
       },
     }));
     const user = userEvent.setup();
-    renderRoute('/export?job=42');
+    await renderRoute('/export?job=42');
 
     await user.click(await screen.findByRole('button', { name: 'Confirm job as complete' }));
     await waitFor(() => {
@@ -126,7 +126,7 @@ describe('Export page', () => {
       'GET /api/jobs/7': () =>
         json(job({ id: 7, status: 'failed', error_message: 'Payment ID lookup failed' })),
     });
-    renderRoute('/export?job=7');
+    await renderRoute('/export?job=7');
     expect(await screen.findByText("Job #7 isn't ready to export")).toBeInTheDocument();
     expect(screen.getByText('Payment ID lookup failed')).toBeInTheDocument();
   });
@@ -148,7 +148,7 @@ describe('Export page', () => {
         }),
     }));
     const user = userEvent.setup();
-    renderRoute('/export?job=42');
+    await renderRoute('/export?job=42');
 
     await user.click(await screen.findByRole('button', { name: 'Download workbook' }));
     await waitFor(() => {
@@ -162,7 +162,7 @@ describe('Export page', () => {
 
   it('shows an empty state when nothing has been processed', async () => {
     stubFetch({ 'GET /api/jobs': () => json([]) });
-    renderRoute('/export');
+    await renderRoute('/export');
     expect(await screen.findByText('No processed jobs yet')).toBeInTheDocument();
   });
 });

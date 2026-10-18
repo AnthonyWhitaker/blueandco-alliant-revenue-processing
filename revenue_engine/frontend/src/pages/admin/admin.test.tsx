@@ -41,7 +41,7 @@ describe('Admin › Payment Ledger', () => {
       },
     });
     const user = userEvent.setup();
-    renderRoute('/admin/ledger');
+    await renderRoute('/admin/ledger');
 
     expect(await screen.findByText('1,204')).toBeInTheDocument();
     const load = screen.getByRole('button', { name: 'Load ledger' });
@@ -73,7 +73,7 @@ describe('Admin › Payment Ledger', () => {
       'GET /api/ledger-entries': () => json({ items: [], total: 0 }),
       'GET /api/tasks/lost': () => json(problem(404, 'Task lost not found'), 404),
     });
-    renderRoute('/admin/ledger');
+    await renderRoute('/admin/ledger');
     await waitFor(() => {
       expect(useAppStore.getState().activeImports).toEqual({});
     });
@@ -89,7 +89,7 @@ describe('Admin › Members', () => {
       'GET /api/tasks/task-1': () => json(task({ kind: 'member_import' })),
     });
     const user = userEvent.setup();
-    renderRoute('/admin/members');
+    await renderRoute('/admin/members');
 
     await user.upload(fileInput(), xlsx('Account List.xlsx'));
     await user.click(screen.getByLabelText('Replace all existing members (full refresh)'));
@@ -119,7 +119,7 @@ describe('Admin › Members', () => {
       },
     });
     const user = userEvent.setup();
-    renderRoute('/admin/members');
+    await renderRoute('/admin/members');
 
     await user.click(screen.getByRole('button', { name: 'Add member' }));
     expect(await screen.findByText('Enter the facility name')).toBeInTheDocument();
@@ -153,7 +153,7 @@ describe('Admin › Suppliers', () => {
       },
     });
     const user = userEvent.setup();
-    renderRoute('/admin/suppliers');
+    await renderRoute('/admin/suppliers');
 
     const edit = await screen.findByRole('button', { name: 'Edit Acme Imaging' });
     // Enabled once the select options (GET /meta) have loaded.
@@ -186,7 +186,7 @@ describe('Admin › Suppliers', () => {
 
   it('shows an empty state with no suppliers', async () => {
     stubFetch({ 'GET /api/suppliers': () => json([]), 'GET /api/meta': () => json(meta) });
-    renderRoute('/admin/suppliers');
+    await renderRoute('/admin/suppliers');
     expect(await screen.findByText('No suppliers configured')).toBeInTheDocument();
   });
 });
@@ -218,7 +218,7 @@ describe('Admin › Aliases', () => {
       },
     });
     const user = userEvent.setup();
-    renderRoute('/admin/aliases');
+    await renderRoute('/admin/aliases');
 
     expect(await screen.findByText('No aliases yet')).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: /^Supplier/ })).not.toBeInTheDocument();

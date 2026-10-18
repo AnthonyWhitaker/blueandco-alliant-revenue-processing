@@ -46,7 +46,7 @@ describe('Upload page', () => {
       },
     });
     const user = userEvent.setup();
-    const { router } = renderRoute('/upload');
+    const { router } = await renderRoute('/upload');
 
     await user.upload(fileInput(), file('Beta 2026-03-01.csv'));
     expect(await screen.findByText('Inferred from the file name: Beta Pharma')).toBeInTheDocument();
@@ -107,7 +107,7 @@ describe('Upload page', () => {
       },
     });
     const user = userEvent.setup();
-    renderRoute('/upload');
+    await renderRoute('/upload');
 
     await user.upload(fileInput(), file('export.csv'));
     expect(
@@ -127,7 +127,7 @@ describe('Upload page', () => {
       'GET /api/jobs/42': () =>
         json(job({ status: 'failed', error_message: 'No column mapped to fee_amount' })),
     });
-    renderRoute('/upload?job=42');
+    await renderRoute('/upload?job=42');
     expect(await screen.findByText('Processing failed (job #42)')).toBeInTheDocument();
     expect(screen.getByText('No column mapped to fee_amount')).toBeInTheDocument();
   });
@@ -137,7 +137,7 @@ describe('Upload page', () => {
       'GET /api/suppliers': () => json([]),
       'GET /api/meta': () => json(meta),
     });
-    renderRoute('/upload');
+    await renderRoute('/upload');
     expect(await screen.findByText('No supplier profiles configured')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Admin › Suppliers' })).toHaveAttribute(
       'href',
