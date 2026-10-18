@@ -15,6 +15,7 @@ from typing import AsyncIterator, Awaitable, Callable
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from fastapi.responses import PlainTextResponse
 
 from core.jobs import fail_interrupted_jobs
 from engine.db import init_db
@@ -23,8 +24,16 @@ from .background import BackgroundRunner
 from .errors import install_error_handlers, use_problem_media_type
 from .routers import jobs, members, reference, suppliers
 from .settings import load_settings
+from .spa import mount_spa
 
 log = logging.getLogger("api")
+
+# Conservative defaults for an internal tool; the SPA needs no framing or cross-origin access.
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "same-origin",
+}
 access_log = logging.getLogger("api.access")
 
 
@@ -72,6 +81,8 @@ def create_app() -> FastAPI:
         started = time.perf_counter()
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
+        for header, value in SECURITY_HEADERS.items():
+            response.headers.setdefault(header, value)
         access_log.info(
             "request_id=%s method=%s path=%s status=%s duration_ms=%.0f",
             request_id, request.method, request.url.path, response.status_code,
@@ -81,6 +92,13 @@ def create_app() -> FastAPI:
 
     for module in (reference, jobs, suppliers, members):
         app.include_router(module.router, prefix="/api")
+
+    # The Streamlit image's health path, kept so anything already probing it keeps working.
+    @app.get("/_stcore/health", include_in_schema=False)
+    def legacy_health() -> PlainTextResponse:
+        return PlainTextResponse("ok")
+
+    mount_spa(app, settings.static_dir)
 
     def openapi() -> dict:
         if app.openapi_schema is None:

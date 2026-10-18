@@ -220,3 +220,61 @@ def test_openapi_responses_are_fully_typed(client):
             for status, resp in op["responses"].items():
                 if status.startswith(("4", "5")):
                     assert list(resp["content"]) == ["application/problem+json"], (method, path, status)
+
+
+# --- Serving the built frontend ---------------------------------------------
+
+@pytest.fixture
+def spa_client(conn, tmp_path, monkeypatch):
+    dist = tmp_path / "dist"
+    (dist / "assets").mkdir(parents=True)
+    (dist / "index.html").write_text("<!doctype html><div id=root></div>")
+    (dist / "assets" / "index-abc123.js").write_text("console.log(1)")
+    (dist / "favicon.svg").write_text("<svg/>")
+    (tmp_path / "secret.txt").write_text("outside dist")
+    monkeypatch.setenv("STATIC_DIR", str(dist))
+    monkeypatch.setenv("REVENUE_UPLOAD_DIR", str(tmp_path / "uploads"))
+    with TestClient(create_app()) as c:
+        yield c
+
+
+def test_deep_links_fall_back_to_index_html(spa_client):
+    for path in ("/", "/admin/tier-c?supplier=3&extractionRule=5", "/review"):
+        r = spa_client.get(path)
+        assert r.status_code == 200
+        assert "id=root" in r.text
+        assert r.headers["cache-control"] == "no-cache"
+
+
+def test_hashed_assets_are_cached_and_public_files_served(spa_client):
+    r = spa_client.get("/assets/index-abc123.js")
+    assert r.status_code == 200
+    assert "immutable" in r.headers["cache-control"]
+    assert spa_client.get("/favicon.svg").text == "<svg/>"
+    assert spa_client.get("/assets/missing.js").status_code == 404
+
+
+def test_unknown_api_paths_stay_problem_json(spa_client):
+    r = spa_client.get("/api/no-such-thing")
+    assert r.status_code == 404
+    assert r.headers["content-type"].startswith("application/problem+json")
+
+
+def test_spa_fallback_never_serves_files_outside_dist(spa_client):
+    r = spa_client.get("/..%2Fsecret.txt")
+    assert "outside dist" not in r.text
+
+
+def test_legacy_health_path_and_security_headers(spa_client):
+    r = spa_client.get("/_stcore/health")
+    assert r.status_code == 200 and r.text == "ok"
+    assert r.headers["x-content-type-options"] == "nosniff"
+    assert r.headers["x-frame-options"] == "DENY"
+
+
+def test_api_only_without_a_built_frontend(conn, tmp_path, monkeypatch):
+    monkeypatch.setenv("STATIC_DIR", str(tmp_path / "missing"))
+    monkeypatch.setenv("REVENUE_UPLOAD_DIR", str(tmp_path / "uploads"))
+    with TestClient(create_app()) as c:
+        assert c.get("/api/health").status_code == 200
+        assert c.get("/review").status_code == 404
