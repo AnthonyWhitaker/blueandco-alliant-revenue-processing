@@ -9,7 +9,8 @@ import { LedgerTab } from '@/pages/admin/LedgerTab';
 import { MembersTab } from '@/pages/admin/MembersTab';
 import { SuppliersTab } from '@/pages/admin/SuppliersTab';
 import { DashboardPage } from '@/pages/DashboardPage';
-import { AdminTabStub, ExportPage, ReviewPage, UploadPage } from '@/pages/stubs';
+import { ExportPage } from '@/pages/export/ExportPage';
+import { AdminTabStub, ReviewPage, UploadPage } from '@/pages/stubs';
 
 export const routeTree: RouteObject[] = [
   {

@@ -26,18 +26,6 @@ export function ReviewPage() {
   );
 }
 
-export function ExportPage() {
-  return (
-    <>
-      <PageHeader
-        title="Export"
-        description="Preview output and download the Salesforce workbook."
-      />
-      <NotMigrated feature="Export" />
-    </>
-  );
-}
-
 export function AdminTabStub({ feature }: { feature: string }) {
   return <NotMigrated feature={feature} />;
 }
