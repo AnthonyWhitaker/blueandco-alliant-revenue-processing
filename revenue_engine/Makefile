@@ -1,4 +1,4 @@
-.PHONY: install initdb seed ui api web openapi test test-real-data check-mssql compose-up compose-down clean deploy
+.PHONY: install initdb seed ui api web openapi test check docker-build docker-run test-real-data check-mssql compose-up compose-down clean deploy
 
 PYTHON ?= python3
 PY     ?= .venv/bin/python
@@ -16,6 +16,7 @@ seed: initdb
 	$(PY) scripts/seed_guerbet.py
 	$(PY) scripts/seed_tier_ab_suppliers.py
 
+# The legacy Streamlit UI (needs requirements-legacy.txt, included by `make install`).
 ui:
 	.venv/bin/streamlit run ui/app.py --server.headless true
 
@@ -31,6 +32,21 @@ openapi:
 
 test:
 	.venv/bin/pytest -q
+
+# The gate infra/deploy.sh runs: backend tests, the OpenAPI snapshot matches the
+# code, and the frontend's typecheck, lint, format, tests and build.
+check: test
+	$(PY) scripts/export_openapi.py >/dev/null
+	git diff --exit-code -- openapi.json
+	cd frontend && npm ci --no-audit --no-fund && npm run ci
+
+# The production image, locally: http://localhost:8501 (SQLite under ./data).
+docker-build:
+	docker build -t revenue-engine:local .
+
+docker-run: docker-build
+	mkdir -p data
+	docker run --rm -p 8501:8501 -v "$(CURDIR)/data:/app/data" revenue-engine:local
 
 # Regression scripts against real supplier files (gitignored; must be present locally).
 test-real-data:
