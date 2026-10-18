@@ -1,6 +1,8 @@
 import { api, unwrap } from '@/api/client';
 
+import { queryKeys } from './keys';
+
 export const dashboardQuery = {
-  queryKey: ['dashboard'] as const,
+  queryKey: queryKeys.dashboard,
   queryFn: () => unwrap(api.GET('/api/dashboard')),
 };

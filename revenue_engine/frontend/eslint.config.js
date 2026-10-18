@@ -30,6 +30,8 @@ export default tseslint.config(
       // Non-null assertions are allowed only with a justifying comment; enforced in review.
       '@typescript-eslint/no-non-null-assertion': 'error',
       '@typescript-eslint/consistent-type-imports': 'error',
+      // `const { [key]: _removed, ...rest } = record` is how slices drop a key immutably.
+      '@typescript-eslint/no-unused-vars': ['error', { ignoreRestSiblings: true }],
       '@typescript-eslint/restrict-template-expressions': ['error', { allowNumber: true }],
     },
   },

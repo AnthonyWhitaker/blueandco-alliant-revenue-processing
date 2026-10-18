@@ -3,8 +3,13 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
 
+import { useAppStore } from '@/stores';
+
 afterEach(() => {
   cleanup();
+  // One store per module; reset it so tests cannot leak client state into each other.
+  useAppStore.setState(useAppStore.getInitialState(), true);
+  sessionStorage.clear();
 });
 
 // jsdom lacks these browser APIs; Mantine uses them for color scheme and layout.
