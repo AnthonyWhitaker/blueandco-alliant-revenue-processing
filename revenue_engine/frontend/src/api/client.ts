@@ -111,3 +111,20 @@ export async function unwrap<D>(request: Promise<ClientResult<D>>): Promise<D> {
   // openapi-fetch only omits `data` for empty successful bodies (204), whose D is never/undefined.
   return result.data as D;
 }
+
+type FormValue = string | number | boolean | Blob | null | undefined;
+
+/**
+ * Body serializer for multipart/form-data endpoints (file uploads):
+ * `api.POST(path, { body, bodySerializer: formData })`. Null/undefined fields are omitted.
+ */
+export function formData(body: Record<string, FormValue>): FormData {
+  const data = new FormData();
+  for (const [name, value] of Object.entries(body)) {
+    if (value === null || value === undefined) continue;
+    if (value instanceof File) data.append(name, value, value.name);
+    else if (value instanceof Blob) data.append(name, value);
+    else data.append(name, String(value));
+  }
+  return data;
+}

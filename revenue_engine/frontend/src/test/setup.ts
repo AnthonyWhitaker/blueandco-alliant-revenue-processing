@@ -16,7 +16,9 @@ afterEach(() => {
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: (query: string) => ({
-    matches: false,
+    // As in browsers, an empty query matches everything (mantine-datatable relies on
+    // this for columns without a visibleMediaQuery); real media features don't match.
+    matches: query.trim() === '',
     media: query,
     onchange: null,
     addListener: () => undefined,

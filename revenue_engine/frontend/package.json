@@ -16,7 +16,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "api:types": "openapi-typescript ../openapi.json -o src/api/schema.d.ts --default-non-nullable false && prettier --write src/api/schema.d.ts",
+    "api:types": "node scripts/generate-api-types.mjs && prettier --write src/api/schema.d.ts",
     "api:sync": "make -C .. openapi && npm run api:types",
     "ci": "npm run api:types && git diff --exit-code src/api/schema.d.ts && npm run typecheck && npm run lint && npm run format:check && npm run test && npm run build"
   },
@@ -38,6 +38,7 @@
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "react-router-dom": "6.30.6",
+    "zod": "4.6.7",
     "zustand": "5.0.15"
   },
   "devDependencies": {
