@@ -29,9 +29,9 @@ Two containers (an nginx frontend plus the API) would add routing, CORS and a se
 - **`.dockerignore`** excludes:
   - local data, `*.db` and `.env*` (fixes F5);
   - `frontend/node_modules` and `frontend/dist`;
-  - the legacy UI (`ui/`, `legacy/`);
+  - the legacy UI (`legacy/`);
   - tests (except `tests/fixtures.py`, used by `scripts/check_mssql.py`), infra and docs.
-- **Python dependencies:** `requirements.txt` is the runtime set. Streamlit moved to `requirements-legacy.txt`, which `requirements-dev.txt` includes for local use.
+- **Python dependencies:** `requirements.txt` is the runtime set. Streamlit moved to `legacy/requirements.txt`, which `requirements-dev.txt` includes for local use.
 
 Verified locally (`make docker-run`):
 - `/` and a nested deep link (`/admin/tier-c?supplier=3`) return the SPA, and the SPA renders when loaded at that nested route.

@@ -2,7 +2,7 @@
 Alliant Revenue Processing Engine — Streamlit App Entry Point.
 
 Run with:
-    streamlit run ui/app.py
+    streamlit run legacy/ui/app.py
 from the revenue_engine/ directory.
 """
 
@@ -12,7 +12,7 @@ from pathlib import Path
 import streamlit as st
 
 # Add parent to path so engine imports work
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # revenue_engine/
 
 from engine.db import init_db
 from core.misc import get_dashboard_stats

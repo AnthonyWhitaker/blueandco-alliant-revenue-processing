@@ -53,7 +53,7 @@ services:
     profiles: ["legacy"]
     image: python:3.12.15-slim-trixie
     working_dir: /app
-    command: sh -c "pip install -q -r requirements-legacy.txt && streamlit run ui/app.py --server.port=8502 --server.address=0.0.0.0 --server.headless=true"
+    command: sh -c "pip install -q -r legacy/requirements.txt && streamlit run legacy/ui/app.py --server.port=8502 --server.address=0.0.0.0 --server.headless=true"
     ports:
       - "8502:8502"
     volumes:

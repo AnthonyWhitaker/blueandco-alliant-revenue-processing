@@ -10,7 +10,7 @@ from streamlit.testing.v1 import AppTest
 
 from .conftest import make_supplier
 
-UI = Path(__file__).resolve().parent.parent / "ui"
+UI = Path(__file__).resolve().parent.parent / "legacy" / "ui"
 PAGES = ["app.py", "pages/1_Upload.py", "pages/2_Review.py", "pages/3_Export.py", "pages/4_Admin.py"]
 
 
