@@ -79,11 +79,11 @@ The six `st.tabs` are already routes (`/admin/members`, …, `/admin/aliases`), 
 `useAppStore` = `review` + `columnMapDraft` + `imports`, wrapped in `devtools` (dev builds only) and `persist`.
 Each slice file opens with a comment saying what it owns, who writes it, and which key it replaces.
 
-| Slice                    | State                                                               | Actions                                                                                                                                  | Persisted             |
-| ------------------------ | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| `reviewSlice.ts`         | `reviewDrafts: Record<itemId, ReviewDraft>`                         | `pickReviewMember`, `recordCreatedMember`, `rejectReviewCandidates`, `setReviewCreateAlias`, `setReviewAliasScope`, `discardReviewDraft` | No                    |
-| `columnMapDraftSlice.ts` | `inferredMappings: Record<supplierId, InferredMapping[]>`           | `setInferredMappings`, `discardInferredMappings`                                                                                         | No                    |
-| `importsSlice.ts`        | `activeImports: { member_import?: taskId, ledger_import?: taskId }` | `trackImport`, `forgetImport`                                                                                                            | Yes, `sessionStorage` |
+| Slice                    | State                                                               | Actions                                                                                                                                                          | Persisted             |
+| ------------------------ | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| `reviewSlice.ts`         | `reviewDrafts: Record<itemId, ReviewDraft>`                         | `pickReviewMember`, `recordCreatedMember`, `rejectReviewCandidates`, `resetReviewSelection`, `setReviewCreateAlias`, `setReviewAliasScope`, `discardReviewDraft` | No                    |
+| `columnMapDraftSlice.ts` | `inferredMappings: Record<supplierId, InferredMapping[]>`           | `setInferredMappings`, `discardInferredMappings`                                                                                                                 | No                    |
+| `importsSlice.ts`        | `activeImports: { member_import?: taskId, ledger_import?: taskId }` | `trackImport`, `forgetImport`                                                                                                                                    | Yes, `sessionStorage` |
 
 How to use the store:
 

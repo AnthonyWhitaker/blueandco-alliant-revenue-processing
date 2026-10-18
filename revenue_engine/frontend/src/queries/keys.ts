@@ -12,6 +12,7 @@ export const queryKeys = {
 
   jobs: {
     all: ['jobs'] as const,
+    lists: ['jobs', 'list'] as const,
     list: (filters: QueryParams<'/api/jobs'>) => ['jobs', 'list', filters] as const,
     detail: (jobId: number) => ['jobs', jobId] as const,
     exceptions: (jobId: number) => ['jobs', jobId, 'exceptions'] as const,

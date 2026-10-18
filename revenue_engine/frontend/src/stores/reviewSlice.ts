@@ -49,6 +49,8 @@ export interface ReviewSlice {
   pickReviewMember: (itemId: number, member: PickedMember) => void;
   recordCreatedMember: (itemId: number, member: PickedMember) => void;
   rejectReviewCandidates: (itemId: number) => void;
+  /** Back to the engine's suggestion (the picker was cleared). */
+  resetReviewSelection: (itemId: number) => void;
   setReviewCreateAlias: (itemId: number, createAlias: boolean) => void;
   setReviewAliasScope: (itemId: number, aliasScope: AliasScope) => void;
   /** Call once the item is approved or dismissed. */
@@ -85,6 +87,9 @@ export const createReviewSlice: StateCreator<AppState, AppStoreMutators, [], Rev
     },
     rejectReviewCandidates: (itemId) => {
       patch(itemId, { selection: { kind: 'none' } }, 'rejectCandidates');
+    },
+    resetReviewSelection: (itemId) => {
+      patch(itemId, { selection: { kind: 'suggested' } }, 'resetSelection');
     },
     setReviewCreateAlias: (itemId, createAlias) => {
       patch(itemId, { createAlias }, 'setCreateAlias');

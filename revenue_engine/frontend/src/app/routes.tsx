@@ -11,7 +11,8 @@ import { MembersTab } from '@/pages/admin/MembersTab';
 import { SuppliersTab } from '@/pages/admin/SuppliersTab';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { ExportPage } from '@/pages/export/ExportPage';
-import { AdminTabStub, ReviewPage } from '@/pages/stubs';
+import { ReviewPage } from '@/pages/review/ReviewPage';
+import { AdminTabStub } from '@/pages/stubs';
 import { UploadPage } from '@/pages/upload/UploadPage';
 
 export const routeTree: RouteObject[] = [

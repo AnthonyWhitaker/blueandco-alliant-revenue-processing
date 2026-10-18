@@ -38,6 +38,13 @@ describe('review slice', () => {
     });
   });
 
+  it('goes back to the suggestion when the selection is reset', () => {
+    store().pickReviewMember(1, { id: 42, label: 'A' });
+    store().resetReviewSelection(1);
+    const draft = store().reviewDrafts[1];
+    expect(draft && resolveReviewMemberId(draft, suggestion)).toBe(7);
+  });
+
   it('keeps drafts per item and discards one without touching the others', () => {
     store().pickReviewMember(1, { id: 42, label: 'A' });
     store().pickReviewMember(2, { id: 43, label: 'B' });
