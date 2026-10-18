@@ -2,18 +2,6 @@
 import { NotMigrated } from '@/components/NotMigrated';
 import { PageHeader } from '@/components/PageHeader';
 
-export function UploadPage() {
-  return (
-    <>
-      <PageHeader
-        title="Upload & Process"
-        description="Upload a supplier file and run the matching pipeline."
-      />
-      <NotMigrated feature="Uploading and processing files" />
-    </>
-  );
-}
-
 export function ReviewPage() {
   return (
     <>
