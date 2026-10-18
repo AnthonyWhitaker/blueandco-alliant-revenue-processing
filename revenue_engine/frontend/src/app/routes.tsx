@@ -5,6 +5,7 @@ import { AppLayout } from '@/components/layout/AppLayout';
 import { routes } from '@/lib/routes';
 import { AdminLayout } from '@/pages/admin/AdminLayout';
 import { AliasesTab } from '@/pages/admin/AliasesTab';
+import { ColumnMapsTab } from '@/pages/admin/ColumnMapsTab';
 import { LedgerTab } from '@/pages/admin/LedgerTab';
 import { MembersTab } from '@/pages/admin/MembersTab';
 import { SuppliersTab } from '@/pages/admin/SuppliersTab';
@@ -34,7 +35,7 @@ export const routeTree: RouteObject[] = [
               { path: routes.admin.members, element: <MembersTab /> },
               { path: routes.admin.ledger, element: <LedgerTab /> },
               { path: routes.admin.suppliers, element: <SuppliersTab /> },
-              { path: routes.admin.columnMaps, element: <AdminTabStub feature="Column maps" /> },
+              { path: routes.admin.columnMaps, element: <ColumnMapsTab /> },
               { path: routes.admin.tierC, element: <AdminTabStub feature="Tier C rules" /> },
               { path: routes.admin.aliases, element: <AliasesTab /> },
             ],
