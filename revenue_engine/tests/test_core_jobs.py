@@ -84,7 +84,7 @@ def test_set_payment_id_updates_output_rows(conn, processed_job):
 
 def test_preview_has_all_four_sheets(conn, processed_job):
     preview = jobs.get_preview(conn, processed_job["job_id"])
-    assert sorted(r.pec for r in preview.upload) == ["EC001", "EC001", "EC002"]
+    assert sorted(r.pec for r in preview.upload) == ["EC001", "EC002"]
     assert {r.entity_code for r in preview.validation} == {"EC001", "EC002"}
     assert [r.customer_name for r in preview.unmatched] == ["Zyxw Qvbn Clinic"]
     assert {r.jde_number for r in preview.jde_mapping} == {"J100", "J200"}

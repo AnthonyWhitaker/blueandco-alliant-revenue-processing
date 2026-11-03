@@ -164,6 +164,25 @@ def test_infer_and_save_inferred(conn, tmp_path):
     assert len(saved) == len(suggestions) and not any(m.is_required for m in saved)
 
 
+def test_infer_medline_headers(conn, tmp_path):
+    """Prefixed, CamelCase and supplier-named headers; the rate column must not take fee_amount."""
+    sid = make_supplier(conn, name="Medline")
+    headers = ["InvoiceNumber", "InvoiceDate", "Medline Account #", "Account Name", "Account Street", "Account City",
+               "Account State", "Account Zip", "GPO ID", "Mfr Name", "Mfr Item #", "MaterialNumber",
+               "MaterialDescription", "MaterialGroupCode", "InvoiceLineUOMCode", "ProductDivisionCode",
+               "SaleToBaseUOMConvFactorQty", "MatUnitPriceAmount", "OrigInvcLineUOMInvoiceQty",
+               "Extended Price Amount", "GPO Fee Rate", "GPO Fee Amount"]
+    path = tmp_path / "medline.csv"
+    path.write_text(",".join(headers) + "\n" + ",".join("x" for _ in headers) + "\n")
+    by_src = {s.source_column: s.canonical_field for s in column_maps.infer_from_sample(conn, sid, str(path))}
+    assert by_src == {
+        "InvoiceDate": "process_date", "Medline Account #": "jde_number", "Account Name": "customer_name",
+        "Account Street": "address", "Account City": "city", "Account State": "state", "Account Zip": "zip",
+        "GPO ID": "entity_code_hint", "ProductDivisionCode": "product_line",
+        "Extended Price Amount": "sales_amount", "GPO Fee Amount": "fee_amount",
+    }
+
+
 def test_infer_rejects_unreadable_file(conn, tmp_path):
     sid = make_supplier(conn)
     bad = tmp_path / "bad.xlsx"

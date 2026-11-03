@@ -78,7 +78,7 @@ def test_upload_process_review_export(client, seeded, tmp_path):
     assert again.headers["content-type"] == "application/problem+json"
 
     preview = client.get(f"/api/jobs/{job['id']}/preview").json()
-    assert sorted(r["total_revenue"] for r in preview["upload"]) == [30.0, 50.0, 100.0, 120.0]
+    assert sorted(r["total_revenue"] for r in preview["upload"]) == [30.0, 120.0, 150.0]
 
     export = client.get(f"/api/jobs/{job['id']}/export")
     assert export.status_code == 200
