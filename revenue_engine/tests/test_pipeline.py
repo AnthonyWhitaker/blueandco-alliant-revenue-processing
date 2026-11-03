@@ -1,6 +1,8 @@
 """Contract tests for the row-level pipeline and review decisions (engine/processor.py)."""
 
-from engine.processor import apply_review_decision
+from engine.processor import apply_review_decision, process_job
+
+from .conftest import FILE_NAME, create_job_row, write_supplier_file
 
 
 def _pending_item(conn, job_id):
@@ -25,17 +27,31 @@ def test_pipeline_matches_and_queues_unmatched(conn, processed_job):
     assert item["total_fee"] == 30.00
 
 
-def test_pipeline_aggregates_per_pec_and_process_date(conn, processed_job):
-    # Current behaviour (FINDINGS F17): grouping is by raw process_date, so two
-    # June dates for EC001 produce two output rows in the same earned period.
+def test_pipeline_aggregates_per_pec_and_earned_month(conn, processed_job):
+    # FINDINGS F17: EC001 has two June dates; they make one row for June.
     rows = conn.execute(
         "SELECT pec, total_revenue, earned_period, payment_id FROM revenue_output_row WHERE job_id = ? "
         "ORDER BY pec, total_revenue",
         (processed_job["job_id"],),
     ).fetchall()
-    assert [(r["pec"], r["total_revenue"]) for r in rows] == [("EC001", 50.00), ("EC001", 100.00), ("EC002", 120.00)]
+    assert [(r["pec"], r["total_revenue"]) for r in rows] == [("EC001", 150.00), ("EC002", 120.00)]
     assert {r["earned_period"] for r in rows} == {"2025-06-01"}
     assert {r["payment_id"] for r in rows} == {"PAY-1"}
+
+
+def test_each_earned_month_gets_its_own_row(conn, seeded, tmp_path):
+    rows = [
+        ("General Hospital", "J100", "Austin", "TX", "78701", 100.00, 1000.00, "2025-06-15"),
+        ("General Hospital", "J100", "Austin", "TX", "78701", 50.00, 500.00, "2025-06-20"),
+        ("General Hospital", "J100", "Austin", "TX", "78701", 25.00, 250.00, "2025-07-02"),
+    ]
+    job_id = create_job_row(conn, seeded["supplier_id"], write_supplier_file(tmp_path / FILE_NAME, rows))
+    process_job(conn=conn, job_id=job_id)
+    out = conn.execute(
+        "SELECT earned_period, quarter_label, volume, total_revenue FROM revenue_output_row "
+        "WHERE job_id = ? ORDER BY earned_period", (job_id,),
+    ).fetchall()
+    assert [tuple(r) for r in out] == [("2025-06-01", "2Q2025", 1500.0, 150.0), ("2025-07-01", "3Q2025", 250.0, 25.0)]
 
 
 def test_approve_completes_job_and_reaggregates(conn, processed_job):

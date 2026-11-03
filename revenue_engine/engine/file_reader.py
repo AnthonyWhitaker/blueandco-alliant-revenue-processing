@@ -12,6 +12,7 @@ Handles:
 - Summary row stripping (rows where a required column is NaN)
 """
 
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -223,6 +224,36 @@ def read_supplier_file(
     return df_out, warnings
 
 
+# Leading words that qualify which party a header is about ("Account City",
+# "Ship-To State", "Member Name"); headers are also scored without them.
+_HEADER_QUALIFIERS = re.compile(r"^(account|facility|member|customer|ship to|billing|bill to|report|payer|payor)\s+")
+# Headers holding a rate rather than money are never suggested as an amount.
+_RATE_HEADER = re.compile(r"\b(rate|pct|percent)\b|%")
+
+
+def _normalize_header(name: str) -> str:
+    """Like _normalize_col, but also splits CamelCase and treats _ - / . as spaces:
+    'InvoiceDate' -> 'invoice date', 'Facility_Zip_Code' -> 'facility zip code'."""
+    spaced = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", str(name))
+    return _normalize_col(re.sub(r"[_\-/.]+", " ", spaced))
+
+
+def _header_variants(header: str, supplier_name: str) -> set[str]:
+    """The header as written, without the supplier's own name ('Medline Account #'
+    -> 'account #'), and without a leading qualifier ('Account City' -> 'city')."""
+    variants = {_normalize_header(header)}
+    supplier_words = set(_normalize_header(supplier_name).split()) if supplier_name else set()
+    if supplier_words:
+        kept = [w for w in _normalize_header(header).split() if w not in supplier_words]
+        if kept:
+            variants.add(" ".join(kept))
+    for v in list(variants):
+        stripped = _HEADER_QUALIFIERS.sub("", v)
+        if stripped and stripped != v:
+            variants.add(stripped)
+    return variants
+
+
 def infer_column_map(
     df: pd.DataFrame,
     supplier_profile_id: int,
@@ -240,40 +271,55 @@ def infer_column_map(
         CANONICAL_CUSTOMER_NAME, CANONICAL_JDE_NUMBER, CANONICAL_PROCESS_DATE,
         CANONICAL_CITY, CANONICAL_STATE, CANONICAL_ZIP, CANONICAL_ADDRESS,
         CANONICAL_SALES_AMOUNT, CANONICAL_FEE_AMOUNT, CANONICAL_PRODUCT_LINE,
-        CANONICAL_CONTRACT_NUMBER,
+        CANONICAL_CONTRACT_NUMBER, CANONICAL_ENTITY_CODE_HINT,
     )
 
     HINTS: dict[str, list[str]] = {
-        CANONICAL_CUSTOMER_NAME: ["customer", "customer name", "customer_name", "name", "account", "facility"],
-        CANONICAL_JDE_NUMBER:    ["jde", "jde customer", "jde number", "jde customer number", "customer number", "customer id"],
-        CANONICAL_PROCESS_DATE:  ["process date", "process_date", "date", "transaction date", "period"],
+        CANONICAL_CUSTOMER_NAME: ["customer", "customer name", "customer_name", "name", "account", "facility",
+                                  "account name", "facility name", "member name"],
+        CANONICAL_JDE_NUMBER:    ["jde", "jde customer", "jde number", "jde customer number", "customer number", "customer id",
+                                  "account #", "account number", "customer #"],
+        CANONICAL_PROCESS_DATE:  ["process date", "process_date", "date", "transaction date", "period",
+                                  "invoice date", "sale date", "earned period"],
         CANONICAL_CITY:          ["city", "billing city"],
         CANONICAL_STATE:         ["state", "billing state", "province"],
         CANONICAL_ZIP:           ["zip", "zip code", "postal", "postal code"],
         CANONICAL_ADDRESS:       ["address", "address line", "street"],
-        CANONICAL_SALES_AMOUNT:  ["rebate", "rebate sales", "net sales", "sales", "volume", "rebate net sales"],
-        CANONICAL_FEE_AMOUNT:    ["fee", "admin fee", "revenue", "amount", "rebate amount"],
-        CANONICAL_PRODUCT_LINE:  ["product", "product line", "product line desc", "category"],
+        CANONICAL_SALES_AMOUNT:  ["rebate", "rebate sales", "net sales", "sales", "volume", "rebate net sales",
+                                  "extended price", "extended price amount", "total sales dollars", "sales volume"],
+        CANONICAL_FEE_AMOUNT:    ["fee", "admin fee", "revenue", "amount", "rebate amount",
+                                  "fee amount", "gpo fee amount", "admin fee amount", "administration fee amount"],
+        CANONICAL_PRODUCT_LINE:  ["product", "product line", "product line desc", "category",
+                                  "product division", "product division code"],
         CANONICAL_CONTRACT_NUMBER: ["contract", "contract number", "contract id"],
+        CANONICAL_ENTITY_CODE_HINT: ["premier entity code", "entity code", "pec", "gpo id", "gpo member number"],
     }
+    amount_fields = {CANONICAL_SALES_AMOUNT, CANONICAL_FEE_AMOUNT}
+
+    supplier_name = ""
+    if conn is not None:
+        row = conn.execute("SELECT name FROM supplier_profile WHERE id = ?", (supplier_profile_id,)).fetchone()
+        supplier_name = row["name"] if row else ""
+
+    # Score every (column, field) pair, then hand out the best pairs first, so a
+    # column only gets a field no other column fits better (otherwise "GPO Fee
+    # Rate", which comes first, would take fee_amount from "GPO Fee Amount").
+    scored: list[tuple[int, int, str, str]] = []
+    for position, raw_col in enumerate(df.columns):
+        variants = _header_variants(str(raw_col), supplier_name)
+        is_rate = bool(_RATE_HEADER.search(_normalize_header(str(raw_col))))
+        for canonical, hint_list in HINTS.items():
+            if is_rate and canonical in amount_fields:
+                continue
+            score = max(fuzz.ratio(v, hint) for v in variants for hint in hint_list)
+            if score >= 70:
+                scored.append((score, -position, str(raw_col), canonical))
 
     suggestions: dict[str, str] = {}
-    used_canonicals: set[str] = set()
+    for _, _, col, canonical in sorted(scored, reverse=True):
+        if col not in suggestions and canonical not in suggestions.values():
+            suggestions[col] = canonical
 
-    for raw_col in df.columns:
-        norm = _normalize_col(str(raw_col))
-        best_canonical = None
-        best_score = 0
-        for canonical, hint_list in HINTS.items():
-            if canonical in used_canonicals:
-                continue
-            for hint in hint_list:
-                score = fuzz.ratio(norm, hint)
-                if score > best_score:
-                    best_score = score
-                    best_canonical = canonical
-        if best_score >= 70 and best_canonical:
-            suggestions[str(raw_col)] = best_canonical
-            used_canonicals.add(best_canonical)
-
-    return suggestions
+    # Keep the file's column order.
+    order = {str(c): i for i, c in enumerate(df.columns)}
+    return dict(sorted(suggestions.items(), key=lambda kv: order[kv[0]]))

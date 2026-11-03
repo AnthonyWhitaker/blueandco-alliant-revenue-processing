@@ -621,7 +621,9 @@ def _aggregate_output(
 ) -> tuple[float, float]:
     """
     Aggregate matched revenue_row records into revenue_output_row.
-    Groups by (entity_code, earned_period).
+    Groups by (entity_code, earned_period): one row per PEC per earned month,
+    however many invoice dates the file has (FINDINGS F17). Facility, member
+    and contract stay in the key so distinct ones are never merged.
     Returns (total_revenue, total_volume).
     """
     # NOTE: entity_code can be NULL for a member created via the "add new
@@ -644,6 +646,21 @@ def _aggregate_output(
         (job_id,),
     ).fetchall()
 
+    # Roll the per-date sums up to earned months. Done here rather than in SQL
+    # because month truncation differs between SQLite and SQL Server.
+    groups: dict[tuple, dict] = {}
+    for r in rows:
+        process_date = str(r["process_date"]) if r["process_date"] else None
+        key = (r["entity_code"], r["account_id"], r["matched_member_id"],
+               first_of_month(process_date), r["contract_number"])
+        g = groups.setdefault(key, {
+            "entity_code": r["entity_code"], "account_id": r["account_id"],
+            "matched_member_id": r["matched_member_id"], "contract_number": r["contract_number"],
+            "process_date": process_date, "volume": 0.0, "total_revenue": 0.0,
+        })
+        g["volume"] += r["volume"] or 0.0
+        g["total_revenue"] += r["total_revenue"] or 0.0
+
     default_contract_id = job.get("contract_id") or supplier.get("contract_id")
     revenue_type = supplier.get("revenue_type", "Admin Fee")
     keep_return  = supplier.get("keep_return_default", "Keep")
@@ -652,7 +669,7 @@ def _aggregate_output(
     total_revenue = 0.0
     total_volume  = 0.0
 
-    for r in rows:
+    for r in groups.values():
         earned_period = first_of_month(r["process_date"])
         quarter_label = get_quarter_label(r["process_date"])
         rev = r["total_revenue"] or 0.0
