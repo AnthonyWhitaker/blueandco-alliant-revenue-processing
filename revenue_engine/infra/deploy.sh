@@ -3,9 +3,10 @@
 # Deploy the Alliant Revenue Processing Engine to Azure.
 #
 # Steps:
+#   0. Runs the test suites and frontend checks (skip with SKIP_CHECKS=1)
 #   1. Creates (or reuses) resource group
 #   2. Creates (or reuses) Azure Container Registry
-#   3. Builds and pushes the Docker image
+#   3. Builds and pushes the Docker image (tags :latest and :<git sha>)
 #   4. Provisions infrastructure via Bicep (SQL Database + Container App)
 #   5. Bootstraps the database schema + seeds supplier profiles
 #
@@ -18,6 +19,10 @@
 # To share infrastructure with alliant-purchasing-solutions, set:
 #   EXISTING_SQL_SERVER    - name of the existing SQL Server
 #   EXISTING_ENVIRONMENT   - name of the existing Container Apps environment
+#
+# Access (FINDINGS F14): the image now serves a REST API as well as the UI.
+#   ALLOWED_IP_RANGES      - comma-separated CIDRs allowed through ingress, e.g. "203.0.113.0/24,198.51.100.7/32"
+#   ALLOW_PUBLIC_INGRESS   - set to "true" to deploy with no IP allowlist anyway (e.g. Easy Auth is configured)
 
 set -euo pipefail
 
@@ -29,6 +34,10 @@ LOCATION="${LOCATION:-eastus}"
 NAME_PREFIX="${NAME_PREFIX:-rev}"
 EXISTING_SQL_SERVER="${EXISTING_SQL_SERVER:-}"    # e.g. "pdn-sql-abc123" to share purchasing-solutions SQL server
 EXISTING_ENVIRONMENT="${EXISTING_ENVIRONMENT:-}"  # e.g. "pdn-env" to share purchasing-solutions Container Apps env
+ALLOWED_IP_RANGES="${ALLOWED_IP_RANGES:-}"
+ALLOW_PUBLIC_INGRESS="${ALLOW_PUBLIC_INGRESS:-false}"
+SKIP_CHECKS="${SKIP_CHECKS:-0}"
+GIT_SHA=$(git rev-parse --short=12 HEAD 2>/dev/null || date +%Y%m%d%H%M%S)
 
 ACR_SUFFIX=$(printf "%06d" $((RANDOM % 1000000)))
 ACR_NAME="${ACR_NAME:-revreg${ACR_SUFFIX}}"
@@ -55,7 +64,15 @@ echo " Name prefix        : $NAME_PREFIX"
 echo " ACR candidate      : $ACR_NAME  (reuses existing ACR if found)"
 echo " Existing SQL server: ${EXISTING_SQL_SERVER:-<none - will create new>}"
 echo " Existing environment: ${EXISTING_ENVIRONMENT:-<none - will create new>}"
+echo " Allowed IP ranges  : ${ALLOWED_IP_RANGES:-<none - public ingress>}"
+echo " Image tags         : latest, $GIT_SHA"
 echo ""
+
+if [ -z "$ALLOWED_IP_RANGES" ] && [ "$ALLOW_PUBLIC_INGRESS" != "true" ]; then
+    echo "ERROR: No ALLOWED_IP_RANGES set. The app now exposes a REST API (FINDINGS F14)." >&2
+    echo "       Set ALLOWED_IP_RANGES, or ALLOW_PUBLIC_INGRESS=true if access is restricted another way (Easy Auth)." >&2
+    exit 1
+fi
 
 if [ ! -f "infra/main.bicep" ]; then
     echo "ERROR: Run this script from the revenue_engine/ directory." >&2
@@ -91,6 +108,14 @@ fi
 SQL_PASSWORD="$SQL_ADMIN_PASSWORD"
 
 # -----------------------------------------------------------------------
+# STEP 0 - Checks (the same gate as `make check`)
+# -----------------------------------------------------------------------
+if [ "$SKIP_CHECKS" != "1" ]; then
+    step 0 6 "Tests, frontend typecheck/lint/tests (SKIP_CHECKS=1 to skip)"
+    make check
+fi
+
+# -----------------------------------------------------------------------
 # STEP 1 - Resource group
 # -----------------------------------------------------------------------
 step 1 6 "Resource group"
@@ -117,6 +142,15 @@ else
 fi
 
 ACR_LOGIN_SERVER=$(az acr show --name "$ACR_NAME" --query loginServer -o tsv)
+
+# Keep the last Streamlit image addressable for rollback, once, before the
+# first React build replaces :latest (see DEPLOYMENT.md, "Rollback").
+if az acr repository show --name "$ACR_NAME" --image "revenue-engine:latest" >/dev/null 2>&1 && \
+   ! az acr repository show --name "$ACR_NAME" --image "revenue-engine:streamlit-legacy" >/dev/null 2>&1; then
+    echo "Tagging the current :latest as revenue-engine:streamlit-legacy (rollback target)..."
+    az acr import --name "$ACR_NAME" --source "${ACR_LOGIN_SERVER}/revenue-engine:latest" \
+        --image "revenue-engine:streamlit-legacy" >/dev/null
+fi
 ACR_USERNAME=$(az acr credential show --name "$ACR_NAME" --query username -o tsv)
 ACR_PASSWORD=$(az acr credential show --name "$ACR_NAME" --query 'passwords[0].value' -o tsv)
 echo "Login server: $ACR_LOGIN_SERVER"
@@ -130,13 +164,19 @@ echo "$ACR_PASSWORD" | docker login "$ACR_LOGIN_SERVER" -u "$ACR_USERNAME" --pas
 step 3 6 "Build and push Docker image (ACR Tasks - built in Azure)"
 
 APP_IMAGE="${ACR_LOGIN_SERVER}/revenue-engine:latest"
-echo "Building image $APP_IMAGE in Azure..."
-az acr build --registry "$ACR_NAME" --image "revenue-engine:latest" --file Dockerfile .
+echo "Building image $APP_IMAGE (also tagged :$GIT_SHA) in Azure..."
+az acr build --registry "$ACR_NAME" --image "revenue-engine:latest" --image "revenue-engine:${GIT_SHA}" --file Dockerfile .
 
 # -----------------------------------------------------------------------
 # STEP 4 - Bicep deployment
 # -----------------------------------------------------------------------
 step 4 6 "Azure infrastructure via Bicep (~3-5 min)"
+
+# "a, b" -> ["a","b"] for the Bicep array parameter.
+IP_RANGES_JSON="[]"
+if [ -n "$ALLOWED_IP_RANGES" ]; then
+    IP_RANGES_JSON="[$(echo "$ALLOWED_IP_RANGES" | sed 's/[[:space:]]//g; s/[^,][^,]*/"&"/g')]"
+fi
 
 TEMP_PARAMS=$(mktemp /tmp/rev-params-XXXXXX.json)
 cat > "$TEMP_PARAMS" <<EOF
@@ -152,7 +192,8 @@ cat > "$TEMP_PARAMS" <<EOF
     "registryUsername": { "value": "$ACR_USERNAME" },
     "registryPassword": { "value": "$ACR_PASSWORD" },
     "existingSqlServerName": { "value": "$EXISTING_SQL_SERVER" },
-    "existingEnvironmentName": { "value": "$EXISTING_ENVIRONMENT" }
+    "existingEnvironmentName": { "value": "$EXISTING_ENVIRONMENT" },
+    "allowedIpRanges": { "value": $IP_RANGES_JSON }
   }
 }
 EOF
@@ -273,11 +314,15 @@ echo "  App URL        : $APP_URL"
 echo "  SQL Server     : $SQL_FQDN"
 echo "  Database       : $DB_NAME"
 echo "  ACR            : $ACR_LOGIN_SERVER"
+echo "  Image          : revenue-engine:latest = revenue-engine:$GIT_SHA"
+echo "  Roll back with : az containerapp update -n <app> -g $RESOURCE_GROUP --image ${ACR_LOGIN_SERVER}/revenue-engine:<previous tag>"
+echo "                   (revenue-engine:streamlit-legacy is the last Streamlit image)"
 echo ""
 yellow "SAVE THESE CREDENTIALS:"
 echo "  SQL login      : $SQL_LOGIN"
 echo "  SQL password   : (from \$SQL_ADMIN_PASSWORD)"
 echo "  ACR username   : $ACR_USERNAME"
 echo ""
+yellow "NOTE: Health check: $APP_URL/api/health (the old /_stcore/health also answers)."
 yellow "NOTE: Restrict access via IP allowlist or Easy Auth before sharing."
 echo ""

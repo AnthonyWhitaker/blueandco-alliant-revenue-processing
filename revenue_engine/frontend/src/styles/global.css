@@ -1,0 +1,28 @@
+/* Figures line up in columns of money and counts. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: 'cv11', 'ss01';
+}
+
+/* Identifiers (payment ids, JDE numbers, cell addresses). */
+.mono {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 0.95em;
+}
+
+/* Visually hidden, still announced by screen readers. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

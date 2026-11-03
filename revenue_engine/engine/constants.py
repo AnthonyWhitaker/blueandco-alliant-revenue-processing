@@ -127,6 +127,7 @@ EXC_EXTRACTION_NOT_FOUND  = "extraction_not_found"
 EXC_EXTRACTION_AMBIGUOUS  = "extraction_ambiguous"
 EXC_ALLOCATION_INCOMPLETE = "allocation_incomplete"
 EXC_MISSING_ENTITY_CODE   = "missing_entity_code"
+EXC_MANUAL_TOTAL          = "manual_total_entered"
 
 # ---------------------------------------------------------------------------
 # Export artifact types

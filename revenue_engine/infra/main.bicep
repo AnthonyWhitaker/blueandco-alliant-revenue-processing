@@ -2,7 +2,7 @@
 //
 // Provisions:
 //   * Azure SQL Database (new database on existing or new SQL Server)
-//   * Azure Container App (Streamlit UI)
+//   * Azure Container App (FastAPI serving the API and the React app)
 //
 // Shares the same Container Apps environment and SQL Server as
 // alliant-purchasing-solutions when deployed to the same resource group.

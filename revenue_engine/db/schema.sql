@@ -88,8 +88,9 @@ CREATE TABLE IF NOT EXISTS supplier_extraction_rule (
     -- 'formula'          : simple +/-/* arithmetic referencing other rule_names
     --                      already extracted this run (e.g. "Gross - Fees Withheld")
     -- 'manual_entry'     : no automated parsing — a human enters the confirmed
-    --                      total in the Upload/Confirm UI (documented fallback
-    --                      for pivot layouts too irregular for the methods above)
+    --                      total on the Upload page (stored in
+    --                      revenue_job.manual_totals_json; fallback for pivot
+    --                      layouts too irregular for the methods above)
     cell_address            TEXT,                   -- for 'named_cell', e.g. "E8"
     label_text              TEXT,                   -- for 'label_lookup' / 'label_range_sum'
     label_match_mode        TEXT DEFAULT 'exact',    -- 'exact' | 'contains' | 'startswith' | 'fuzzy'
@@ -231,6 +232,7 @@ CREATE TABLE IF NOT EXISTS revenue_job (
     total_revenue           REAL,              -- Sum of fee_amount
     error_message           TEXT,
     column_mapping_json     TEXT,              -- Confirmed column→canonical mapping
+    manual_totals_json      TEXT,              -- Tier C: {rule_name: amount} for manual_entry rules, entered at upload
     created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at            TIMESTAMP
 );

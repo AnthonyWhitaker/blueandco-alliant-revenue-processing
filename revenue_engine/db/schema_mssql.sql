@@ -241,6 +241,7 @@ BEGIN
         total_revenue           FLOAT,
         error_message           NVARCHAR(MAX),
         column_mapping_json     NVARCHAR(MAX),
+        manual_totals_json      NVARCHAR(MAX),  -- Tier C: {rule_name: amount} for manual_entry rules
         created_at              DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
         completed_at            DATETIME2
     );

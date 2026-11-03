@@ -1,0 +1,32 @@
+# Keep the build context small and free of local state and secrets (FINDINGS F5).
+.git
+.venv
+venv
+**/__pycache__
+**/*.pyc
+.pytest_cache
+
+# Local data: SQLite databases, uploads, environment files.
+data/
+*.db
+*.db-*
+*.sqlite*
+.env
+.env.*
+
+# Frontend: dependencies and build output are produced inside the image.
+frontend/node_modules
+frontend/dist
+frontend/coverage
+frontend/.env*
+!frontend/.env.example
+
+# Tests, except the synthetic fixtures scripts/check_mssql.py imports.
+tests/*
+!tests/__init__.py
+!tests/fixtures.py
+
+# Deployment and docs are not needed at runtime.
+infra/
+docker-compose.yml
+*.md

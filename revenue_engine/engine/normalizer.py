@@ -216,16 +216,3 @@ def parse_deposit_amount_from_filename(filename: str) -> Optional[float]:
         except ValueError:
             continue
     return None
-
-
-def parse_date_from_filename(filename: str) -> Optional[str]:
-    """
-    Extract a date from a filename like:
-        'Carolon 2026.01.29 1219.79 Ledger.xlsx'
-    Returns an ISO date string (YYYY-MM-DD) or None.
-    """
-    m = re.search(r"\b(19|20)(\d{2})\.(\d{1,2})\.(\d{1,2})\b", filename)
-    if m:
-        year, month, day = int(m.group(1) + m.group(2)), int(m.group(3)), int(m.group(4))
-        return f"{year:04d}-{month:02d}-{day:02d}"
-    return None

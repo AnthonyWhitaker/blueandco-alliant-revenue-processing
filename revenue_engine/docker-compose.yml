@@ -1,17 +1,53 @@
-version: "3.9"
+# Local development: the API with auto-reload and the Vite dev server with hot
+# module replacement, so code changes show up without rebuilding images.
+#
+#   docker compose up            → http://localhost:5173 (UI), :8000/api/docs (API)
+#   docker compose --profile prod up --build app
+#                                → the production image on http://localhost:8501
+#
+# Both share ./data (SQLite DB + uploads). See ../DEPLOYMENT.md.
 
 services:
-  revenue-engine:
+  api:
+    build:
+      context: .
+      target: runtime
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    user: root  # the bind mount is owned by the host user
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/app
+    environment:
+      REVENUE_DB_PATH: /app/data/revenue.db
+      REVENUE_UPLOAD_DIR: /app/data/uploads
+      STATIC_DIR: ""  # the Vite dev server serves the UI
+
+  web:
+    image: node:22.22.2-trixie-slim
+    working_dir: /frontend
+    command: sh -c "npm ci --no-audit --no-fund && npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/frontend
+      - frontend-node-modules:/frontend/node_modules  # Linux binaries, not the host's
+    environment:
+      API_PROXY_TARGET: http://api:8000
+    depends_on:
+      - api
+
+  app:
+    profiles: ["prod"]
     build: .
     ports:
       - "8501:8501"
     volumes:
       - ./data:/app/data
     environment:
-      - REVENUE_DB_PATH=/app/data/revenue.db
-    restart: unless-stopped
+      REVENUE_DB_PATH: /app/data/revenue.db
 
-  # Optional: local SQL Server for testing Azure SQL path
+  # Optional: local SQL Server for testing the Azure SQL path (or use `make check-mssql`).
   # mssql:
   #   image: mcr.microsoft.com/mssql/server:2022-latest
   #   environment:
@@ -19,8 +55,6 @@ services:
   #     MSSQL_SA_PASSWORD: "<YourStrong!Passw0rd>"
   #   ports:
   #     - "1433:1433"
-  #   volumes:
-  #     - mssql-data:/var/opt/mssql
 
-# volumes:
-#   mssql-data:
+volumes:
+  frontend-node-modules:

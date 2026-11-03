@@ -34,7 +34,7 @@ from .constants import (
     EXC_UNMATCHED_CUSTOMER, EXC_PAYMENT_NOT_FOUND,
     EXC_REVENUE_MISMATCH, EXC_PROCESSING_ERROR,
     EXC_EXTRACTION_NOT_FOUND, EXC_ALLOCATION_INCOMPLETE,
-    EXC_MISSING_ENTITY_CODE,
+    EXC_MISSING_ENTITY_CODE, EXC_MANUAL_TOTAL,
     REVIEW_PENDING, JOB_TYPE_PIVOT_ALLOCATION,
 )
 from .db import execute_upsert, execute_insert_ignore, get_last_insert_id
@@ -412,7 +412,15 @@ def _run_pivot_allocation_pipeline(
     # ------------------------------------------------------------------
     # Step 2: Extract totals from the pivot/summary sheet
     # ------------------------------------------------------------------
-    extraction = extract_totals(file_path, supplier_id, conn)
+    manual_totals = json.loads(job.get("manual_totals_json") or "{}")
+    extraction = extract_totals(file_path, supplier_id, conn, manual_totals)
+    for name, amount in manual_totals.items():
+        if name in extraction.values:
+            _job_log(
+                conn, job_id, EXC_MANUAL_TOTAL,
+                f"Extraction rule {name!r} is manual_entry; used the total entered at upload: {amount:,.2f}.",
+                "info",
+            )
     for w in extraction.warnings:
         _job_log(conn, job_id, EXC_EXTRACTION_NOT_FOUND, w, "error")
 
@@ -421,7 +429,8 @@ def _run_pivot_allocation_pipeline(
             _job_log(
                 conn, job_id, EXC_EXTRACTION_NOT_FOUND,
                 f"Extraction rule {name!r} is configured as manual_entry — "
-                f"a reviewer must enter the confirmed total before this job can complete.",
+                f"no total was entered at upload, so it was not allocated. Upload the file again "
+                f"with the confirmed total.",
                 "warning",
             )
 
@@ -552,9 +561,13 @@ def _build_review_items(
     For each unique unmatched customer in the job, create a member_review_item.
     Groups by JDE number (or customer name) and computes total fee impact.
     """
+    # Non-grouped columns must be aggregated: SQL Server rejects bare columns
+    # (SQLite silently picks an arbitrary row's value). MIN/MAX also make the
+    # representative name/location deterministic.
     rows = conn.execute(
         """
-        SELECT jde_number, customer_name, city, state, zip,
+        SELECT MAX(jde_number) AS jde_number, MIN(customer_name) AS customer_name,
+               MIN(city) AS city, MIN(state) AS state, MIN(zip) AS zip,
                COUNT(*) AS affected_rows,
                SUM(fee_amount) AS total_fee,
                SUM(sales_amount) AS total_sales
@@ -784,14 +797,16 @@ def apply_review_decision(
         (resolved_member_id, resolution_scope, resolved_by, notes, review_item_id),
     )
 
+    # A job_only decision applies to this job's rows and nothing else: no
+    # alias and no JDE history, so future jobs don't inherit it.
+    remember = resolution_scope != "job_only"
+
     # Create alias if requested
-    if create_alias and item.get("customer_name_sample"):
+    if create_alias and remember and item.get("customer_name_sample"):
         from .normalizer import normalize_key
         raw_name = item["customer_name_sample"]
         canon_key = normalize_key(raw_name)
-        sp_id = supplier_profile_id if resolution_scope in ("supplier", "global") else None
-        if resolution_scope == "global":
-            sp_id = None
+        sp_id = supplier_profile_id if resolution_scope == "supplier" else None
         try:
             execute_insert_ignore(
                 conn,
@@ -810,7 +825,7 @@ def apply_review_decision(
             pass
 
     # Also update JDE history if we have a JDE number
-    if item.get("jde_number") and supplier_profile_id:
+    if remember and item.get("jde_number") and supplier_profile_id:
         execute_upsert(
             conn,
             """

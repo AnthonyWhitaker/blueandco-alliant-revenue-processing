@@ -196,11 +196,17 @@ def _extract_formula(rule: dict, values_so_far: dict[str, float]) -> float:
         raise ExtractionError(f"Could not evaluate formula {expr!r}: {e}")
 
 
-def extract_totals(file_path: str, supplier_profile_id: int, conn: object) -> ExtractionResult:
+def extract_totals(
+    file_path: str,
+    supplier_profile_id: int,
+    conn: object,
+    manual_totals: Optional[dict[str, float]] = None,
+) -> ExtractionResult:
     """
     Run all supplier_extraction_rule records for a supplier against a raw
     file, returning the extracted {rule_name: value} plus any manual_entry
-    rule names that need a human-entered value, and warnings for anything
+    rule names that still need a human-entered value (manual_totals holds
+    the ones entered at upload, by rule name), and warnings for anything
     that failed (never raises — failures show up as missing rule_name keys
     plus a warning, so callers can decide whether that blocks the job).
     """
@@ -222,7 +228,10 @@ def extract_totals(file_path: str, supplier_profile_id: int, conn: object) -> Ex
         method = rule["extraction_method"]
         rule_name = rule["rule_name"]
         if method == EXTRACT_MANUAL_ENTRY:
-            result.manual_entry_rules.append(rule_name)
+            if manual_totals and manual_totals.get(rule_name) is not None:
+                result.values[rule_name] = float(manual_totals[rule_name])
+            else:
+                result.manual_entry_rules.append(rule_name)
             result.is_sales_amount[rule_name] = bool(rule.get("is_sales_amount"))
             continue
         sheet_key = rule.get("sheet_name")

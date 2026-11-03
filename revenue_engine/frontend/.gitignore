@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+*.tsbuildinfo
+.env
+.env.local
+e2e/.data/
+test-results/
+playwright-report/
