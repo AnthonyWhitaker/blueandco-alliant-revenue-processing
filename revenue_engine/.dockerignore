@@ -21,6 +21,9 @@ frontend/coverage
 frontend/.env*
 !frontend/.env.example
 
+# Mock supplier files (scripts/make_medline_mock.py output).
+samples/
+
 # Tests, except the synthetic fixtures scripts/check_mssql.py imports.
 tests/*
 !tests/__init__.py
