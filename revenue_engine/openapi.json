@@ -2744,6 +2744,18 @@
               }
             ],
             "title": "Manual Payment Id"
+          },
+          "manual_totals": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Manual Totals",
+            "description": "Tier C only. JSON object of confirmed totals by manual_entry rule name, e.g. {\"Total Rebate\": 1234.5}. Required when the supplier has manual_entry rules."
           }
         },
         "type": "object",
@@ -2786,6 +2798,7 @@
           "replace_all": {
             "type": "boolean",
             "title": "Replace All",
+            "description": "Full refresh: deactivate members from an earlier Account List that are not in this file.",
             "default": false
           }
         },
@@ -3604,7 +3617,8 @@
                 "enum": [
                   "ledger_auto",
                   "manual",
-                  "column"
+                  "column",
+                  "not_found"
                 ]
               },
               {
@@ -3740,6 +3754,14 @@
           "pending_review_count": {
             "type": "integer",
             "title": "Pending Review Count"
+          },
+          "manual_totals": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Manual Totals",
+            "description": "Tier C: the totals entered at upload for manual_entry extraction rules, by rule name."
           },
           "created_at": {
             "type": "string",
@@ -4068,6 +4090,12 @@
           "skipped": {
             "type": "integer",
             "title": "Skipped"
+          },
+          "deactivated": {
+            "type": "integer",
+            "title": "Deactivated",
+            "description": "Full refresh only: members not in the file, now inactive.",
+            "default": 0
           }
         },
         "type": "object",

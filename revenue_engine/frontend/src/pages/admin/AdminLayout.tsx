@@ -1,5 +1,5 @@
 import { Tabs } from '@mantine/core';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router';
 
 import { PageHeader } from '@/components/PageHeader';
 import { routes } from '@/lib/routes';
@@ -28,7 +28,7 @@ export function AdminLayout() {
       <Tabs
         value={active}
         onChange={(to) => {
-          if (to) navigate(to);
+          if (to) void navigate(to);
         }}
         mb="lg"
         keepMounted={false}

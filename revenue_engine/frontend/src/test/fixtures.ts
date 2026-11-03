@@ -103,6 +103,33 @@ export function job(overrides: Partial<Schemas['Job']> = {}): Schemas['Job'] {
   };
 }
 
+export function extractionRule(
+  overrides: Partial<Schemas['ExtractionRule']> = {},
+): Schemas['ExtractionRule'] {
+  return {
+    id: 5,
+    supplier_profile_id: 3,
+    rule_name: 'Gross',
+    sheet_name: 'Summary',
+    extraction_method: 'named_cell',
+    cell_address: 'E8',
+    label_text: null,
+    label_match_mode: null,
+    label_match_threshold: null,
+    value_row_offset: null,
+    value_col_offset: null,
+    range_axis: null,
+    column_index: null,
+    column_letter: null,
+    header_row: null,
+    stop_label_text: null,
+    formula_expression: null,
+    is_sales_amount: true,
+    sort_order: 2,
+    ...overrides,
+  };
+}
+
 export function task(overrides: Partial<Schemas['Task']> = {}): Schemas['Task'] {
   return {
     id: 'task-1',

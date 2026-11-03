@@ -1,9 +1,9 @@
 import { mergeThemeOverrides } from '@mantine/core';
 import { render, waitFor } from '@testing-library/react';
-import { createMemoryRouter, RouterProvider } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 
 import { Providers } from '@/app/Providers';
-import { providerFuture, routeTree, routerFuture } from '@/app/routes';
+import { routeTree } from '@/app/routes';
 import { createQueryClient } from '@/lib/queryClient';
 import { theme } from '@/theme';
 
@@ -22,10 +22,10 @@ const testTheme = mergeThemeOverrides(theme, {
 export async function renderRoute(path: string) {
   const queryClient = createQueryClient();
   queryClient.setDefaultOptions({ queries: { retry: false } });
-  const router = createMemoryRouter(routeTree, { initialEntries: [path], future: routerFuture });
+  const router = createMemoryRouter(routeTree, { initialEntries: [path] });
   const view = render(
     <Providers queryClient={queryClient} theme={testTheme}>
-      <RouterProvider router={router} future={providerFuture} />
+      <RouterProvider router={router} />
     </Providers>,
   );
   // The page module loads lazily, then (startTransition) commits a tick later.

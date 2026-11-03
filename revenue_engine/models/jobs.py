@@ -1,7 +1,8 @@
+import json
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from .common import ApiModel, InputModel
 from .enums import JobPaymentIdSource, JobStatus, JobType, Severity
@@ -28,8 +29,17 @@ class Job(ApiModel):
     total_revenue: Optional[float]
     error_message: Optional[str]
     pending_review_count: int
+    manual_totals: dict[str, float] = Field(
+        default_factory=dict, validation_alias="manual_totals_json",
+        description="Tier C: the totals entered at upload for manual_entry extraction rules, by rule name.",
+    )
     created_at: datetime
     completed_at: Optional[datetime]
+
+    @field_validator("manual_totals", mode="before")
+    @classmethod
+    def _parse_manual_totals(cls, v):
+        return json.loads(v) if isinstance(v, str) else (v or {})
 
 
 class JobPatch(InputModel):

@@ -406,9 +406,9 @@ export function ExtractionRuleForm({
         )}
 
         {method === 'manual_entry' && (
-          <Alert color="orange" variant="light">
-            manual_entry has no automated parsing. Note that there is currently no place to enter
-            the confirmed total during Upload or Review (FINDINGS F9).
+          <Alert color="blue" variant="light">
+            manual_entry has no automated parsing. The confirmed total is entered on the Upload page
+            each time a file for this supplier is processed.
           </Alert>
         )}
 

@@ -1,6 +1,6 @@
 import { Alert, Button, Center, Code, Group, Stack, Text, Title } from '@mantine/core';
 import { IconAlertTriangle } from '@tabler/icons-react';
-import { isRouteErrorResponse, Link, useRouteError } from 'react-router-dom';
+import { isRouteErrorResponse, Link, useRouteError } from 'react-router';
 
 import { ApiError } from '@/api/client';
 import { routes } from '@/lib/routes';

@@ -20,7 +20,7 @@ import { notifications } from '@mantine/notifications';
 import { IconWand } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { z } from 'zod';
 
 import { api, formData, unwrap } from '@/api/client';

@@ -1,7 +1,7 @@
 import { Alert, Anchor, Skeleton, Stack, Text, Title } from '@mantine/core';
 import { IconCircleCheck } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 
 import { EmptyState } from '@/components/EmptyState';
 import { JobSelect } from '@/components/JobSelect';

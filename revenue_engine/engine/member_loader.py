@@ -38,12 +38,19 @@ def _find_col(df_cols: list[str], candidates: list[str]) -> Optional[str]:
     return None
 
 
+def _account_list_member_ids(conn: object, active: bool) -> set[int]:
+    rows = conn.execute(
+        "SELECT id FROM member WHERE account_id IS NOT NULL AND is_active = ?", (1 if active else 0,)
+    ).fetchall()
+    return {r[0] for r in rows}
+
+
 def load_account_list(
     conn: object,
     file_path: str,
     sheet_name: Optional[str] = None,
     replace_all: bool = False,
-) -> tuple[int, int]:
+) -> tuple[int, int, int]:
     """
     Load the Account List XLSX into the member table.
 
@@ -51,10 +58,13 @@ def load_account_list(
         conn:        Database connection
         file_path:   Path to Account List.xlsx
         sheet_name:  Sheet name (auto-detects if None)
-        replace_all: If True, truncate member table first (full refresh)
+        replace_all: If True, a full refresh: members from an earlier Account
+                     List that are not in this file are deactivated. They are
+                     never deleted, because jobs, review items, allocation
+                     rules, aliases and JDE history refer to them (FINDINGS F23).
 
     Returns:
-        (inserted_count, skipped_count)
+        (inserted_count, skipped_count, deactivated_count)
     """
     xl = pd.ExcelFile(file_path)
     if sheet_name is None:
@@ -86,8 +96,11 @@ def load_account_list(
         raise ValueError("Cannot find Account Name column in Account List file.")
 
     if replace_all:
-        conn.execute("DELETE FROM member")
-        conn.commit()
+        # Mark and sweep, in one transaction: deactivate every Account List
+        # member, then the upserts below reactivate the ones in this file.
+        # Members created by hand during Review (no account_id) are left alone.
+        active_before = _account_list_member_ids(conn, active=True)
+        conn.execute("UPDATE member SET is_active = 0 WHERE account_id IS NOT NULL")
 
     inserted = 0
     skipped = 0
@@ -136,6 +149,7 @@ def load_account_list(
                     norm_city           = excluded.norm_city,
                     norm_state          = excluded.norm_state,
                     norm_zip            = excluded.norm_zip,
+                    is_active           = 1,
                     updated_at          = CURRENT_TIMESTAMP
                 """,
                 (
@@ -157,8 +171,11 @@ def load_account_list(
         except Exception:
             skipped += 1
 
+    deactivated = 0
+    if replace_all:
+        deactivated = len(active_before & _account_list_member_ids(conn, active=False))
     conn.commit()
-    return inserted, skipped
+    return inserted, skipped, deactivated
 
 
 def create_member(

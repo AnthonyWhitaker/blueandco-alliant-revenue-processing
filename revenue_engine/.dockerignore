@@ -21,9 +21,6 @@ frontend/coverage
 frontend/.env*
 !frontend/.env.example
 
-# The legacy Streamlit UI is not part of the production image.
-legacy/
-
 # Tests, except the synthetic fixtures scripts/check_mssql.py imports.
 tests/*
 !tests/__init__.py

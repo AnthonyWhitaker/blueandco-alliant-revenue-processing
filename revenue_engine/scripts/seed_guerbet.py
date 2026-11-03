@@ -138,7 +138,7 @@ def seed_guerbet(
     if account_list_path:
         from engine.member_loader import load_account_list
         print(f"  Loading Account List from: {account_list_path}")
-        inserted, skipped = load_account_list(conn, account_list_path)
+        inserted, skipped, _ = load_account_list(conn, account_list_path)
         print(f"  Members: {inserted:,} loaded, {skipped} skipped")
 
     # Load Ledger if provided

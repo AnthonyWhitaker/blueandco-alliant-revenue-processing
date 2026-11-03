@@ -1,5 +1,7 @@
 """Revenue jobs: creation, listing, payment ID, exceptions, preview, export, sign-off."""
 
+import json
+import math
 import os
 import tempfile
 import uuid
@@ -7,7 +9,7 @@ from datetime import date
 from pathlib import Path
 from typing import Optional
 
-from engine.constants import STATUS_COMPLETED, STATUS_FAILED, STATUS_NEEDS_REVIEW, STATUS_PROCESSING, STATUS_UPLOADED
+from engine.constants import EXTRACT_MANUAL_ENTRY, JOB_TYPE_PIVOT_ALLOCATION, STATUS_COMPLETED, STATUS_FAILED, STATUS_NEEDS_REVIEW, STATUS_PROCESSING, STATUS_UPLOADED
 from engine.db import execute_select, get_last_insert_id
 from engine.exporter import export_job, export_to_dataframes
 from engine.normalizer import guess_supplier_from_filename, parse_date_from_filename, parse_deposit_amount_from_filename
@@ -18,6 +20,7 @@ from models.jobs import FileNameInference, Job, JobException, JobPreview
 from .errors import ConflictError, InvalidInputError, NotFoundError
 from .rows import frame_records, row_dict, rows_dicts
 from .suppliers import get_supplier, list_suppliers
+from .tier_c import list_extraction_rules
 
 UPLOAD_EXTENSIONS = [".xlsx", ".xls", ".xlsm", ".csv"]
 EXPORTABLE_STATUSES: list[JobStatus] = [STATUS_COMPLETED, STATUS_NEEDS_REVIEW]
@@ -125,17 +128,57 @@ def save_upload(file_name: str, content: bytes) -> Path:
     return path
 
 
-def create_job(conn, supplier_id: int, file_name: str, content: bytes, date_received: date) -> Job:
-    """Store the file and create a revenue_job in 'uploaded' status. Processing is separate (run_job)."""
+def manual_entry_rule_names(conn, supplier_id: int) -> list[str]:
+    """Tier C extraction rules whose total is typed in at upload instead of read from the file."""
+    return [r.rule_name for r in list_extraction_rules(conn, supplier_id)
+            if r.extraction_method == EXTRACT_MANUAL_ENTRY]
+
+
+def _check_manual_totals(conn, supplier, manual_totals: Optional[dict[str, float]]) -> dict[str, float]:
+    """Every manual_entry rule of a Tier C supplier needs a total (FINDINGS F9), and nothing else may have one."""
+    manual_totals = manual_totals or {}
+    expected = manual_entry_rule_names(conn, supplier.id) if supplier.job_type == JOB_TYPE_PIVOT_ALLOCATION else []
+    unknown = sorted(set(manual_totals) - set(expected))
+    if unknown:
+        raise InvalidInputError(
+            f"{supplier.name} has no manual-entry extraction rule named {', '.join(map(repr, unknown))}."
+        )
+    missing = [name for name in expected if name not in manual_totals]
+    if missing:
+        raise InvalidInputError(
+            f"Enter the confirmed total for {', '.join(map(repr, missing))}: "
+            f"{'it is a manual-entry rule' if len(missing) == 1 else 'they are manual-entry rules'} for {supplier.name}."
+        )
+    for name, amount in manual_totals.items():
+        if not math.isfinite(amount):
+            raise InvalidInputError(f"The total for {name!r} must be a number.")
+    return manual_totals
+
+
+def create_job(
+    conn,
+    supplier_id: int,
+    file_name: str,
+    content: bytes,
+    date_received: date,
+    manual_totals: Optional[dict[str, float]] = None,
+) -> Job:
+    """Store the file and create a revenue_job in 'uploaded' status. Processing is separate (run_job).
+
+    manual_totals: {rule_name: amount}, required for each of a Tier C supplier's manual_entry rules.
+    """
     supplier = get_supplier(conn, supplier_id)
+    manual_totals = _check_manual_totals(conn, supplier, manual_totals)
     path = save_upload(file_name, content)
     cur = conn.execute(
         """
         INSERT INTO revenue_job
-            (supplier_profile_id, original_file_name, file_path, status, date_received, contract_id)
-        VALUES (?, ?, ?, ?, ?, ?)
+            (supplier_profile_id, original_file_name, file_path, status, date_received, contract_id,
+             manual_totals_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (supplier.id, file_name, str(path), STATUS_UPLOADED, date_received.isoformat(), supplier.contract_id),
+        (supplier.id, file_name, str(path), STATUS_UPLOADED, date_received.isoformat(), supplier.contract_id,
+         json.dumps(manual_totals) if manual_totals else None),
     )
     conn.commit()
     return get_job(conn, get_last_insert_id(conn, cur))

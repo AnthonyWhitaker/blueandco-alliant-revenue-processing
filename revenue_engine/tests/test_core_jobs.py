@@ -4,11 +4,12 @@ from io import BytesIO
 import openpyxl
 import pytest
 
-from core import jobs, reviews
+from core import jobs, reviews, tier_c
 from core.errors import ConflictError, InvalidInputError, NotFoundError
 from models.reviews import ReviewApproval
+from models.tier_c import AllocationRuleInput, ExtractionRuleInput
 
-from .conftest import FILE_NAME, write_supplier_file
+from .conftest import FILE_NAME, make_supplier, write_supplier_file
 
 
 @pytest.fixture(autouse=True)
@@ -133,3 +134,48 @@ def test_review_approve_unknown_member(conn, processed_job):
     item = reviews.list_pending_items(conn, processed_job["job_id"])[0]
     with pytest.raises(NotFoundError):
         reviews.approve(conn, item.id, ReviewApproval(member_id=9999))
+
+
+# --- Tier C manual_entry totals (FINDINGS F9) --------------------------------
+
+@pytest.fixture
+def manual_supplier(conn, seeded):
+    """A Tier C supplier with one manual_entry total, split 60/40, plus a formula on top of it."""
+    sid = make_supplier(conn, name="Komet", job_type="pivot_allocation")
+    tier_c.save_extraction_rule(conn, sid, ExtractionRuleInput(extraction_method="manual_entry", rule_name="Rebate"))
+    tier_c.save_extraction_rule(conn, sid, ExtractionRuleInput(
+        extraction_method="formula", rule_name="Bonus", formula_expression="Rebate * 0.1"))
+    for rule, member, kind, value in [("Rebate", "general", "percent", 60), ("Rebate", "mercy", "remainder", None),
+                                      ("Bonus", "desert", "remainder", None)]:
+        tier_c.save_allocation_rule(conn, sid, AllocationRuleInput(
+            extraction_rule_name=rule, member_id=seeded["members"][member], allocation_type=kind,
+            allocation_value=value))
+    return sid
+
+
+def test_manual_total_is_allocated(conn, manual_supplier, tmp_path):
+    job = jobs.create_job(conn, manual_supplier, "Komet 2025.07.02.xlsx", _xlsx_bytes(tmp_path), date(2025, 7, 2),
+                          manual_totals={"Rebate": 500.0})
+    assert job.manual_totals == {"Rebate": 500.0}
+    done = jobs.run_job(conn, job.id)
+    assert done.status == "completed"
+    assert done.total_revenue == pytest.approx(550.0)
+    by_pec = {r.pec: r.total_revenue for r in jobs.get_preview(conn, job.id).upload}
+    assert by_pec == {"EC001": pytest.approx(300.0), "EC002": pytest.approx(200.0), "EC003": pytest.approx(50.0)}
+    assert any(e.exception_type == "manual_total_entered" and e.severity == "info"
+               for e in jobs.list_exceptions(conn, job.id))
+
+
+def test_manual_totals_are_checked(conn, seeded, manual_supplier, tmp_path):
+    content = _xlsx_bytes(tmp_path)
+    with pytest.raises(InvalidInputError, match="Enter the confirmed total for 'Rebate'"):
+        jobs.create_job(conn, manual_supplier, "k.xlsx", content, date(2025, 7, 2))
+    with pytest.raises(InvalidInputError, match="no manual-entry extraction rule named 'Bonus'"):
+        jobs.create_job(conn, manual_supplier, "k.xlsx", content, date(2025, 7, 2),
+                        manual_totals={"Rebate": 1.0, "Bonus": 2.0})
+    with pytest.raises(InvalidInputError, match="no manual-entry"):
+        jobs.create_job(conn, seeded["supplier_id"], FILE_NAME, content, date(2025, 7, 2),
+                        manual_totals={"Rebate": 1.0})
+    with pytest.raises(InvalidInputError, match="must be a number"):
+        jobs.create_job(conn, manual_supplier, "k.xlsx", content, date(2025, 7, 2),
+                        manual_totals={"Rebate": float("nan")})

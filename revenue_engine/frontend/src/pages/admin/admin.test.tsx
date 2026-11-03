@@ -100,7 +100,7 @@ describe('Admin › Members', () => {
     expect(posted).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'Load Account List' }));
-    await user.click(await screen.findByRole('button', { name: 'Delete and reload' }));
+    await user.click(await screen.findByRole('button', { name: 'Deactivate missing and reload' }));
     await waitFor(() => {
       expect(posted).toHaveBeenCalledTimes(1);
     });

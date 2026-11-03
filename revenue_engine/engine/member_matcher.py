@@ -161,8 +161,8 @@ class MemberMatcher:
             SELECT a.canonical_key, a.jde_number, m.*
             FROM member_alias a
             JOIN member m ON m.id = a.member_id
-            WHERE a.supplier_profile_id IS NULL
-               OR a.supplier_profile_id = ?
+            WHERE m.is_active = 1
+              AND (a.supplier_profile_id IS NULL OR a.supplier_profile_id = ?)
             """,
             (self.supplier_profile_id,),
         ).fetchall()
@@ -180,7 +180,7 @@ class MemberMatcher:
             SELECT h.jde_number, m.*
             FROM jde_member_history h
             JOIN member m ON m.id = h.member_id
-            WHERE h.supplier_profile_id = ?
+            WHERE h.supplier_profile_id = ? AND m.is_active = 1
             """,
             (self.supplier_profile_id,),
         ).fetchall()

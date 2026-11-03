@@ -31,10 +31,7 @@ class Supplier(ApiModel):
     updated_at: datetime
 
 
-class SupplierFormInput(InputModel):
-    """The fields the legacy Admin › Suppliers form edits. Upserting through
-    this model leaves fee_rate and the fuzzy thresholds untouched."""
-
+class SupplierInput(InputModel):
     name: str = Field(min_length=1)
     description: Optional[str] = None
     contract_id: Optional[str] = None
@@ -48,9 +45,6 @@ class SupplierFormInput(InputModel):
     max_read_columns: Optional[int] = Field(default=None, ge=1)
     job_type: JobType = "row_level"
     requires_manual_confirmation: bool = False
-
-
-class SupplierInput(SupplierFormInput):
     fee_rate: Optional[float] = Field(default=None, ge=0)
     fuzzy_zip_state_threshold: int = Field(default=75, ge=0, le=100)
     fuzzy_city_state_threshold: int = Field(default=75, ge=0, le=100)

@@ -4,10 +4,8 @@
 #   docker compose up            → http://localhost:5173 (UI), :8000/api/docs (API)
 #   docker compose --profile prod up --build app
 #                                → the production image on http://localhost:8501
-#   docker compose --profile legacy up legacy
-#                                → the old Streamlit UI on http://localhost:8502
 #
-# All three share ./data (SQLite DB + uploads). See ../DEPLOYMENT.md.
+# Both share ./data (SQLite DB + uploads). See ../DEPLOYMENT.md.
 
 services:
   api:
@@ -46,18 +44,6 @@ services:
       - "8501:8501"
     volumes:
       - ./data:/app/data
-    environment:
-      REVENUE_DB_PATH: /app/data/revenue.db
-
-  legacy:
-    profiles: ["legacy"]
-    image: python:3.12.15-slim-trixie
-    working_dir: /app
-    command: sh -c "pip install -q -r legacy/requirements.txt && streamlit run legacy/ui/app.py --server.port=8502 --server.address=0.0.0.0 --server.headless=true"
-    ports:
-      - "8502:8502"
-    volumes:
-      - .:/app
     environment:
       REVENUE_DB_PATH: /app/data/revenue.db
 

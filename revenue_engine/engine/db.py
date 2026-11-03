@@ -183,6 +183,7 @@ def init_db(db_path: Optional[str] = None):
     _safe_add_column(conn, "supplier_profile", "job_type", "TEXT NOT NULL DEFAULT 'row_level'")
     _safe_add_column(conn, "supplier_profile", "requires_manual_confirmation", "INTEGER NOT NULL DEFAULT 0")
     _safe_add_column(conn, "supplier_profile", "fee_rate", "REAL")
+    _safe_add_column(conn, "revenue_job", "manual_totals_json", "NVARCHAR(MAX)" if is_mssql() else "TEXT")
 
     return conn
 

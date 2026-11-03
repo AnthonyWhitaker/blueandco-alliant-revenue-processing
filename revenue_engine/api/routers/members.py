@@ -56,7 +56,9 @@ def _start_import(
 def import_members(
     request: Request, response: Response, runner: Runner,
     file: Annotated[UploadFile, File(description="Account List.xlsx")],
-    replace_all: Annotated[bool, Form()] = False,
+    replace_all: Annotated[bool, Form(
+        description="Full refresh: deactivate members from an earlier Account List that are not in this file.",
+    )] = False,
 ) -> Task:
     return _start_import(request, response, runner, file, "member_import",
                          lambda conn, path: members.import_account_list(conn, path, replace_all))

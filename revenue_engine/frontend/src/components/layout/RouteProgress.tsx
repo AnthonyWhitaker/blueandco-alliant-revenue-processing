@@ -1,6 +1,6 @@
 import { Progress } from '@mantine/core';
 import { useIsFetching, useIsMutating } from '@tanstack/react-query';
-import { useNavigation } from 'react-router-dom';
+import { useNavigation } from 'react-router';
 
 /**
  * Global loading indicator: a thin bar along the top of the header while a

@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { job, meta, supplier } from '@/test/fixtures';
+import { extractionRule, job, meta, supplier } from '@/test/fixtures';
 import { json, renderRoute, stubFetch } from '@/test/render';
 
 afterEach(() => {
@@ -117,6 +117,60 @@ describe('Upload page', () => {
     expect(await screen.findByText('Pick the supplier')).toBeInTheDocument();
     expect(screen.getByText('Enter the date received')).toBeInTheDocument();
     expect(posted).not.toHaveBeenCalled();
+  });
+
+  it('asks for the confirmed total of a Tier C manual-entry rule and sends it', async () => {
+    let form: FormData | null = null;
+    const pivot = supplier({ id: 3, name: 'Pivot Co', job_type: 'pivot_allocation' });
+    stubFetch({
+      'GET /api/suppliers': () => json([pivot]),
+      'GET /api/meta': () => json(meta),
+      'GET /api/jobs': () => json([]),
+      'GET /api/suppliers/3/extraction-rules': () =>
+        json([
+          extractionRule({ id: 1, rule_name: 'Gross' }),
+          extractionRule({
+            id: 2,
+            rule_name: 'Rebate',
+            extraction_method: 'manual_entry',
+            cell_address: null,
+            is_sales_amount: false,
+          }),
+        ]),
+      'GET /api/file-name-inference': () =>
+        json({
+          file_name: 'Pivot Co 2026-03-01.xlsx',
+          supplier_profile_id: 3,
+          supplier_name: 'Pivot Co',
+          date_received: '2026-03-01',
+          deposit_amount: null,
+        }),
+      'POST /api/jobs': async (request) => {
+        form = await request.formData();
+        return json(job({ status: 'uploaded' }), 202);
+      },
+      'GET /api/jobs/42': () =>
+        json(job({ job_type: 'pivot_allocation', manual_totals: { Rebate: 1500.25 } })),
+    });
+    const user = userEvent.setup();
+    await renderRoute('/upload');
+
+    await user.upload(fileInput(), file('Pivot Co 2026-03-01.xlsx'));
+    const rebate = await screen.findByLabelText(/^Rebate/);
+    // Only manual_entry rules get a box.
+    expect(screen.queryByLabelText(/^Gross/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Process file' }));
+    expect(await screen.findByText('Enter the confirmed total for Rebate')).toBeInTheDocument();
+    expect(form).toBeNull();
+
+    await user.type(rebate, '1500.25');
+    await user.click(screen.getByRole('button', { name: 'Process file' }));
+    expect(
+      await screen.findByText('Confirmed totals entered at upload: Rebate $1,500.25'),
+    ).toBeInTheDocument();
+    const sent = form as FormData | null;
+    expect(JSON.parse(sent?.get('manual_totals') as string)).toEqual({ Rebate: 1500.25 });
   });
 
   it('shows why processing failed', async () => {

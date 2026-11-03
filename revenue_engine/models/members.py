@@ -31,6 +31,7 @@ class MemberInput(InputModel):
 class MemberImportResult(ApiModel):
     inserted: int
     skipped: int
+    deactivated: int = Field(0, description="Full refresh only: members not in the file, now inactive.")
 
 
 class LedgerEntry(ApiModel):

@@ -13,7 +13,7 @@ import {
 } from '@mantine/core';
 import { IconPencil } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 
 import type { Schemas } from '@/api/types';
 import { DataTable } from '@/components/DataTable';

@@ -11,7 +11,7 @@ import {
 } from '@mantine/core';
 import { IconAlertTriangle } from '@tabler/icons-react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 
 import { PageHeader } from '@/components/PageHeader';
 import { routes } from '@/lib/routes';

@@ -1,4 +1,4 @@
-.PHONY: install initdb seed ui api web openapi test check docker-build docker-run test-real-data check-mssql compose-up compose-down clean deploy
+.PHONY: install initdb seed api web openapi test check docker-build docker-run test-real-data check-mssql compose-up compose-down clean deploy
 
 PYTHON ?= python3
 PY     ?= .venv/bin/python
@@ -15,10 +15,6 @@ initdb:
 seed: initdb
 	$(PY) scripts/seed_guerbet.py
 	$(PY) scripts/seed_tier_ab_suppliers.py
-
-# The legacy Streamlit UI (needs legacy/requirements.txt, included by `make install`).
-ui:
-	.venv/bin/streamlit run legacy/ui/app.py --server.headless true
 
 api:
 	.venv/bin/uvicorn api.main:app --reload --port 8000

@@ -4,8 +4,10 @@ import {
   Badge,
   Button,
   Code,
+  Fieldset,
   Group,
   Loader,
+  NumberInput,
   Paper,
   Select,
   SimpleGrid,
@@ -19,7 +21,7 @@ import { schemaResolver, useForm } from '@mantine/form';
 import { IconAlertTriangle, IconCircleCheck, IconPlayerPlay } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 import { z } from 'zod';
 
 import { api, formData, unwrap } from '@/api/client';
@@ -44,7 +46,7 @@ import {
 } from '@/queries/jobs';
 import { queryKeys } from '@/queries/keys';
 import { metaQuery } from '@/queries/reference';
-import { suppliersQuery, type Supplier } from '@/queries/suppliers';
+import { extractionRulesQuery, suppliersQuery, type Supplier } from '@/queries/suppliers';
 
 const RECENT_LIMIT = 20;
 /** Same as core.jobs.UPLOAD_EXTENSIONS; /meta is the source once it has loaded. */
@@ -58,6 +60,8 @@ const uploadSchema = z.object({
   manual_payment_id: z.string(),
 });
 type UploadValues = z.infer<typeof uploadSchema>;
+/** Typed-in totals for a Tier C supplier's manual_entry rules, by rule name ('' until entered). */
+type ManualTotals = Record<string, number | string>;
 
 interface UploadFormProps {
   file: File;
@@ -83,6 +87,28 @@ function UploadForm({ file, suppliers, inference, onSubmitted }: UploadFormProps
   const values = form.getValues();
   const selected = suppliers.find((s) => String(s.id) === values.supplier_id);
 
+  // Tier C rules with no automated parsing need their confirmed total typed in here (FINDINGS F9).
+  const isPivot = selected?.job_type === 'pivot_allocation';
+  const extractionRules = useQuery({
+    ...extractionRulesQuery(selected?.id ?? 0),
+    enabled: isPivot,
+  });
+  const manualRules = isPivot
+    ? (extractionRules.data ?? []).filter((r) => r.extraction_method === 'manual_entry')
+    : [];
+  const [manualTotals, setManualTotals] = useState<ManualTotals>({});
+  const [manualErrors, setManualErrors] = useState<Record<string, string>>({});
+  const checkManualTotals = () => {
+    const errors: Record<string, string> = {};
+    for (const r of manualRules) {
+      if (typeof manualTotals[r.rule_name] !== 'number') {
+        errors[r.rule_name] = `Enter the confirmed total for ${r.rule_name}`;
+      }
+    }
+    setManualErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const submit = useMutation({
     meta: { handlesErrors: true },
     mutationFn: (v: UploadValues) =>
@@ -93,6 +119,14 @@ function UploadForm({ file, suppliers, inference, onSubmitted }: UploadFormProps
             supplier_profile_id: Number(v.supplier_id),
             date_received: v.date_received,
             manual_payment_id: blankToNull(v.manual_payment_id),
+            manual_totals:
+              manualRules.length > 0
+                ? JSON.stringify(
+                    Object.fromEntries(
+                      manualRules.map((r) => [r.rule_name, manualTotals[r.rule_name]]),
+                    ),
+                  )
+                : null,
           },
           bodySerializer: formData,
         }),
@@ -110,10 +144,15 @@ function UploadForm({ file, suppliers, inference, onSubmitted }: UploadFormProps
   return (
     <form
       noValidate
-      onSubmit={form.onSubmit((v) => {
-        setFormError(null);
-        submit.mutate(v);
-      })}
+      onSubmit={form.onSubmit(
+        (v) => {
+          setFormError(null);
+          if (checkManualTotals()) submit.mutate(v);
+        },
+        () => {
+          checkManualTotals();
+        },
+      )}
     >
       <Stack gap="md">
         {formError && (
@@ -153,6 +192,52 @@ function UploadForm({ file, suppliers, inference, onSubmitted }: UploadFormProps
           maw={360}
           {...form.getInputProps('manual_payment_id')}
         />
+        {isPivot &&
+          (extractionRules.error ? (
+            <QueryError
+              title="Couldn't load this supplier's extraction rules"
+              error={extractionRules.error}
+              onRetry={() => void extractionRules.refetch()}
+            />
+          ) : extractionRules.isPending ? (
+            <Skeleton height={60} />
+          ) : (
+            manualRules.length > 0 && (
+              <Fieldset legend="Confirmed totals">
+                <Stack gap="sm">
+                  <Text size="sm" c="dimmed">
+                    {selected.name} has {pluralize(manualRules.length, 'total')} that can't be read
+                    from the file. Enter the confirmed{' '}
+                    {manualRules.length === 1 ? 'amount' : 'amounts'}; they are allocated like any
+                    extracted total.
+                  </Text>
+                  <SimpleGrid cols={{ base: 1, sm: 2 }}>
+                    {manualRules.map((r) => (
+                      <NumberInput
+                        key={r.id}
+                        label={r.rule_name}
+                        withAsterisk
+                        prefix="$"
+                        decimalScale={2}
+                        thousandSeparator=","
+                        description={
+                          r.is_sales_amount
+                            ? 'Sales amount (counts toward volume)'
+                            : 'Fee amount (counts toward revenue)'
+                        }
+                        value={manualTotals[r.rule_name] ?? ''}
+                        error={manualErrors[r.rule_name]}
+                        onChange={(value) => {
+                          setManualTotals((t) => ({ ...t, [r.rule_name]: value }));
+                          setManualErrors(({ [r.rule_name]: _cleared, ...rest }) => rest);
+                        }}
+                      />
+                    ))}
+                  </SimpleGrid>
+                </Stack>
+              </Fieldset>
+            )
+          ))}
         {selected && (
           <Text size="sm">
             Contract ID <Code>{selected.contract_id ?? '—'}</Code> · Revenue type{' '}
@@ -164,6 +249,7 @@ function UploadForm({ file, suppliers, inference, onSubmitted }: UploadFormProps
             type="submit"
             leftSection={<IconPlayerPlay size={16} />}
             loading={submit.isPending}
+            disabled={isPivot && !extractionRules.isSuccess}
           >
             Process file
           </Button>
@@ -260,6 +346,14 @@ function JobResult({ jobId }: { jobId: number }) {
           value={j.total_revenue ? formatCurrency(j.total_revenue) : '—'}
         />
       </SimpleGrid>
+      {Object.keys(j.manual_totals ?? {}).length > 0 && (
+        <Text size="sm">
+          Confirmed totals entered at upload:{' '}
+          {Object.entries(j.manual_totals ?? {})
+            .map(([name, amount]) => `${name} ${formatCurrency(amount)}`)
+            .join(' · ')}
+        </Text>
+      )}
       {j.payment_id ? (
         <Text size="sm">
           Payment ID <Code>{j.payment_id}</Code> (source: {formatText(j.payment_id_source)})

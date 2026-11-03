@@ -21,7 +21,7 @@ import {
   IconSun,
   type Icon,
 } from '@tabler/icons-react';
-import { NavLink as RouterNavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink as RouterNavLink, Outlet, useLocation } from 'react-router';
 
 import { routes } from '@/lib/routes';
 

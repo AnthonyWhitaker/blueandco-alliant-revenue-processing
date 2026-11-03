@@ -1,5 +1,6 @@
 """Revenue jobs, their review queue, and export."""
 
+import json
 from datetime import date
 from typing import Annotated, Optional
 from urllib.parse import quote
@@ -7,6 +8,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, File, Form, Query, Request, Response, UploadFile, status
 
 from core import jobs, reviews
+from core.errors import InvalidInputError
 from models.enums import JobStatus
 from models.jobs import FileNameInference, Job, JobException, JobPatch, JobPreview
 from models.reviews import ReviewApproval, ReviewDecisionResult, ReviewItem
@@ -44,12 +46,31 @@ def create_job(
     supplier_profile_id: Annotated[int, Form()],
     date_received: Annotated[date, Form()],
     manual_payment_id: Annotated[Optional[str], Form()] = None,
+    manual_totals: Annotated[Optional[str], Form(
+        description='Tier C only. JSON object of confirmed totals by manual_entry rule name, e.g. '
+                    '{"Total Rebate": 1234.5}. Required when the supplier has manual_entry rules.',
+    )] = None,
 ) -> Job:
     content = read_upload(request, file)
-    job = jobs.create_job(conn, supplier_profile_id, file.filename or "upload", content, date_received)
+    job = jobs.create_job(conn, supplier_profile_id, file.filename or "upload", content, date_received,
+                          _parse_manual_totals(manual_totals))
     runner.submit_job(job.id, (manual_payment_id or "").strip() or None)
     response.headers["Location"] = f"/api/jobs/{job.id}"
     return job
+
+
+def _parse_manual_totals(raw: Optional[str]) -> Optional[dict[str, float]]:
+    if not (raw or "").strip():
+        return None
+    try:
+        parsed = json.loads(raw)
+    except ValueError:
+        parsed = None
+    if not isinstance(parsed, dict) or not all(
+        isinstance(k, str) and isinstance(v, (int, float)) and not isinstance(v, bool) for k, v in parsed.items()
+    ):
+        raise InvalidInputError('manual_totals must be a JSON object of numbers, e.g. {"Total Rebate": 1234.5}.')
+    return {k: float(v) for k, v in parsed.items()}
 
 
 @router.get("/file-name-inference", response_model=FileNameInference,

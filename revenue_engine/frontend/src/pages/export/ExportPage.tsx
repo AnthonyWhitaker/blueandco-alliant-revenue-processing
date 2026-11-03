@@ -24,7 +24,7 @@ import {
 } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 
 import { api, ApiError, unwrap } from '@/api/client';
 import { DataTable } from '@/components/DataTable';

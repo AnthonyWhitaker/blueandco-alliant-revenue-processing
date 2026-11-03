@@ -11,7 +11,7 @@ from models.column_maps import ColumnMappingInput, InferredMappingInput
 from models.enums import AllocationType, CanonicalField, ExtractionMethod, JobType
 from models.members import MemberInput
 from models.misc import AliasInput
-from models.suppliers import SupplierFormInput, SupplierInput
+from models.suppliers import SupplierInput
 
 from .conftest import make_members, make_supplier
 
@@ -39,13 +39,6 @@ def test_supplier_create_update_and_conflicts(conn):
     assert updated.job_type == "pivot_allocation"
     with pytest.raises(NotFoundError):
         suppliers.get_supplier(conn, 999)
-
-
-def test_legacy_upsert_preserves_fee_rate_and_thresholds(conn):
-    s = suppliers.create_supplier(conn, SupplierInput(name="Labcorp", fee_rate=0.03, fuzzy_state_threshold=90))
-    suppliers.upsert_supplier_by_name(conn, SupplierFormInput(name="Labcorp", contract_id="C-9"))
-    after = suppliers.get_supplier(conn, s.id)
-    assert (after.contract_id, after.fee_rate, after.fuzzy_state_threshold) == ("C-9", 0.03, 90)
 
 
 def test_list_suppliers_by_job_type(conn):
@@ -89,6 +82,42 @@ def test_import_account_list(conn, tmp_path):
     result = members.import_account_list(conn, str(path), replace_all=False)
     assert result.inserted == 1
     assert members.search_members(conn, term="Lakeside").items[0].entity_code == "EC100"
+
+
+def _account_list(path, *rows):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Accounts"
+    ws.append(["Account ID", "Account Name", "Premier Entity Code", "Billing City", "Billing State/Province"])
+    for r in rows:
+        ws.append(list(r))
+    wb.save(path)
+    return str(path)
+
+
+def test_full_refresh_deactivates_instead_of_deleting(conn, processed_job, tmp_path):
+    """FINDINGS F23: replace_all used to DELETE every member, which fails once any job refers to one."""
+    ids = processed_job["members"]
+    manual = members.create_member(conn, MemberInput(name="Walk-in Clinic"))  # no account_id
+    alias_count = conn.execute("SELECT COUNT(*) FROM member_alias").fetchone()[0]
+
+    result = members.import_account_list(conn, _account_list(
+        tmp_path / "a.xlsx", ("SF-GEN", "General Hospital", "EC001", "Austin", "TX"),
+        ("SF-NEW", "New Regional", "EC009", "Waco", "TX"),
+    ), replace_all=True)
+    assert (result.inserted, result.deactivated) == (2, 2)
+
+    active = {m.name: m.id for m in members.search_members(conn, limit=100).items}
+    assert active == {"General Hospital": ids["general"], "New Regional": active["New Regional"],
+                      "Walk-in Clinic": manual.id}
+    assert members.get_member(conn, ids["mercy"]).is_active is False
+    assert conn.execute("SELECT COUNT(*) FROM member_alias").fetchone()[0] == alias_count
+
+    # Back in the next Account List: reactivated, same id.
+    members.import_account_list(conn, _account_list(
+        tmp_path / "b.xlsx", ("SF-MER", "Mercy Medical Center", "EC002", "Dallas", "TX"),
+    ), replace_all=False)
+    assert members.get_member(conn, ids["mercy"]).is_active is True
 
 
 def test_import_ledger_and_list(conn, tmp_path):

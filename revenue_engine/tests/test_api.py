@@ -155,6 +155,29 @@ def test_tier_c_over_http(client, conn, seeded):
     assert client.delete(f"/api/suppliers/{seeded['supplier_id']}/extraction-rules/{rule_id}").status_code == 404
 
 
+def test_upload_with_manual_totals(client, conn, seeded, tmp_path):
+    sid = make_supplier(conn, name="Komet", job_type="pivot_allocation")
+    client.post(f"/api/suppliers/{sid}/extraction-rules", json={"extraction_method": "manual_entry", "rule_name": "Rebate"})
+    client.post(f"/api/suppliers/{sid}/allocation-rules", json={
+        "extraction_rule_name": "Rebate", "member_id": seeded["members"]["general"], "allocation_type": "remainder"})
+
+    def post(manual_totals):
+        content = write_supplier_file(tmp_path / "k.xlsx").read_bytes()
+        data = {"supplier_profile_id": str(sid), "date_received": "2025-07-02"}
+        if manual_totals is not None:
+            data["manual_totals"] = manual_totals
+        return client.post("/api/jobs", files={"file": ("Komet.xlsx", content, XLSX)}, data=data)
+
+    assert post(None).status_code == 422
+    assert post("[1, 2]").status_code == 422
+    assert post('{"Rebate": "lots"}').status_code == 422
+    r = post('{"Rebate": 250}')
+    assert r.status_code == 202
+    job = wait_for(lambda: client.get(f"/api/jobs/{r.json()['id']}").json(),
+                   lambda b: b["status"] not in ("uploaded", "processing"))
+    assert (job["status"], job["total_revenue"], job["manual_totals"]) == ("completed", 250.0, {"Rebate": 250.0})
+
+
 def test_member_import_runs_as_task(client, tmp_path):
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -167,7 +190,7 @@ def test_member_import_runs_as_task(client, tmp_path):
     r = client.post("/api/member-imports", files={"file": ("Account List.xlsx", buf.getvalue(), XLSX)})
     assert r.status_code == 202
     task = wait_for(lambda: client.get(r.headers["location"]).json(), lambda b: b["status"] in ("succeeded", "failed"))
-    assert task["member_import"] == {"inserted": 1, "skipped": 0}
+    assert task["member_import"] == {"inserted": 1, "skipped": 0, "deactivated": 0}
     assert client.get("/api/members", params={"search": "lakeside"}).json()["total"] == 1
 
 

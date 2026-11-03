@@ -649,6 +649,11 @@ export interface components {
       date_received: string;
       /** Manual Payment Id */
       manual_payment_id?: string | null;
+      /**
+       * Manual Totals
+       * @description Tier C only. JSON object of confirmed totals by manual_entry rule name, e.g. {"Total Rebate": 1234.5}. Required when the supplier has manual_entry rules.
+       */
+      manual_totals?: string | null;
     };
     /** Body_import_ledger_api_ledger_imports_post */
     Body_import_ledger_api_ledger_imports_post: {
@@ -672,6 +677,7 @@ export interface components {
       file: Blob;
       /**
        * Replace All
+       * @description Full refresh: deactivate members from an earlier Account List that are not in this file.
        * @default false
        */
       replace_all?: boolean;
@@ -993,7 +999,7 @@ export interface components {
       /** Payment Id */
       payment_id: string | null;
       /** Payment Id Source */
-      payment_id_source: ('ledger_auto' | 'manual' | 'column') | null;
+      payment_id_source: ('ledger_auto' | 'manual' | 'column' | 'not_found') | null;
       /** Deposit Amount */
       deposit_amount: number | null;
       /** Date Received */
@@ -1018,6 +1024,13 @@ export interface components {
       error_message: string | null;
       /** Pending Review Count */
       pending_review_count: number;
+      /**
+       * Manual Totals
+       * @description Tier C: the totals entered at upload for manual_entry extraction rules, by rule name.
+       */
+      manual_totals?: {
+        [key: string]: number;
+      };
       /**
        * Created At
        * Format: date-time
@@ -1115,6 +1128,12 @@ export interface components {
       inserted: number;
       /** Skipped */
       skipped: number;
+      /**
+       * Deactivated
+       * @description Full refresh only: members not in the file, now inactive.
+       * @default 0
+       */
+      deactivated?: number;
     };
     /** MemberInput */
     MemberInput: {

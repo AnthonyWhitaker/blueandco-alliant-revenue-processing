@@ -18,7 +18,7 @@ JobStatus = Literal[
 ]
 JobType = Literal["row_level", "pivot_allocation"]
 SupplierPaymentIdSource = Literal["ledger", "manual", "column"]
-JobPaymentIdSource = Literal["ledger_auto", "manual", "column"]
+JobPaymentIdSource = Literal["ledger_auto", "manual", "column", "not_found"]
 ExtractionMethod = Literal[
     "named_cell", "label_lookup", "label_range_sum", "column_sum", "formula", "manual_entry",
 ]

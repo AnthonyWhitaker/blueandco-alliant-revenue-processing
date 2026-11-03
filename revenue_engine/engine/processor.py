@@ -34,7 +34,7 @@ from .constants import (
     EXC_UNMATCHED_CUSTOMER, EXC_PAYMENT_NOT_FOUND,
     EXC_REVENUE_MISMATCH, EXC_PROCESSING_ERROR,
     EXC_EXTRACTION_NOT_FOUND, EXC_ALLOCATION_INCOMPLETE,
-    EXC_MISSING_ENTITY_CODE,
+    EXC_MISSING_ENTITY_CODE, EXC_MANUAL_TOTAL,
     REVIEW_PENDING, JOB_TYPE_PIVOT_ALLOCATION,
 )
 from .db import execute_upsert, execute_insert_ignore, get_last_insert_id
@@ -412,7 +412,15 @@ def _run_pivot_allocation_pipeline(
     # ------------------------------------------------------------------
     # Step 2: Extract totals from the pivot/summary sheet
     # ------------------------------------------------------------------
-    extraction = extract_totals(file_path, supplier_id, conn)
+    manual_totals = json.loads(job.get("manual_totals_json") or "{}")
+    extraction = extract_totals(file_path, supplier_id, conn, manual_totals)
+    for name, amount in manual_totals.items():
+        if name in extraction.values:
+            _job_log(
+                conn, job_id, EXC_MANUAL_TOTAL,
+                f"Extraction rule {name!r} is manual_entry; used the total entered at upload: {amount:,.2f}.",
+                "info",
+            )
     for w in extraction.warnings:
         _job_log(conn, job_id, EXC_EXTRACTION_NOT_FOUND, w, "error")
 
@@ -421,7 +429,8 @@ def _run_pivot_allocation_pipeline(
             _job_log(
                 conn, job_id, EXC_EXTRACTION_NOT_FOUND,
                 f"Extraction rule {name!r} is configured as manual_entry — "
-                f"a reviewer must enter the confirmed total before this job can complete.",
+                f"no total was entered at upload, so it was not allocated. Upload the file again "
+                f"with the confirmed total.",
                 "warning",
             )
 

@@ -28,7 +28,7 @@ browser ──► React SPA (frontend/, built to frontend/dist)
               │                     uploads, background jobs, serves the SPA
               ▼
             core/                   use cases (list jobs, approve a review item, save a rule…)
-              │                     framework-free; also used by the legacy Streamlit UI
+              │                     framework-free
               ▼
             engine/                 matching pipeline, exporter, DB dialect shims
               ▼
@@ -38,7 +38,7 @@ browser ──► React SPA (frontend/, built to frontend/dist)
 ```
 revenue_engine/
 ├── api/                  FastAPI app: main.py, routers/, errors.py (RFC 7807), background.py, spa.py
-├── core/                 Use cases shared by the API and the legacy UI (no HTTP, no Streamlit)
+├── core/                 Use cases called by the API (no HTTP)
 ├── models/               Pydantic v2 request/response models (the API contract)
 ├── engine/               Processing pipeline: file_reader, member_matcher, processor, exporter, db
 ├── db/                   schema.sql (SQLite) and schema_mssql.sql (Azure SQL); keep them in sync
@@ -50,9 +50,8 @@ revenue_engine/
 │   ├── src/queries/      Query options and the query-key factory
 │   ├── src/stores/       Zustand slices + README.md (where every piece of state lives)
 │   └── e2e/              Playwright specs (npm run e2e)
-├── legacy/               The retired Streamlit UI (see legacy/README.md)
 ├── scripts/              Seeds, OpenAPI export, SQL Server smoke check, regression scripts
-├── tests/                pytest: engine, core, API, SQL dialect, legacy UI
+├── tests/                pytest: engine, core, API, SQL dialect
 ├── infra/                deploy.sh + main.bicep (Azure Container Apps)
 ├── Dockerfile            Node build stage → Python runtime serving API + SPA on :8501
 └── docker-compose.yml    Local dev: API with reload + Vite dev server
@@ -89,7 +88,7 @@ Requires Python 3.12 and Node ≥ 22.22.2 (`frontend/.nvmrc`).
 
 ```bash
 cd revenue_engine
-make install                       # .venv with runtime + dev + legacy deps
+make install                       # .venv with runtime + dev deps
 (cd frontend && npm ci)
 make seed                          # create data/revenue.db, seed Guerbet + Tier A/B suppliers
 ```
@@ -122,7 +121,7 @@ First-time setup in the UI:
 
 | Command | What |
 |---|---|
-| `make test` | pytest (engine, core, API, SQL dialect, legacy UI) |
+| `make test` | pytest (engine, core, API, SQL dialect) |
 | `cd frontend && npm test` | Vitest component tests |
 | `cd frontend && npm run e2e` | Playwright against the production build on a fresh synthetic DB |
 | `make check` | Everything `deploy.sh` gates on (pytest, OpenAPI snapshot, frontend types/typecheck/lint/format/tests/build) |
@@ -353,7 +352,7 @@ re-triage needed. `db/schema_mssql.sql` is now kept in sync with
 `schema.sql` (mirrored in the same pass) — the two must never be allowed
 to diverge; any future schema change goes into both files together.
 
-## Streamlit UI Check (historical: the Streamlit UI is now in `legacy/`)
+## Streamlit UI Check (historical: the Streamlit UI has been removed)
 
 Checked whether the UI alone (no scripts) can onboard a new supplier and
 safely process/export a job, especially for Tier C.

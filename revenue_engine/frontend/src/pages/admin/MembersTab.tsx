@@ -59,17 +59,19 @@ function AccountListImport() {
       upload.mutate({ file, replaceAll });
       return;
     }
-    // A full refresh deletes every member first (FINDINGS F23), so ask.
+    // A full refresh can deactivate many members at once, so ask.
     modals.openConfirmModal({
       title: 'Replace all members?',
       children: (
         <Text size="sm">
-          Every existing member is deleted before the file is loaded. This fails if any processed
-          job, allocation rule or JDE history refers to a member, and it removes all aliases.
+          Members from an earlier Account List that are not in this file are deactivated: they are
+          no longer matched or offered on the Review page. Nothing is deleted, so past jobs, aliases
+          and Tier C rules keep working, and a member is reactivated if a later file includes it
+          again. Facilities added by hand on the Review page are not affected.
         </Text>
       ),
-      labels: { confirm: 'Delete and reload', cancel: 'Cancel' },
-      confirmProps: { color: 'red' },
+      labels: { confirm: 'Deactivate missing and reload', cancel: 'Cancel' },
+      confirmProps: { color: 'orange' },
       onConfirm: () => {
         upload.mutate({ file, replaceAll });
       },
@@ -97,6 +99,7 @@ function AccountListImport() {
         />
         <Checkbox
           label="Replace all existing members (full refresh)"
+          description="Deactivates members that are not in this file."
           checked={replaceAll}
           onChange={(e) => {
             setReplaceAll(e.currentTarget.checked);
@@ -111,7 +114,8 @@ function AccountListImport() {
           kind="member_import"
           describeSuccess={(task) => {
             const result = task.member_import;
-            return `Loaded ${formatInteger(result?.inserted ?? 0)} members (inserted or updated), ${formatInteger(result?.skipped ?? 0)} skipped.`;
+            const deactivated = result?.deactivated ?? 0;
+            return `Loaded ${formatInteger(result?.inserted ?? 0)} members (inserted or updated), ${formatInteger(result?.skipped ?? 0)} skipped${deactivated ? `, ${formatInteger(deactivated)} deactivated (not in the file)` : ''}.`;
           }}
           onSucceeded={() =>
             Promise.all([

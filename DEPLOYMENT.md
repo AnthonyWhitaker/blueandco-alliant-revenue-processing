@@ -29,9 +29,8 @@ Two containers (an nginx frontend plus the API) would add routing, CORS and a se
 - **`.dockerignore`** excludes:
   - local data, `*.db` and `.env*` (fixes F5);
   - `frontend/node_modules` and `frontend/dist`;
-  - the legacy UI (`legacy/`);
   - tests (except `tests/fixtures.py`, used by `scripts/check_mssql.py`), infra and docs.
-- **Python dependencies:** `requirements.txt` is the runtime set. Streamlit moved to `legacy/requirements.txt`, which `requirements-dev.txt` includes for local use.
+- **Python dependencies:** `requirements.txt` is the runtime set. `requirements-dev.txt` adds the test tools. Streamlit is no longer a dependency; the old UI was removed from the repo.
 
 Verified locally (`make docker-run`):
 - `/` and a nested deep link (`/admin/tier-c?supplier=3`) return the SPA, and the SPA renders when loaded at that nested route.
@@ -49,7 +48,6 @@ Verified locally (`make docker-run`):
 | UI dev server (proxies `/api` to :8000) | `make web` | http://localhost:5173 |
 | Both, in Docker, with hot reload | `docker compose up` | :5173 (UI), :8000 (API) |
 | Production image | `make docker-run` or `docker compose --profile prod up --build app` | http://localhost:8501 |
-| Legacy Streamlit UI | `make ui` or `docker compose --profile legacy up legacy` | :8501 / :8502 |
 | All checks (the deploy gate) | `make check` | — |
 | Azure SQL path, against throwaway SQL Server | `make check-mssql` | — |
 

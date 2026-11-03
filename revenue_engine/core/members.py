@@ -59,10 +59,10 @@ def create_member(conn, data: MemberInput) -> Member:
 
 def import_account_list(conn, file_path: str, replace_all: bool) -> MemberImportResult:
     try:
-        inserted, skipped = load_account_list(conn, file_path, replace_all=replace_all)
+        inserted, skipped, deactivated = load_account_list(conn, file_path, replace_all=replace_all)
     except (ValueError, KeyError) as e:
         raise InvalidInputError(f"Could not read the Account List: {e}") from e
-    return MemberImportResult(inserted=inserted, skipped=skipped)
+    return MemberImportResult(inserted=inserted, skipped=skipped, deactivated=deactivated)
 
 
 def list_ledger_entries(conn, limit: int = 30) -> Page[LedgerEntry]:

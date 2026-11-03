@@ -2,38 +2,14 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type { Schemas } from '@/api/types';
-import { meta, problem, supplier } from '@/test/fixtures';
+import { extractionRule as extraction, meta, problem, supplier } from '@/test/fixtures';
 import { json, renderRoute, stubFetch } from '@/test/render';
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-type ExtractionRule = Schemas['ExtractionRule'];
 type AllocationRule = Schemas['AllocationRule'];
-
-const extraction = (overrides: Partial<ExtractionRule> = {}): ExtractionRule => ({
-  id: 5,
-  supplier_profile_id: 3,
-  rule_name: 'Gross',
-  sheet_name: 'Summary',
-  extraction_method: 'named_cell',
-  cell_address: 'E8',
-  label_text: null,
-  label_match_mode: null,
-  label_match_threshold: null,
-  value_row_offset: null,
-  value_col_offset: null,
-  range_axis: null,
-  column_index: null,
-  column_letter: null,
-  header_row: null,
-  stop_label_text: null,
-  formula_expression: null,
-  is_sales_amount: true,
-  sort_order: 2,
-  ...overrides,
-});
 
 const allocation = (overrides: Partial<AllocationRule> = {}): AllocationRule => ({
   id: 8,
