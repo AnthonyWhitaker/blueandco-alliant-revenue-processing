@@ -112,19 +112,28 @@ export async function unwrap<D>(request: Promise<ClientResult<D>>): Promise<D> {
   return result.data as D;
 }
 
-type FormValue = string | number | boolean | Blob | null | undefined;
+type FormScalar = string | number | boolean | Blob | null | undefined;
+type FormValue = FormScalar | readonly Blob[];
 
 /**
  * Body serializer for multipart/form-data endpoints (file uploads):
- * `api.POST(path, { body, bodySerializer: formData })`. Null/undefined fields are omitted.
+ * `api.POST(path, { body, bodySerializer: formData })`. Null/undefined fields are omitted;
+ * an array (several files) is sent as repeated fields of the same name.
  */
 export function formData(body: Record<string, FormValue>): FormData {
   const data = new FormData();
-  for (const [name, value] of Object.entries(body)) {
-    if (value === null || value === undefined) continue;
+  const append = (name: string, value: FormScalar) => {
+    if (value === null || value === undefined) return;
     if (value instanceof File) data.append(name, value, value.name);
     else if (value instanceof Blob) data.append(name, value);
     else data.append(name, String(value));
+  };
+  for (const [name, value] of Object.entries(body)) {
+    if (Array.isArray(value)) {
+      for (const item of value as readonly Blob[]) append(name, item);
+    } else {
+      append(name, value as FormScalar);
+    }
   }
   return data;
 }

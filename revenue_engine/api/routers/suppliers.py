@@ -3,13 +3,14 @@
 import os
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, File, Request, Response, UploadFile, status
+from fastapi import APIRouter, File, Form, Request, Response, UploadFile, status
 
-from core import column_maps, suppliers, tier_c
+from core import column_maps, gpo_key, suppliers, tier_c
+from engine.gpo_key import KeyColumns
 from models.column_maps import ColumnMapping, ColumnMappingInput, InferredMapping, InferredMappingInput
 from models.common import Notice
 from models.enums import JobType
-from models.suppliers import Supplier, SupplierInput
+from models.suppliers import GpoKeyImportResult, GpoKeySummary, Supplier, SupplierInput
 from models.tier_c import (
     AllocationRule, AllocationRuleDraft, AllocationRuleInput,
     ExtractionRule, ExtractionRuleInput, ExtractionRuleSaveResult,
@@ -39,6 +40,42 @@ def get_supplier(conn: Conn, supplier_id: int) -> Supplier:
 @router.put("/{supplier_id}", responses=problems(404, 409), response_model=Supplier)
 def update_supplier(conn: Conn, supplier_id: int, body: SupplierInput) -> Supplier:
     return suppliers.update_supplier(conn, supplier_id, body)
+
+
+# --- GPO key -----------------------------------------------------------------
+
+_KEY_DEFAULTS = KeyColumns()
+
+
+@router.get("/{supplier_id}/gpo-key", responses=problems(404), response_model=GpoKeySummary, tags=["gpo key"],
+            summary="The GPO key loaded for a supplier")
+def get_gpo_key(conn: Conn, supplier_id: int) -> GpoKeySummary:
+    return gpo_key.get_summary(conn, supplier_id)
+
+
+@router.put("/{supplier_id}/gpo-key", responses=problems(404, 413), response_model=GpoKeyImportResult,
+            tags=["gpo key"], summary="Replace a supplier's GPO key from a CSV/XLSX key file",
+            description="The key lists, per supplier account, the account name, address and correct GPO ID. "
+                        "Column names default to the placeholders in engine/gpo_key.KeyColumns.")
+def put_gpo_key(
+    request: Request,
+    conn: Conn,
+    supplier_id: int,
+    file: Annotated[UploadFile, File(description="Key file (.csv, .xlsx, .xls, .xlsm)")],
+    account_number_column: Annotated[str, Form()] = _KEY_DEFAULTS.account_number,
+    account_name_column: Annotated[str, Form()] = _KEY_DEFAULTS.account_name,
+    address_column: Annotated[str, Form()] = _KEY_DEFAULTS.address,
+    gpo_id_column: Annotated[str, Form()] = _KEY_DEFAULTS.gpo_id,
+    sheet_name: Annotated[Optional[str], Form()] = None,
+    header_row: Annotated[int, Form(ge=0)] = 0,
+) -> GpoKeyImportResult:
+    path = upload_to_temp_file(request, file)
+    try:
+        columns = KeyColumns(account_number_column, account_name_column, address_column, gpo_id_column,
+                             (sheet_name or "").strip() or None, header_row)
+        return gpo_key.import_key(conn, supplier_id, path, file.filename or "key", columns)
+    finally:
+        os.unlink(path)
 
 
 # --- Column maps -------------------------------------------------------------

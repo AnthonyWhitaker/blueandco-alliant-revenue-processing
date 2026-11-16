@@ -6,13 +6,14 @@ A **supplier-agnostic revenue reconciliation engine** for Alliant Purchasing Sol
 
 ## What It Does
 
-1. **Reads** raw supplier remittance files (XLSX, CSV) — any format
+1. **Reads** raw supplier remittance files (XLSX, CSV) — any format; several files for one month are combined into one job, and duplicate rows across them are reported (never removed). XLSX is read row by row, so a month split into several 1M-row files fits in memory (about 1.2 GB peak for a 1M-row file); each file must be under `MAX_UPLOAD_MB` (default 200; a 1M-row Medline file is about 95 MB)
 2. **Maps** supplier-specific column names to canonical fields via a configurable column map
-3. **Matches** each customer row to the Alliant member database using a 5-tier geographic + fuzzy name engine
+3. **Identifies** each row's facility: either matches it to the Alliant member database (5-tier geographic + fuzzy name engine), or, for suppliers like Medline, verifies the GPO ID against the supplier's key file (account number + name + address)
 4. **Aggregates** matched revenue to one row per entity code (PEC) per earned period
-5. **Resolves** Salesforce Payment IDs automatically from the payment ledger
-6. **Produces** a 4-tab Salesforce-ready XLSX (Upload, Validation, Unmatched, JDE Mapping)
-7. **Queues** unmatched customers for human review — with fuzzy suggestions and alias creation
+5. **Resolves** Salesforce Payment IDs from the payment ledger (for reference: the Upload template leaves Payment ID blank)
+6. **Produces** a 4-tab Salesforce-ready XLSX (Upload, Validation, Unmatched, JDE Mapping) and an exceptions report, written as new timestamped files to an output folder
+7. **Checks** on every run that input totals = output + exceptions
+8. **Queues** unmatched customers for human review — with fuzzy suggestions and alias creation
 
 ---
 
@@ -72,13 +73,15 @@ Adapted from `alliant-purchasing-solutions` (same architectural patterns, adapte
 | `member` | Alliant member / facility master | `company` |
 | `member_alias` | Alternate names for members | `company_alias` |
 | `payment_ledger` | Deposit amount → SF Payment ID | *(new)* |
-| `revenue_job` | One row per file processed | `import_job` |
+| `revenue_job` | One row per processing run (one or more files) | `import_job` |
+| `revenue_job_file` | The source files of a job | *(new)* |
+| `gpo_key_entry` | Supplier key: account → correct GPO ID (`identity_mode = 'gpo_key'`) | *(new)* |
 | `revenue_row` | One row per line in supplier file | `import_row` |
 | `member_review_item` | Unmatched customers needing review | `review_item` |
 | `revenue_output_row` | Aggregated (PEC × month) output | *(new)* |
 | `jde_member_history` | Persistent JDE→member mapping | *(new — replaces "previous file" pattern)* |
 | `exception` | Processing warnings and errors | `exception` |
-| `export_file` | Generated output file references | `export_file` |
+| `export_file` | Every output file written (never overwritten) | `export_file` |
 
 ---
 
@@ -175,37 +178,43 @@ Key difference from the Guerbet prototype: matched JDE numbers are **persisted t
 4. Upload a sample file to **auto-infer column mappings**, then review and save
 5. For a pivot/aggregate workpaper (job type `pivot_allocation`), set up its rules in **Admin › Tier C Rules**
 
-### Via seed script (copy `seed_guerbet.py`)
+### Via config (`engine/supplier_presets.py`)
 
-```python
-conn.execute("INSERT INTO supplier_profile (name, contract_id, ...) VALUES (...)")
-conn.execute("INSERT INTO supplier_column_map (supplier_profile_id, source_column, canonical_field) VALUES (...)")
-```
+A supplier is a profile plus a column map. Add a dict like `MEDLINE` to `engine/supplier_presets.py` and run `scripts/seed_admin_fee_suppliers.py` (part of `make seed`). Relevant profile settings:
+
+- `identity_mode`: `member_match` (default) or `gpo_key` (verify the GPO ID against a key file; load it with `--gpo-key`, `scripts/load_gpo_key.py`, or Admin › Suppliers › Edit)
+- `volume_mode`: `sum` (default) or `blank` (Volume left empty, for files that carry revenue only)
+- `contract_id`: written to every Upload row's Contract ID (a contract number or a Salesforce ID)
+- `skip_rows_where_col_null`: strips summary/total rows. Pick a column only summary rows leave blank, so a data row with a gap isn't stripped.
+
+`ROLLED_UP_PLACEHOLDER` is a stub for a supplier that hasn't sent a sample yet (`--include-placeholders`).
 
 ---
 
 ## Output File Format
 
-The downloaded XLSX has 4 tabs matching the Guerbet prototype:
+Processing writes two files to `REVENUE_OUTPUT_DIR` (default `data/outputs`; it must not be the upload folder): `<name> Processed <YYYYMMDD-HHMMSS>.xlsx` and `<name> Exceptions <timestamp>.xlsx`. A file is never overwritten; **Generate new version** on the Export page (`POST /api/jobs/{id}/outputs`) writes another pair, e.g. after review decisions. Every file is listed and downloadable on the Export page.
+
+The processed workbook has 4 tabs matching the Guerbet prototype:
 
 | Tab | Contents |
 |---|---|
-| **Upload** | 16-column Salesforce Facility Revenue format — paste directly into SF |
+| **Upload** | 16-column Salesforce Facility Revenue template (`SF_UPLOAD_COLUMNS`) — paste directly into SF |
 | **Validation** | JDE# / supplier name / PEC / Account ID / DB name / match method |
 | **Unmatched** | Raw rows with no member match (for manual investigation) |
 | **JDE Mapping** | JDE# → PEC → DB name (cross-reference for future months) |
+
+Upload tab rules, the same for every supplier: Facility ID is the Premier entity code (or verified GPO ID) when there is one, else the Salesforce Account ID; Contract ID comes from the supplier profile; Payment ID and Date Received are blank (filled in from the ledger afterwards); Pmt For (Time Frame) is the timeframe entered at upload; the remaining columns stay, blank.
+
+The exceptions report has: **Reconciliation** (input vs output + exceptions), **Exceptions** (every row left out of the Upload tab, with the reason and source file/row), **Duplicates** (identical rows, kept and counted), **Dropped Rows** (summary/total rows stripped before processing).
 
 ---
 
 ## Revenue Reconciliation Check
 
-After aggregation, the engine checks:
+Every run checks that the input totals equal the Upload tab plus the exceptions report, for revenue (fee) and volume (sales; not checked when Volume is left blank). Input is measured from the files as read; summary/total rows are reported but not counted. A difference over half a cent logs an error and the job stays in `needs_review`. The check is re-run after each review decision and stored on the job (`revenue_job.reconciliation_json`, shown on the Export page).
 
-```
-|total_matched_revenue - deposit_amount| > $1.00  →  warning exception logged
-```
-
-This mirrors the 100% reconciliation requirement from the Guerbet prototype. Deposit amount is parsed from the filename (`Guerbet 2025.07.02 4231.37 Ledger.xlsx` → `$4,231.37`).
+Separately, the engine still warns when matched revenue differs from the deposit amount parsed from the filename (`Guerbet 2025.07.02 4231.37 Ledger.xlsx` → `$4,231.37`) by more than $1.00.
 
 ---
 
@@ -405,7 +414,7 @@ safely process/export a job, especially for Tier C.
 ### Near-term
 - [ ] Carolon needs its own onboarding pass — its raw "Contract ID" column is actually a facility code, not the real Salesforce Contract ID, so a straight column-map won't work
 - [ ] Batch processing: watch a folder and auto-process new files
-- [ ] Medline support: item-level rows needing heavy rollup before matching
+- [x] Medline support: GPO ID verified against a key file, item-level rows rolled up per GPO ID per month (key file, Contract ID and real headers still to come; see `engine/supplier_presets.py` TODOs)
 
 ### Longer-term
 - [ ] Azure SQL migration (schema is compatible)

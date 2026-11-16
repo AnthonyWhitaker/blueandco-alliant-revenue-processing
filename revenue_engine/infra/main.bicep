@@ -170,7 +170,9 @@ resource revenueApp 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'revenue-engine'
           image: appImage
-          resources: { cpu: json('1'), memory: '2Gi' }
+          // 4Gi for multi-million-row Medline months (~2 GB peak for 3M rows); Container Apps
+          // requires 2 GiB per vCPU, hence 2 CPUs.
+          resources: { cpu: json('2'), memory: '4Gi' }
           env: [
             { name: 'AZURE_SQL_CONNECTION_STRING', secretRef: 'sql-conn' }
           ]

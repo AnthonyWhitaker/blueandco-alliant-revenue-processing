@@ -5,7 +5,7 @@
 #   docker compose --profile prod up --build app
 #                                → the production image on http://localhost:8501
 #
-# Both share ./data (SQLite DB + uploads). See ../DEPLOYMENT.md.
+# Both share ./data (SQLite DB, uploads, outputs). See ../DEPLOYMENT.md.
 
 services:
   api:
@@ -21,6 +21,7 @@ services:
     environment:
       REVENUE_DB_PATH: /app/data/revenue.db
       REVENUE_UPLOAD_DIR: /app/data/uploads
+      REVENUE_OUTPUT_DIR: /app/data/outputs
       STATIC_DIR: ""  # the Vite dev server serves the UI
 
   web:

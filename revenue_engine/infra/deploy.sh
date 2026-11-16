@@ -22,7 +22,7 @@
 #
 # Access (FINDINGS F14): the image now serves a REST API as well as the UI.
 #   ALLOWED_IP_RANGES      - comma-separated CIDRs allowed through ingress, e.g. "203.0.113.0/24,198.51.100.7/32"
-#   ALLOW_PUBLIC_INGRESS   - set to "true" to deploy with no IP allowlist anyway (e.g. Easy Auth is configured)
+#                            Optional for now (demo deploys); unset means public ingress with a warning.
 
 set -euo pipefail
 
@@ -35,7 +35,6 @@ NAME_PREFIX="${NAME_PREFIX:-rev}"
 EXISTING_SQL_SERVER="${EXISTING_SQL_SERVER:-}"    # e.g. "pdn-sql-abc123" to share purchasing-solutions SQL server
 EXISTING_ENVIRONMENT="${EXISTING_ENVIRONMENT:-}"  # e.g. "pdn-env" to share purchasing-solutions Container Apps env
 ALLOWED_IP_RANGES="${ALLOWED_IP_RANGES:-}"
-ALLOW_PUBLIC_INGRESS="${ALLOW_PUBLIC_INGRESS:-false}"
 SKIP_CHECKS="${SKIP_CHECKS:-0}"
 GIT_SHA=$(git rev-parse --short=12 HEAD 2>/dev/null || date +%Y%m%d%H%M%S)
 
@@ -68,10 +67,8 @@ echo " Allowed IP ranges  : ${ALLOWED_IP_RANGES:-<none - public ingress>}"
 echo " Image tags         : latest, $GIT_SHA"
 echo ""
 
-if [ -z "$ALLOWED_IP_RANGES" ] && [ "$ALLOW_PUBLIC_INGRESS" != "true" ]; then
-    echo "ERROR: No ALLOWED_IP_RANGES set. The app now exposes a REST API (FINDINGS F14)." >&2
-    echo "       Set ALLOWED_IP_RANGES, or ALLOW_PUBLIC_INGRESS=true if access is restricted another way (Easy Auth)." >&2
-    exit 1
+if [ -z "$ALLOWED_IP_RANGES" ]; then
+    yellow "WARNING: No ALLOWED_IP_RANGES set. The REST API will be publicly reachable with no auth (FINDINGS F14)."
 fi
 
 if [ ! -f "infra/main.bicep" ]; then

@@ -13,10 +13,26 @@ Handles:
 """
 
 import re
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
+import openpyxl
 import pandas as pd
+
+# Column added to every frame read by read_supplier_file_detailed(): the row's
+# 1-based row number in the source spreadsheet (as Excel shows it).
+SOURCE_ROW_COL = "__source_row"
+
+
+@dataclass
+class ReadResult:
+    df: pd.DataFrame                    # canonical + unmapped raw columns, plus SOURCE_ROW_COL
+    warnings: list[str]
+    # Rows removed by skip_rows_where_col_null (summary/total rows), renamed to
+    # canonical columns like df. Fully empty rows are not kept.
+    dropped: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 
 def _normalize_col(name: str) -> str:
@@ -85,11 +101,114 @@ def load_supplier_column_map_patterns(
     return patterns
 
 
+_STREAM_CHUNK = 100_000
+
+
+def _cell_text(v) -> Optional[str]:
+    """A cell as pd.read_excel(dtype=str) gives it: whole floats as ints, datetimes as 'YYYY-MM-DD HH:MM:SS'."""
+    if v is None:
+        return None
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    if isinstance(v, datetime):
+        return str(pd.Timestamp(v))
+    return str(v)
+
+
+def _header_names(raw: tuple, width: int) -> list[str]:
+    """pd.read_excel's names: blank -> 'Unnamed: i', repeats -> 'X.1', 'X.2'."""
+    names, seen = [], {}
+    for i in range(width):
+        v = raw[i] if i < len(raw) else None
+        name = f"Unnamed: {i}" if v is None else _cell_text(v)
+        if name in seen:
+            seen[name] += 1
+            dup = f"{name}.{seen[name]}"
+            while dup in seen:
+                seen[name] += 1
+                dup = f"{name}.{seen[name]}"
+            seen[dup] = 0
+            name = dup
+        else:
+            seen[name] = 0
+        names.append(name)
+    return names
+
+
+def read_xlsx_streaming(
+    file_path: str,
+    sheet_name: Union[str, int] = 0,
+    header_row: int = 0,
+    max_columns: Optional[int] = None,
+) -> pd.DataFrame:
+    """
+    Same frame as pd.read_excel(file_path, sheet_name, header=header_row, dtype=str), read row by row
+    in chunks. pd.read_excel holds every cell of the sheet as a Python object at once (about 2 GB for
+    a 1M-row Medline file); this stays well under 1 GB.
+    """
+    wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
+    try:
+        ws = wb.worksheets[sheet_name] if isinstance(sheet_name, int) else wb[sheet_name]
+        rows = ws.iter_rows(values_only=True)
+        for _ in range(header_row):
+            next(rows, None)
+        raw_header = next(rows, None)
+        if raw_header is None:
+            return pd.DataFrame(dtype="str")
+        width = len(raw_header)
+        while width and raw_header[width - 1] is None:
+            width -= 1
+        parts, buf, blank_run = [], [], []
+        last_width = width
+
+        def flush(chunk):
+            cols = list(zip(*chunk)) if chunk else [()] * width
+            parts.append(pd.DataFrame({i: pd.Series([_cell_text(v) for v in col], dtype="str")
+                                       for i, col in enumerate(cols)}))
+
+        for row in rows:
+            # A row may be wider than the header (data in unnamed columns); pandas names those too.
+            if len(row) > width and any(v is not None for v in row[width:]):
+                last_width = max(last_width, max(i for i, v in enumerate(row) if v is not None) + 1)
+            if all(v is None for v in row):
+                blank_run.append(row)       # kept only if more data follows (pandas drops trailing blank rows)
+                continue
+            if blank_run:
+                buf.extend(blank_run)
+                blank_run = []
+            buf.append(row)
+            if len(buf) >= _STREAM_CHUNK:
+                flush([tuple(r[:last_width]) + (None,) * (last_width - len(r)) for r in buf])
+                buf = []
+        if buf or not parts:
+            flush([tuple(r[:last_width]) + (None,) * (last_width - len(r)) for r in buf])
+    finally:
+        wb.close()
+
+    n = max_columns if max_columns else last_width
+    parts = [p.reindex(columns=range(last_width)) for p in parts]
+    df = pd.concat(parts, ignore_index=True) if len(parts) > 1 else parts[0]
+    df.columns = _header_names(raw_header, last_width)
+    if n < last_width:
+        df = df.iloc[:, :n]
+    return df
+
+
 def read_supplier_file(
     file_path: str,
     supplier_profile: dict,
     conn: object,
 ) -> tuple[pd.DataFrame, list[str]]:
+    """Like read_supplier_file_detailed, without the dropped rows or the source row column."""
+    result = read_supplier_file_detailed(file_path, supplier_profile, conn)
+    return result.df.drop(columns=[SOURCE_ROW_COL]), result.warnings
+
+
+def read_supplier_file_detailed(
+    file_path: str,
+    supplier_profile: dict,
+    conn: object,
+) -> ReadResult:
     """
     Read a raw supplier file and return:
         (df_canonical, warnings)
@@ -124,14 +243,19 @@ def read_supplier_file(
     suffix = path.suffix.lower()
     if suffix in (".xlsx", ".xls", ".xlsm"):
         try:
-            kw = {**read_kwargs, "usecols": _usecols} if _usecols else read_kwargs
-            try:
-                df = pd.read_excel(file_path, **kw)
-            except ValueError as e:
-                if _usecols and "out-of-bounds" in str(e):
-                    df = pd.read_excel(file_path, **read_kwargs)
-                else:
-                    raise
+            if suffix == ".xls":
+                kw = {**read_kwargs, "usecols": _usecols} if _usecols else read_kwargs
+                try:
+                    df = pd.read_excel(file_path, **kw)
+                except ValueError as e:
+                    if _usecols and "out-of-bounds" in str(e):
+                        df = pd.read_excel(file_path, **read_kwargs)
+                    else:
+                        raise
+            else:
+                # A file narrower than max_read_columns just reads all of its columns.
+                df = read_xlsx_streaming(file_path, sheet_name, header_row,
+                                         int(max_read_columns) if max_read_columns else None)
         except Exception as e:
             raise ValueError(f"Cannot read Excel file: {e}") from e
     elif suffix == ".csv":
@@ -142,9 +266,14 @@ def read_supplier_file(
     else:
         raise ValueError(f"Unsupported file type: {suffix}")
 
+    # Spreadsheet row number of each data row (header row + 1, 1-based)
+    data_cols = list(df.columns)
+    df[SOURCE_ROW_COL] = df.index + header_row + 2
+
     # Strip completely empty rows and columns
-    df.dropna(how="all", inplace=True)
+    df.dropna(how="all", subset=data_cols, inplace=True)
     df.dropna(axis=1, how="all", inplace=True)
+    dropped = df.iloc[0:0]
 
     # Strip summary rows (e.g., Guerbet uses NaN JDE Number for totals)
     if skip_col:
@@ -156,7 +285,9 @@ def read_supplier_file(
                 match_col = c
                 break
         if match_col:
-            df = df[df[match_col].notna() & (df[match_col].str.strip() != "")]
+            keep = df[match_col].notna() & (df[match_col].str.strip() != "")
+            dropped = df[~keep]
+            df = df[keep]
 
     # Build column map
     col_map = load_supplier_column_map(conn, supplier_id)
@@ -186,6 +317,7 @@ def read_supplier_file(
     # Keep original columns with 'raw_' prefix, add canonical columns
     df_out = df.copy()
     df_out.rename(columns=rename, inplace=True)
+    dropped = dropped.rename(columns=rename)
 
     # If the file has no per-row fee column at all — only a per-row sales/
     # revenue figure plus a single flat rate stated on the supplier's own
@@ -216,12 +348,13 @@ def read_supplier_file(
         )
 
     # Warn about unmapped columns
-    unmapped = [c for c in df.columns if c not in rename and _normalize_col(str(c)) not in col_map]
+    unmapped = [c for c in df.columns
+                if c not in rename and c != SOURCE_ROW_COL and _normalize_col(str(c)) not in col_map]
     if unmapped:
         warnings.append(f"Unmapped columns (will be ignored): {unmapped}")
 
     df_out.reset_index(drop=True, inplace=True)
-    return df_out, warnings
+    return ReadResult(df_out, warnings, dropped.reset_index(drop=True))
 
 
 # Leading words that qualify which party a header is about ("Account City",

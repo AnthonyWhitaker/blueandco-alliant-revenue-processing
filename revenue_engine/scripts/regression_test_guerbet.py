@@ -87,7 +87,7 @@ def main() -> int:
         result = process_job(conn, job_id)
         print(f"\nEngine result: {result}\n")
 
-        output_path = export_job(conn, job_id, output_path=str(tmp_dir / "engine_output.xlsx"))
+        output_path = export_job(conn, job_id, tmp_dir / "outputs")[0].file_path
 
         # -----------------------------------------------------------------
         # Compare: total revenue vs. deposit amount in filename ($4,248.85)

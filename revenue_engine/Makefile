@@ -15,6 +15,7 @@ initdb:
 seed: initdb
 	$(PY) scripts/seed_guerbet.py
 	$(PY) scripts/seed_tier_ab_suppliers.py
+	$(PY) scripts/seed_admin_fee_suppliers.py --gpo-key "samples/medline/GPO Key (mock).csv"
 
 api:
 	.venv/bin/uvicorn api.main:app --reload --port 8000

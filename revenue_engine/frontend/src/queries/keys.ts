@@ -18,6 +18,8 @@ export const queryKeys = {
     exceptions: (jobId: number) => ['jobs', jobId, 'exceptions'] as const,
     preview: (jobId: number) => ['jobs', jobId, 'preview'] as const,
     reviewItems: (jobId: number) => ['jobs', jobId, 'review-items'] as const,
+    files: (jobId: number) => ['jobs', jobId, 'files'] as const,
+    outputs: (jobId: number) => ['jobs', jobId, 'outputs'] as const,
   },
 
   suppliers: {
@@ -27,6 +29,7 @@ export const queryKeys = {
     columnMappings: (supplierId: number) => ['suppliers', supplierId, 'column-mappings'] as const,
     extractionRules: (supplierId: number) => ['suppliers', supplierId, 'extraction-rules'] as const,
     allocationRules: (supplierId: number) => ['suppliers', supplierId, 'allocation-rules'] as const,
+    gpoKey: (supplierId: number) => ['suppliers', supplierId, 'gpo-key'] as const,
     /** Advisory notices for an unsaved rule; under allocationRules so saves invalidate it. */
     allocationDraftNotices: (supplierId: number, draft: Schemas['AllocationRuleDraft']) =>
       ['suppliers', supplierId, 'allocation-rules', 'validation', draft] as const,

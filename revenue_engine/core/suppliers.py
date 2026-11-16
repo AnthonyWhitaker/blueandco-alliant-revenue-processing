@@ -13,7 +13,7 @@ _ALL_FIELDS = [
     "name", "description", "contract_id", "revenue_type", "keep_return_default",
     "payor_filter_name", "payment_id_source", "skip_rows_where_col_null", "sheet_name",
     "header_row", "max_read_columns", "job_type", "requires_manual_confirmation",
-    "fee_rate", "fuzzy_zip_state_threshold", "fuzzy_city_state_threshold",
+    "identity_mode", "volume_mode", "fee_rate", "fuzzy_zip_state_threshold", "fuzzy_city_state_threshold",
     "fuzzy_state_threshold", "fuzzy_nationwide_threshold",
 ]
 

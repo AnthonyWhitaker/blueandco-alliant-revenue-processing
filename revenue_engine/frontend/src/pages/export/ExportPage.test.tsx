@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
-import { job } from '@/test/fixtures';
+import { job, jobOutput, reconciliation } from '@/test/fixtures';
 import { json, renderRoute, stubFetch } from '@/test/render';
 
 afterEach(() => {
@@ -48,6 +48,7 @@ function api(
         [`GET /api/jobs/${j.id}`, () => json(byId.get(j.id))],
         [`GET /api/jobs/${j.id}/exceptions`, () => json([])],
         [`GET /api/jobs/${j.id}/preview`, () => json(preview)],
+        [`GET /api/jobs/${j.id}/outputs`, () => json([])],
       ]),
     ),
     ...extra(byId),
@@ -63,8 +64,9 @@ describe('Export page', () => {
       expect(router.state.location.search).toBe('?job=42');
     });
     expect(router.state.historyAction).toBe('REPLACE');
-    expect(await screen.findByText('$1,234.50')).toBeInTheDocument();
+    expect((await screen.findAllByText('$1,234.50')).length).toBeGreaterThan(0);
     expect(screen.getByText('PAY-1')).toBeInTheDocument();
+    expect(screen.getByText('Totals reconcile')).toBeInTheDocument();
     expect(await screen.findByRole('table', { name: 'Upload tab preview' })).toBeInTheDocument();
     expect(screen.getByText('PEC-10')).toBeInTheDocument();
 
@@ -131,33 +133,82 @@ describe('Export page', () => {
     expect(screen.getByText('Payment ID lookup failed')).toBeInTheDocument();
   });
 
-  it('downloads the workbook under the server-provided name', async () => {
+  it('downloads a stored output file under the server-provided name', async () => {
     // jsdom has no object URLs.
     const createObjectURL = vi.fn(() => 'blob:workbook');
     Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
     const clicked = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {
       /* jsdom can't navigate to a blob URL */
     });
+    const output = jobOutput({ id: 7, file_name: 'Acme 2026 Processed 20260302-093100.xlsx' });
     api([job()], () => ({
-      'GET /api/jobs/42/export': () =>
+      'GET /api/jobs/42/outputs': () => json([output]),
+      'GET /api/jobs/42/outputs/7/content': () =>
         new Response('xlsx', {
           headers: {
             'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'Content-Disposition': "attachment; filename*=UTF-8''Acme%202026%20Processed.xlsx",
+            'Content-Disposition':
+              "attachment; filename*=UTF-8''Acme%202026%20Processed%2020260302-093100.xlsx",
           },
         }),
     }));
     const user = userEvent.setup();
     await renderRoute('/export?job=42');
 
-    await user.click(await screen.findByRole('button', { name: 'Download workbook' }));
+    await user.click(await screen.findByRole('button', { name: `Download ${output.file_name}` }));
     await waitFor(() => {
       expect(clicked).toHaveBeenCalled();
     });
     const anchor = clicked.mock.instances[0] as HTMLAnchorElement;
-    expect(anchor.download).toBe('Acme 2026 Processed.xlsx');
+    expect(anchor.download).toBe('Acme 2026 Processed 20260302-093100.xlsx');
     expect(createObjectURL).toHaveBeenCalled();
     clicked.mockRestore();
+  });
+
+  it('generates a new version without replacing the old ones', async () => {
+    const outputs = [jobOutput({ id: 1, file_name: 'v1 Processed.xlsx' })];
+    let posted = 0;
+    api([job()], () => ({
+      'GET /api/jobs/42/outputs': () => json(outputs),
+      'POST /api/jobs/42/outputs': () => {
+        posted += 1;
+        const created = [
+          jobOutput({ id: 2, file_name: 'v2 Processed.xlsx' }),
+          jobOutput({ id: 3, artifact_type: 'exception_report', file_name: 'v2 Exceptions.xlsx' }),
+        ];
+        outputs.unshift(...created);
+        return json(created, 201);
+      },
+    }));
+    const user = userEvent.setup();
+    await renderRoute('/export?job=42');
+
+    expect(await screen.findByText('v1 Processed.xlsx')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Generate new version' }));
+    expect(await screen.findByText('v2 Exceptions.xlsx')).toBeInTheDocument();
+    expect(screen.getByText('v1 Processed.xlsx')).toBeInTheDocument();
+    expect(posted).toBe(1);
+  });
+
+  it('disables downloading a file that is no longer on disk', async () => {
+    api([job()], () => ({
+      'GET /api/jobs/42/outputs': () =>
+        json([jobOutput({ file_name: 'gone.xlsx', available: false })]),
+    }));
+    await renderRoute('/export?job=42');
+    expect(await screen.findByRole('button', { name: 'Download gone.xlsx' })).toBeDisabled();
+  });
+
+  it('flags totals that do not reconcile', async () => {
+    api([
+      job({
+        status: 'needs_review',
+        reconciliation: reconciliation({ balanced: false, revenue_difference: 12.5 }),
+      }),
+    ]);
+    await renderRoute('/export?job=42');
+    expect(await screen.findByText('Totals do not reconcile')).toBeInTheDocument();
+    expect(screen.getByText('$12.50')).toBeInTheDocument();
   });
 
   it('shows an empty state when nothing has been processed', async () => {

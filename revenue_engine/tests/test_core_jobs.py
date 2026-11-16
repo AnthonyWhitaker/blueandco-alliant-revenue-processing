@@ -15,6 +15,7 @@ from .conftest import FILE_NAME, make_supplier, write_supplier_file
 @pytest.fixture(autouse=True)
 def _upload_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("REVENUE_UPLOAD_DIR", str(tmp_path / "uploads"))
+    monkeypatch.setenv("REVENUE_OUTPUT_DIR", str(tmp_path / "outputs"))
 
 
 def _xlsx_bytes(tmp_path) -> bytes:
@@ -22,7 +23,7 @@ def _xlsx_bytes(tmp_path) -> bytes:
 
 
 def test_create_and_run_job(conn, seeded, tmp_path):
-    job = jobs.create_job(conn, seeded["supplier_id"], FILE_NAME, _xlsx_bytes(tmp_path), date(2025, 7, 2))
+    job = jobs.create_job(conn, seeded["supplier_id"], [(FILE_NAME, _xlsx_bytes(tmp_path))], date(2025, 7, 2))
     assert job.status == "uploaded"
     assert job.supplier_name == "Acme Supply"
     assert job.contract_id == "CON-1"
@@ -36,17 +37,17 @@ def test_create_and_run_job(conn, seeded, tmp_path):
 
 def test_create_job_rejects_unknown_extension(conn, seeded):
     with pytest.raises(InvalidInputError):
-        jobs.create_job(conn, seeded["supplier_id"], "notes.pdf", b"x", date(2025, 7, 2))
+        jobs.create_job(conn, seeded["supplier_id"], [("notes.pdf", b"x")], date(2025, 7, 2))
 
 
 def test_create_job_unknown_supplier(conn, seeded, tmp_path):
     with pytest.raises(NotFoundError):
-        jobs.create_job(conn, 999, FILE_NAME, _xlsx_bytes(tmp_path), date(2025, 7, 2))
+        jobs.create_job(conn, 999, [(FILE_NAME, _xlsx_bytes(tmp_path))], date(2025, 7, 2))
 
 
 def test_run_job_with_missing_file_ends_failed(conn, seeded, tmp_path):
-    job = jobs.create_job(conn, seeded["supplier_id"], FILE_NAME, _xlsx_bytes(tmp_path), date(2025, 7, 2))
-    conn.execute("UPDATE revenue_job SET file_path = ? WHERE id = ?", (str(tmp_path / "gone.xlsx"), job.id))
+    job = jobs.create_job(conn, seeded["supplier_id"], [(FILE_NAME, _xlsx_bytes(tmp_path))], date(2025, 7, 2))
+    conn.execute("UPDATE revenue_job_file SET file_path = ? WHERE job_id = ?", (str(tmp_path / "gone.xlsx"), job.id))
     conn.commit()
     with pytest.raises(FileNotFoundError):
         jobs.run_job(conn, job.id)
@@ -56,7 +57,7 @@ def test_run_job_with_missing_file_ends_failed(conn, seeded, tmp_path):
 
 
 def test_fail_interrupted_jobs(conn, seeded, tmp_path):
-    job = jobs.create_job(conn, seeded["supplier_id"], FILE_NAME, _xlsx_bytes(tmp_path), date(2025, 7, 2))
+    job = jobs.create_job(conn, seeded["supplier_id"], [(FILE_NAME, _xlsx_bytes(tmp_path))], date(2025, 7, 2))
     assert jobs.fail_interrupted_jobs(conn) == 1
     assert jobs.get_job(conn, job.id).status == "failed"
 
@@ -78,8 +79,10 @@ def test_infer_from_filename(conn, seeded):
 def test_set_payment_id_updates_output_rows(conn, processed_job):
     job = jobs.set_payment_id(conn, processed_job["job_id"], "PAY-OVERRIDE")
     assert job.payment_id == "PAY-OVERRIDE"
-    preview = jobs.get_preview(conn, job.id)
-    assert {r.payment_id for r in preview.upload} == {"PAY-OVERRIDE"}
+    stored = conn.execute("SELECT DISTINCT payment_id FROM revenue_output_row WHERE job_id = ?", (job.id,)).fetchall()
+    assert [r[0] for r in stored] == ["PAY-OVERRIDE"]
+    # The Upload template leaves Payment ID blank: it is filled in from the ledger afterwards.
+    assert {r.payment_id for r in jobs.get_preview(conn, job.id).upload} == {None}
 
 
 def test_preview_has_all_four_sheets(conn, processed_job):
@@ -90,17 +93,24 @@ def test_preview_has_all_four_sheets(conn, processed_job):
     assert {r.jde_number for r in preview.jde_mapping} == {"J100", "J200"}
 
 
-def test_build_export_returns_workbook(conn, processed_job):
-    name, content = jobs.build_export(conn, processed_job["job_id"])
-    assert name == "Acme Supply 2025.07.02 300.00 Ledger Processed.xlsx"
+def test_create_outputs_writes_both_workbooks(conn, processed_job, tmp_path):
+    outputs = jobs.create_outputs(conn, processed_job["job_id"])
+    assert [o.artifact_type for o in outputs] == ["salesforce_upload", "exception_report"]
+    assert outputs[0].file_name.startswith("Acme Supply 2025.07.02 300.00 Ledger Processed ")
+    assert all(o.available for o in outputs)
+    name, content = jobs.read_output(conn, processed_job["job_id"], outputs[0].id)
+    assert name == outputs[0].file_name
+    assert (tmp_path / "outputs" / name).is_file()
     wb = openpyxl.load_workbook(BytesIO(content))
     assert wb.sheetnames == ["Upload", "Validation", "Unmatched", "JDE Mapping"]
+    _, exc = jobs.read_output(conn, processed_job["job_id"], outputs[1].id)
+    assert openpyxl.load_workbook(BytesIO(exc)).sheetnames == ["Reconciliation", "Exceptions", "Duplicates", "Dropped Rows"]
 
 
-def test_build_export_refuses_failed_job(conn, seeded, tmp_path):
-    job = jobs.create_job(conn, seeded["supplier_id"], FILE_NAME, _xlsx_bytes(tmp_path), date(2025, 7, 2))
+def test_create_outputs_refuses_unprocessed_job(conn, seeded, tmp_path):
+    job = jobs.create_job(conn, seeded["supplier_id"], [(FILE_NAME, _xlsx_bytes(tmp_path))], date(2025, 7, 2))
     with pytest.raises(ConflictError):
-        jobs.build_export(conn, job.id)
+        jobs.create_outputs(conn, job.id)
 
 
 def test_exceptions_listed(conn, processed_job):
@@ -154,7 +164,7 @@ def manual_supplier(conn, seeded):
 
 
 def test_manual_total_is_allocated(conn, manual_supplier, tmp_path):
-    job = jobs.create_job(conn, manual_supplier, "Komet 2025.07.02.xlsx", _xlsx_bytes(tmp_path), date(2025, 7, 2),
+    job = jobs.create_job(conn, manual_supplier, [("Komet 2025.07.02.xlsx", _xlsx_bytes(tmp_path))], date(2025, 7, 2),
                           manual_totals={"Rebate": 500.0})
     assert job.manual_totals == {"Rebate": 500.0}
     done = jobs.run_job(conn, job.id)
@@ -169,13 +179,13 @@ def test_manual_total_is_allocated(conn, manual_supplier, tmp_path):
 def test_manual_totals_are_checked(conn, seeded, manual_supplier, tmp_path):
     content = _xlsx_bytes(tmp_path)
     with pytest.raises(InvalidInputError, match="Enter the confirmed total for 'Rebate'"):
-        jobs.create_job(conn, manual_supplier, "k.xlsx", content, date(2025, 7, 2))
+        jobs.create_job(conn, manual_supplier, [("k.xlsx", content)], date(2025, 7, 2))
     with pytest.raises(InvalidInputError, match="no manual-entry extraction rule named 'Bonus'"):
-        jobs.create_job(conn, manual_supplier, "k.xlsx", content, date(2025, 7, 2),
+        jobs.create_job(conn, manual_supplier, [("k.xlsx", content)], date(2025, 7, 2),
                         manual_totals={"Rebate": 1.0, "Bonus": 2.0})
     with pytest.raises(InvalidInputError, match="no manual-entry"):
-        jobs.create_job(conn, seeded["supplier_id"], FILE_NAME, content, date(2025, 7, 2),
+        jobs.create_job(conn, seeded["supplier_id"], [(FILE_NAME, content)], date(2025, 7, 2),
                         manual_totals={"Rebate": 1.0})
     with pytest.raises(InvalidInputError, match="must be a number"):
-        jobs.create_job(conn, manual_supplier, "k.xlsx", content, date(2025, 7, 2),
+        jobs.create_job(conn, manual_supplier, [("k.xlsx", content)], date(2025, 7, 2),
                         manual_totals={"Rebate": float("nan")})

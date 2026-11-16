@@ -29,6 +29,12 @@ export const extractionRulesQuery = (supplierId: number) =>
       unwrap(api.GET('/api/suppliers/{supplier_id}/extraction-rules', path(supplierId))),
   });
 
+export const gpoKeyQuery = (supplierId: number) =>
+  queryOptions({
+    queryKey: queryKeys.suppliers.gpoKey(supplierId),
+    queryFn: () => unwrap(api.GET('/api/suppliers/{supplier_id}/gpo-key', path(supplierId))),
+  });
+
 export const allocationRulesQuery = (supplierId: number) =>
   queryOptions({
     queryKey: queryKeys.suppliers.allocationRules(supplierId),

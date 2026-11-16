@@ -14,17 +14,18 @@ test('upload → review → export: the main revenue path', async ({ page }) => 
   await page.locator('input[type="file"]').setInputFiles(SAMPLE_FILE);
   await expect(page.getByText('Inferred from the file name: Acme Supply')).toBeVisible();
   await expect(page.getByLabel(/Date received/)).toHaveValue('2025-07-02');
+  await page.getByLabel(/^Timeframe/).fill('3Q25');
   await page.getByRole('button', { name: 'Process file' }).click();
 
   await expect(page).toHaveURL(/\/upload\?job=\d+$/);
-  await expect(page.getByText(/1 unmatched customer needs review/)).toBeVisible({
+  await expect(page.getByText(/needs review: 1 unmatched row/)).toBeVisible({
     timeout: 20_000,
   });
   await expect(page.getByText('PAY-ACME-1')).toBeVisible();
 
   // A reload keeps the result (the job is in the URL).
   await page.reload();
-  await expect(page.getByText(/1 unmatched customer needs review/)).toBeVisible();
+  await expect(page.getByText(/needs review: 1 unmatched row/)).toBeVisible();
 
   // Review: no good suggestion for "Zyxw Qvbn Clinic", so create the facility and approve.
   await page.getByRole('link', { name: /Review page/ }).click();
@@ -37,16 +38,25 @@ test('upload → review → export: the main revenue path', async ({ page }) => 
   await card.getByRole('button', { name: /Approve match/ }).click();
   await expect(page.getByText(/Nothing left to review for job #\d+/)).toBeVisible();
 
-  // Export: the job is complete, the preview has the new facility, and the download is named as before.
+  // Export: the job is complete and the preview has the new facility. Processing stored a first
+  // version of the outputs; a new version reflects the review, and the first one is kept.
   await page.getByRole('link', { name: /Export page/ }).click();
   await expect(page.getByText('completed', { exact: true })).toBeVisible();
+  // Pec and Facility ID: Facility ID is the entity code when there is one.
   await expect(
-    page.getByRole('table', { name: 'Upload tab preview' }).getByText('EC900'),
-  ).toBeVisible();
+    page.getByRole('table', { name: 'Upload tab preview' }).getByRole('cell', { name: 'EC900' }),
+  ).toHaveCount(2);
+  const outputs = page.getByRole('table', { name: 'Output files' });
+  await expect(outputs.getByRole('button', { name: /^Download / })).toHaveCount(2);
+  await page.getByRole('button', { name: 'Generate new version' }).click();
+  await expect(outputs.getByRole('button', { name: /^Download / })).toHaveCount(4);
   const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Download workbook' }).click();
-  expect((await download).suggestedFilename()).toBe(
-    'Acme Supply 2025.07.02 300.00 Ledger Processed.xlsx',
+  await outputs
+    .getByRole('button', { name: /^Download .* Processed / })
+    .first()
+    .click();
+  expect((await download).suggestedFilename()).toMatch(
+    /^Acme Supply 2025\.07\.02 300\.00 Ledger Processed \d{8}-\d{6}(-\d+)?\.xlsx$/,
   );
 
   // Dashboard counts reflect it.

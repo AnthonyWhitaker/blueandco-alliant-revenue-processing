@@ -44,6 +44,11 @@ CREATE TABLE IF NOT EXISTS supplier_profile (
     --                        pre-known facilities (supplier_allocation_rule) instead of matching
     job_type                TEXT NOT NULL DEFAULT 'row_level',
     requires_manual_confirmation INTEGER NOT NULL DEFAULT 0,
+    -- Row-level only. 'member_match' (MemberMatcher + Review queue) | 'gpo_key'
+    -- (GPO ID verified against gpo_key_entry; unverified rows go to the exceptions report)
+    identity_mode           TEXT NOT NULL DEFAULT 'member_match',
+    -- 'sum' (Volume = sum of sales_amount) | 'blank' (Volume left empty)
+    volume_mode             TEXT NOT NULL DEFAULT 'sum',
     -- 1 = job always lands in needs_review for a human sign-off even if extraction/
     -- allocation succeeded cleanly (default true for pivot_allocation suppliers)
     created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -233,9 +238,53 @@ CREATE TABLE IF NOT EXISTS revenue_job (
     error_message           TEXT,
     column_mapping_json     TEXT,              -- Confirmed column→canonical mapping
     manual_totals_json      TEXT,              -- Tier C: {rule_name: amount} for manual_entry rules, entered at upload
+    timeframe               TEXT,              -- "Pmt For (Time Frame)", entered per run (free text)
+    reconciliation_json     TEXT,              -- Input vs output + exceptions totals (engine/reconciliation.py)
     created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     completed_at            TIMESTAMP
 );
+
+-- ---------------------------------------------------------------------------
+-- REVENUE JOB FILE
+-- The source files of a job. One month can arrive as several files; they are
+-- combined before processing. revenue_job.file_path keeps the first one.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS revenue_job_file (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id                  INTEGER NOT NULL REFERENCES revenue_job(id) ON DELETE CASCADE,
+    original_file_name      TEXT NOT NULL,
+    file_path               TEXT NOT NULL,
+    sha256                  TEXT NOT NULL,
+    row_count               INTEGER,
+    created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_job_file_job ON revenue_job_file(job_id);
+
+-- ---------------------------------------------------------------------------
+-- GPO KEY ENTRY
+-- The supplier's key of correct GPO IDs (identity_mode = 'gpo_key'), loaded
+-- from a CSV/XLSX key file (engine/gpo_key.py). Rows are verified by account
+-- number, account name and address (street + ZIP); the *_norm columns hold the normalized
+-- values compared.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS gpo_key_entry (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_profile_id     INTEGER NOT NULL REFERENCES supplier_profile(id) ON DELETE CASCADE,
+    account_number          TEXT NOT NULL,
+    account_name            TEXT,
+    address                 TEXT,
+    zip                     TEXT,
+    gpo_id                  TEXT,
+    account_number_norm     TEXT NOT NULL,
+    account_name_norm       TEXT,
+    address_norm            TEXT,
+    zip_norm                TEXT,
+    source_file_name        TEXT,
+    loaded_at               TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_gpo_key_lookup ON gpo_key_entry(supplier_profile_id, account_number_norm);
 
 -- ---------------------------------------------------------------------------
 -- REVENUE ROW
@@ -273,10 +322,17 @@ CREATE TABLE IF NOT EXISTS revenue_row (
     -- Values: pending | matched | unmatched | needs_review | alias_matched
     validation_status       TEXT NOT NULL DEFAULT 'pending',
     -- Values: pending | valid | invalid
+    -- Where the row came from (a job can combine several files)
+    source_file             TEXT,
+    source_row              INTEGER,           -- 1-based spreadsheet row
+    file_entity_code        TEXT,              -- GPO ID / entity code as written in the file
+    exception_reason        TEXT,              -- gpo_key mode: why the row didn't verify
+    duplicate_group         INTEGER,           -- rows with identical content share a group number
     created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS ix_rev_row_job        ON revenue_row(job_id);
+CREATE INDEX IF NOT EXISTS ix_rev_row_job_row    ON revenue_row(job_id, row_number);
 CREATE INDEX IF NOT EXISTS ix_rev_row_jde        ON revenue_row(jde_number);
 CREATE INDEX IF NOT EXISTS ix_rev_row_status     ON revenue_row(match_status);
 CREATE INDEX IF NOT EXISTS ix_rev_row_member     ON revenue_row(matched_member_id);

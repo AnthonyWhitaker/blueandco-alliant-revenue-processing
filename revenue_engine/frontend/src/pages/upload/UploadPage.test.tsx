@@ -8,7 +8,10 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const file = (name: string) => new File(['a,b\n1,2'], name, { type: 'text/csv' });
+const file = (name: string) => new File([`a,b\n1,${name}`], name, { type: 'text/csv' });
+/** The test fetch layer drops multipart file names, so files are told apart by content. */
+const sentFiles = (form: FormData | null) =>
+  Promise.all((form?.getAll('files') as Blob[]).map((f) => f.text()));
 const fileInput = () => {
   const input = document.querySelector('input[type="file"]');
   if (!(input instanceof HTMLInputElement)) throw new Error('No file input');
@@ -54,6 +57,7 @@ describe('Upload page', () => {
     expect(screen.getByText('C-200')).toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/Payment ID override/), ' PAY-7 ');
+    await user.type(screen.getByLabelText(/^Timeframe/), '3Q26');
     await user.click(screen.getByRole('button', { name: 'Process file' }));
 
     await waitFor(() => {
@@ -61,7 +65,7 @@ describe('Upload page', () => {
     });
     expect(await screen.findByText(/Processing job #42/)).toBeInTheDocument();
     expect(
-      await screen.findByText(/3 unmatched customers need review/, {}, { timeout: 4000 }),
+      await screen.findByText(/needs review: 3 unmatched rows/, {}, { timeout: 4000 }),
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Review page/ })).toHaveAttribute(
       'href',
@@ -72,6 +76,8 @@ describe('Upload page', () => {
     expect(sent?.get('supplier_profile_id')).toBe('2');
     expect(sent?.get('date_received')).toBe('2026-03-01');
     expect(sent?.get('manual_payment_id')).toBe('PAY-7');
+    expect(sent?.get('timeframe')).toBe('3Q26');
+    expect(await sentFiles(sent)).toEqual(['a,b\n1,Beta 2026-03-01.csv']);
 
     const inferenceCall = fetchMock.mock.calls.find(
       ([r]) => new URL(r.url).pathname === '/api/file-name-inference',
@@ -116,7 +122,72 @@ describe('Upload page', () => {
     await user.click(screen.getByRole('button', { name: 'Process file' }));
     expect(await screen.findByText('Pick the supplier')).toBeInTheDocument();
     expect(screen.getByText('Enter the date received')).toBeInTheDocument();
+    expect(screen.getByText('Enter the quarter this payment represents')).toBeInTheDocument();
     expect(posted).not.toHaveBeenCalled();
+  });
+
+  it('combines several files for one month into one job', async () => {
+    let form: FormData | null = null;
+    stubFetch({
+      'GET /api/suppliers': () => json(suppliers),
+      'GET /api/meta': () => json(meta),
+      'GET /api/jobs': () => json([]),
+      'GET /api/file-name-inference': () =>
+        json({
+          file_name: 'Beta 2026-03-01 part 1.csv',
+          supplier_profile_id: 2,
+          supplier_name: 'Beta Pharma',
+          date_received: '2026-03-01',
+          deposit_amount: null,
+        }),
+      'POST /api/jobs': async (request) => {
+        form = await request.formData();
+        return json(job({ status: 'uploaded', file_count: 3 }), 202);
+      },
+      'GET /api/jobs/42': () => json(job({ file_count: 3, row_count: 120000 })),
+    });
+    const user = userEvent.setup();
+    await renderRoute('/upload');
+
+    await user.upload(fileInput(), [file('Beta 2026-03-01 part 1.csv'), file('part 2.csv')]);
+    expect(await screen.findByText('Inferred from the file name: Beta Pharma')).toBeInTheDocument();
+    await user.upload(fileInput(), file('part 3.csv'));
+    expect(screen.getByText('File 3 of 3 · 0 KB')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Remove part 2.csv' }));
+    await user.upload(fileInput(), file('part 2.csv'));
+    await user.type(screen.getByLabelText(/^Timeframe/), '1Q26');
+    await user.click(screen.getByRole('button', { name: 'Combine and process 3 files' }));
+
+    expect(await screen.findByText('Total rows (3 files)')).toBeInTheDocument();
+    const sent = form as FormData | null;
+    expect(await sentFiles(sent)).toEqual([
+      'a,b\n1,Beta 2026-03-01 part 1.csv',
+      'a,b\n1,part 3.csv',
+      'a,b\n1,part 2.csv',
+    ]);
+  });
+
+  it('allows one file per job for a Tier C supplier', async () => {
+    const pivot = supplier({ id: 3, name: 'Pivot Co', job_type: 'pivot_allocation' });
+    stubFetch({
+      'GET /api/suppliers': () => json([pivot]),
+      'GET /api/meta': () => json(meta),
+      'GET /api/jobs': () => json([]),
+      'GET /api/suppliers/3/extraction-rules': () => json([extractionRule({ id: 1 })]),
+      'GET /api/file-name-inference': () =>
+        json({
+          file_name: 'Pivot Co 2026-03-01.xlsx',
+          supplier_profile_id: 3,
+          supplier_name: 'Pivot Co',
+          date_received: '2026-03-01',
+          deposit_amount: null,
+        }),
+    });
+    const user = userEvent.setup();
+    await renderRoute('/upload');
+    await user.upload(fileInput(), [file('Pivot Co 2026-03-01.xlsx'), file('b.xlsx')]);
+    expect(await screen.findByText(/takes one file per job/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Combine and process 2 files' })).toBeDisabled();
   });
 
   it('asks for the confirmed total of a Tier C manual-entry rule and sends it', async () => {
@@ -165,6 +236,7 @@ describe('Upload page', () => {
     expect(form).toBeNull();
 
     await user.type(rebate, '1500.25');
+    await user.type(screen.getByLabelText(/^Timeframe/), '1Q26');
     await user.click(screen.getByRole('button', { name: 'Process file' }));
     expect(
       await screen.findByText('Confirmed totals entered at upload: Rebate $1,500.25'),

@@ -201,8 +201,8 @@
         "tags": [
           "jobs"
         ],
-        "summary": "Upload a supplier file and start processing",
-        "description": "Returns immediately with the job in 'uploaded' status. Poll GET /jobs/{job_id} until status is completed, needs_review, or failed.",
+        "summary": "Upload one or more supplier files for one month and start processing",
+        "description": "Several files are combined into one job before processing. Returns immediately with the job in 'uploaded' status. Poll GET /jobs/{job_id} until status is completed, needs_review, or failed.",
         "operationId": "create_job_api_jobs_post",
         "requestBody": {
           "required": true,
@@ -583,13 +583,13 @@
         }
       }
     },
-    "/api/jobs/{job_id}/export": {
+    "/api/jobs/{job_id}/files": {
       "get": {
         "tags": [
           "jobs"
         ],
-        "summary": "Download the Salesforce workbook",
-        "operationId": "export_api_jobs__job_id__export_get",
+        "summary": "The source files combined in this job",
+        "operationId": "list_files_api_jobs__job_id__files_get",
         "parameters": [
           {
             "name": "job_id",
@@ -603,12 +603,126 @@
         ],
         "responses": {
           "200": {
-            "description": "4-tab XLSX",
+            "description": "Successful Response",
             "content": {
-              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+              "application/json": {
                 "schema": {
-                  "type": "string",
-                  "format": "binary"
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobFile"
+                  },
+                  "title": "Response List Files Api Jobs  Job Id  Files Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/outputs": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Stored output files of the job, newest first",
+        "operationId": "list_outputs_api_jobs__job_id__outputs_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobOutput"
+                  },
+                  "title": "Response List Outputs Api Jobs  Job Id  Outputs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Write a new version of the processed and exceptions workbooks",
+        "description": "Files are timestamped and never overwrite an earlier version. Processing writes the first version; generate another after review decisions or sign-off.",
+        "operationId": "create_outputs_api_jobs__job_id__outputs_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/JobOutput"
+                  },
+                  "title": "Response Create Outputs Api Jobs  Job Id  Outputs Post"
                 }
               }
             }
@@ -635,6 +749,68 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs/{job_id}/outputs/{output_id}/content": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Download a stored output file",
+        "operationId": "download_output_api_jobs__job_id__outputs__output_id__content_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "output_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Output Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "XLSX",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1053,6 +1229,131 @@
           },
           "409": {
             "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/suppliers/{supplier_id}/gpo-key": {
+      "get": {
+        "tags": [
+          "suppliers",
+          "gpo key"
+        ],
+        "summary": "The GPO key loaded for a supplier",
+        "operationId": "get_gpo_key_api_suppliers__supplier_id__gpo_key_get",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GpoKeySummary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "suppliers",
+          "gpo key"
+        ],
+        "summary": "Replace a supplier's GPO key from a CSV/XLSX key file",
+        "description": "The key lists, per supplier account, the account name, address and correct GPO ID. Column names default to the placeholders in engine/gpo_key.KeyColumns.",
+        "operationId": "put_gpo_key_api_suppliers__supplier_id__gpo_key_put",
+        "parameters": [
+          {
+            "name": "supplier_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Supplier Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_put_gpo_key_api_suppliers__supplier_id__gpo_key_put"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GpoKeyImportResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload Too Large",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2719,11 +3020,14 @@
       },
       "Body_create_job_api_jobs_post": {
         "properties": {
-          "file": {
-            "type": "string",
-            "contentMediaType": "application/octet-stream",
-            "title": "File",
-            "description": "Supplier remittance file (.xlsx, .xls, .xlsm, .csv)"
+          "files": {
+            "items": {
+              "type": "string",
+              "contentMediaType": "application/octet-stream"
+            },
+            "type": "array",
+            "title": "Files",
+            "description": "Supplier remittance file(s) (.xlsx, .xls, .xlsm, .csv) for the same supplier and month. Tier C suppliers take exactly one."
           },
           "supplier_profile_id": {
             "type": "integer",
@@ -2733,6 +3037,18 @@
             "type": "string",
             "format": "date",
             "title": "Date Received"
+          },
+          "timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframe",
+            "description": "Written to \"Pmt For (Time Frame)\" on every Upload row: the quarter the payment represents. Format XQYY: quarter and 2-digit year, e.g. 1Q26."
           },
           "manual_payment_id": {
             "anyOf": [
@@ -2760,7 +3076,7 @@
         },
         "type": "object",
         "required": [
-          "file",
+          "files",
           "supplier_profile_id",
           "date_received"
         ],
@@ -2821,6 +3137,58 @@
           "file"
         ],
         "title": "Body_infer_column_mappings_api_suppliers__supplier_id__column_mappings_inference_post"
+      },
+      "Body_put_gpo_key_api_suppliers__supplier_id__gpo_key_put": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "description": "Key file (.csv, .xlsx, .xls, .xlsm)"
+          },
+          "account_number_column": {
+            "type": "string",
+            "title": "Account Number Column",
+            "default": "Medline Account Number"
+          },
+          "account_name_column": {
+            "type": "string",
+            "title": "Account Name Column",
+            "default": "Medline Account Name"
+          },
+          "address_column": {
+            "type": "string",
+            "title": "Address Column",
+            "default": "Medline Street"
+          },
+          "gpo_id_column": {
+            "type": "string",
+            "title": "Gpo Id Column",
+            "default": "Final GPO ID"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Name"
+          },
+          "header_row": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Header Row",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_put_gpo_key_api_suppliers__supplier_id__gpo_key_put"
       },
       "ColumnMapping": {
         "properties": {
@@ -3423,6 +3791,78 @@
         ],
         "title": "FileNameInference"
       },
+      "GpoKeyImportResult": {
+        "properties": {
+          "loaded": {
+            "type": "integer",
+            "title": "Loaded"
+          },
+          "skipped_blank_account": {
+            "type": "integer",
+            "title": "Skipped Blank Account",
+            "description": "Key rows without an account number (not loaded)."
+          },
+          "accounts_with_several_entries": {
+            "type": "integer",
+            "title": "Accounts With Several Entries"
+          },
+          "key": {
+            "$ref": "#/components/schemas/GpoKeySummary"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loaded",
+          "skipped_blank_account",
+          "accounts_with_several_entries",
+          "key"
+        ],
+        "title": "GpoKeyImportResult"
+      },
+      "GpoKeySummary": {
+        "properties": {
+          "entry_count": {
+            "type": "integer",
+            "title": "Entry Count"
+          },
+          "account_count": {
+            "type": "integer",
+            "title": "Account Count"
+          },
+          "source_file_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source File Name"
+          },
+          "loaded_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Loaded At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "entry_count",
+          "account_count",
+          "source_file_name",
+          "loaded_at"
+        ],
+        "title": "GpoKeySummary",
+        "description": "The GPO key currently loaded for a supplier (identity_mode = 'gpo_key')."
+      },
       "HealthStatus": {
         "properties": {
           "status": {
@@ -3763,6 +4203,34 @@
             "title": "Manual Totals",
             "description": "Tier C: the totals entered at upload for manual_entry extraction rules, by rule name."
           },
+          "timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframe",
+            "description": "\"Pmt For (Time Frame)\" for every Upload row, entered at upload."
+          },
+          "file_count": {
+            "type": "integer",
+            "title": "File Count",
+            "description": "Number of source files combined in this job."
+          },
+          "reconciliation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Reconciliation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Totals check from the last processing run or review decision. Null before processing."
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -3803,6 +4271,8 @@
           "total_revenue",
           "error_message",
           "pending_review_count",
+          "timeframe",
+          "file_count",
           "created_at",
           "completed_at"
         ],
@@ -3851,6 +4321,91 @@
           "created_at"
         ],
         "title": "JobException"
+      },
+      "JobFile": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "original_file_name": {
+            "type": "string",
+            "title": "Original File Name"
+          },
+          "sha256": {
+            "type": "string",
+            "title": "Sha256"
+          },
+          "row_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Row Count",
+            "description": "Data rows read from this file (set when processing finishes)."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "original_file_name",
+          "sha256",
+          "row_count",
+          "created_at"
+        ],
+        "title": "JobFile",
+        "description": "One source file of a job."
+      },
+      "JobOutput": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "artifact_type": {
+            "type": "string",
+            "enum": [
+              "salesforce_upload",
+              "exception_report",
+              "validation_report",
+              "jde_mapping"
+            ],
+            "title": "Artifact Type"
+          },
+          "file_name": {
+            "type": "string",
+            "title": "File Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available",
+            "description": "False when the file is no longer on disk (e.g. lost in a server restart)."
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "artifact_type",
+          "file_name",
+          "created_at",
+          "available"
+        ],
+        "title": "JobOutput",
+        "description": "A stored output file. Each export writes a new version; none is ever overwritten."
       },
       "JobPatch": {
         "properties": {
@@ -4236,6 +4791,28 @@
             "type": "array",
             "title": "Job Types"
           },
+          "identity_modes": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "member_match",
+                "gpo_key"
+              ]
+            },
+            "type": "array",
+            "title": "Identity Modes"
+          },
+          "volume_modes": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "blank"
+              ]
+            },
+            "type": "array",
+            "title": "Volume Modes"
+          },
           "extraction_methods": {
             "items": {
               "type": "string",
@@ -4314,6 +4891,8 @@
           "keep_return_options",
           "payment_id_sources",
           "job_types",
+          "identity_modes",
+          "volume_modes",
           "extraction_methods",
           "label_match_modes",
           "range_axes",
@@ -4446,6 +5025,140 @@
           "status"
         ],
         "title": "Problem"
+      },
+      "Reconciliation": {
+        "properties": {
+          "input": {
+            "$ref": "#/components/schemas/ReconciliationInput"
+          },
+          "output_rows": {
+            "type": "integer",
+            "title": "Output Rows"
+          },
+          "output_volume": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Volume"
+          },
+          "output_revenue": {
+            "type": "number",
+            "title": "Output Revenue"
+          },
+          "exception_rows": {
+            "type": "integer",
+            "title": "Exception Rows"
+          },
+          "exceptions_volume": {
+            "type": "number",
+            "title": "Exceptions Volume"
+          },
+          "exceptions_revenue": {
+            "type": "number",
+            "title": "Exceptions Revenue"
+          },
+          "volume_checked": {
+            "type": "boolean",
+            "title": "Volume Checked",
+            "description": "False when the supplier's Volume is left blank."
+          },
+          "volume_difference": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Volume Difference"
+          },
+          "revenue_difference": {
+            "type": "number",
+            "title": "Revenue Difference"
+          },
+          "balanced": {
+            "type": "boolean",
+            "title": "Balanced"
+          }
+        },
+        "type": "object",
+        "required": [
+          "input",
+          "output_rows",
+          "output_volume",
+          "output_revenue",
+          "exception_rows",
+          "exceptions_volume",
+          "exceptions_revenue",
+          "volume_checked",
+          "volume_difference",
+          "revenue_difference",
+          "balanced"
+        ],
+        "title": "Reconciliation",
+        "description": "Input totals = Upload tab output + exceptions report, checked on every run."
+      },
+      "ReconciliationInput": {
+        "properties": {
+          "rows": {
+            "type": "integer",
+            "title": "Rows"
+          },
+          "volume": {
+            "type": "number",
+            "title": "Volume"
+          },
+          "revenue": {
+            "type": "number",
+            "title": "Revenue"
+          },
+          "unparseable_volume": {
+            "type": "integer",
+            "title": "Unparseable Volume",
+            "default": 0
+          },
+          "unparseable_revenue": {
+            "type": "integer",
+            "title": "Unparseable Revenue",
+            "default": 0
+          },
+          "dropped_rows": {
+            "type": "integer",
+            "title": "Dropped Rows",
+            "description": "Summary/total rows stripped before processing (not part of the input).",
+            "default": 0
+          },
+          "dropped_volume": {
+            "type": "number",
+            "title": "Dropped Volume",
+            "default": 0.0
+          },
+          "dropped_revenue": {
+            "type": "number",
+            "title": "Dropped Revenue",
+            "default": 0.0
+          },
+          "rows_per_file": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Rows Per File"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rows",
+          "volume",
+          "revenue"
+        ],
+        "title": "ReconciliationInput"
       },
       "ReviewApproval": {
         "properties": {
@@ -4813,6 +5526,22 @@
             "type": "boolean",
             "title": "Requires Manual Confirmation"
           },
+          "identity_mode": {
+            "type": "string",
+            "enum": [
+              "member_match",
+              "gpo_key"
+            ],
+            "title": "Identity Mode"
+          },
+          "volume_mode": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "blank"
+            ],
+            "title": "Volume Mode"
+          },
           "fuzzy_zip_state_threshold": {
             "type": "integer",
             "title": "Fuzzy Zip State Threshold"
@@ -4857,6 +5586,8 @@
           "fee_rate",
           "job_type",
           "requires_manual_confirmation",
+          "identity_mode",
+          "volume_mode",
           "fuzzy_zip_state_threshold",
           "fuzzy_city_state_threshold",
           "fuzzy_state_threshold",
@@ -4979,6 +5710,26 @@
             "type": "boolean",
             "title": "Requires Manual Confirmation",
             "default": false
+          },
+          "identity_mode": {
+            "type": "string",
+            "enum": [
+              "member_match",
+              "gpo_key"
+            ],
+            "title": "Identity Mode",
+            "description": "Row-level only. 'member_match': fuzzy/exact member matching with a Review queue. 'gpo_key': GPO ID verified against the supplier's key file; unverified rows go to the exceptions report.",
+            "default": "member_match"
+          },
+          "volume_mode": {
+            "type": "string",
+            "enum": [
+              "sum",
+              "blank"
+            ],
+            "title": "Volume Mode",
+            "description": "'sum': Volume = sum of sales amounts. 'blank': Volume is left empty.",
+            "default": "sum"
           },
           "fee_rate": {
             "anyOf": [

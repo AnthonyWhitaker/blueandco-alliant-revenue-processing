@@ -61,6 +61,7 @@ MATCH_UNMATCHED     = "unmatched"
 MATCH_ENTITY_CODE   = "entity_code_exact"
 MATCH_ACCOUNT_ID    = "account_id_exact"
 MATCH_PIVOT_ALLOCATION = "pivot_allocation"
+MATCH_GPO_KEY       = "gpo_key"
 
 # ---------------------------------------------------------------------------
 # Supplier job types (supplier_profile.job_type) — selects which pipeline
@@ -68,6 +69,24 @@ MATCH_PIVOT_ALLOCATION = "pivot_allocation"
 # ---------------------------------------------------------------------------
 JOB_TYPE_ROW_LEVEL       = "row_level"
 JOB_TYPE_PIVOT_ALLOCATION = "pivot_allocation"
+
+# ---------------------------------------------------------------------------
+# Identity modes (supplier_profile.identity_mode) — how a row-level file's
+# rows are tied to a facility.
+#   member_match : MemberMatcher (exact hints, JDE history, aliases, fuzzy);
+#                  unmatched customers go to the Review queue
+#   gpo_key      : the GPO ID is looked up in the supplier's key file
+#                  (gpo_key_entry) by account number + name + address; rows
+#                  that don't verify go to the exceptions report, never guessed
+# ---------------------------------------------------------------------------
+IDENTITY_MEMBER_MATCH = "member_match"
+IDENTITY_GPO_KEY      = "gpo_key"
+
+# Volume modes (supplier_profile.volume_mode)
+#   sum   : Volume = sum of sales_amount
+#   blank : Volume left empty (files already rolled up that carry revenue only)
+VOLUME_SUM   = "sum"
+VOLUME_BLANK = "blank"
 
 # ---------------------------------------------------------------------------
 # Extraction methods (supplier_extraction_rule.extraction_method)
@@ -104,6 +123,17 @@ ROW_MATCHED         = "matched"
 ROW_UNMATCHED       = "unmatched"
 ROW_NEEDS_REVIEW    = "needs_review"
 ROW_ALIAS_MATCHED   = "alias_matched"
+ROW_KEY_EXCEPTION   = "key_exception"   # gpo_key mode: not verified against the key
+
+# Reasons a row fails GPO key verification (revenue_row.exception_reason)
+KEY_MISSING_ACCOUNT  = "missing_account_number"
+KEY_ACCOUNT_NOT_FOUND = "account_not_in_key"
+KEY_NAME_MISMATCH    = "name_mismatch"
+KEY_ADDRESS_MISMATCH = "address_mismatch"
+KEY_NAME_AND_ADDRESS_MISMATCH = "name_and_address_mismatch"
+KEY_AMBIGUOUS        = "ambiguous_key_entries"
+KEY_NO_GPO_ID        = "key_entry_has_no_gpo_id"
+KEY_NOT_LOADED       = "key_not_loaded"
 
 # ---------------------------------------------------------------------------
 # Review item status values
@@ -128,6 +158,13 @@ EXC_EXTRACTION_AMBIGUOUS  = "extraction_ambiguous"
 EXC_ALLOCATION_INCOMPLETE = "allocation_incomplete"
 EXC_MISSING_ENTITY_CODE   = "missing_entity_code"
 EXC_MANUAL_TOTAL          = "manual_total_entered"
+EXC_KEY_VERIFICATION      = "gpo_key_verification"
+EXC_GPO_ID_CORRECTED      = "gpo_id_corrected"
+EXC_DUPLICATE_ROWS        = "duplicate_rows"
+EXC_DUPLICATE_FILE        = "duplicate_file"
+EXC_RECONCILIATION        = "reconciliation"
+EXC_DROPPED_ROWS          = "dropped_rows"
+EXC_TIMEFRAME_MISSING     = "timeframe_missing"
 
 # ---------------------------------------------------------------------------
 # Export artifact types

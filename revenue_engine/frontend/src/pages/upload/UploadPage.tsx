@@ -28,7 +28,7 @@ import { api, formData, unwrap } from '@/api/client';
 import type { Schemas } from '@/api/types';
 import { DataTable } from '@/components/DataTable';
 import { EmptyState } from '@/components/EmptyState';
-import { FileDropzone } from '@/components/FileDropzone';
+import { FileListDropzone } from '@/components/FileDropzone';
 import { PageHeader } from '@/components/PageHeader';
 import { QueryError } from '@/components/QueryError';
 import { StatCard } from '@/components/StatCard';
@@ -57,6 +57,11 @@ const jobLink = (page: string, jobId: number) => `${page}?${searchParamNames.job
 const uploadSchema = z.object({
   supplier_id: z.string({ error: 'Pick the supplier' }).min(1, 'Pick the supplier'),
   date_received: z.iso.date({ error: 'Enter the date received' }),
+  timeframe: z
+    .string()
+    .trim()
+    .min(1, 'Enter the quarter this payment represents')
+    .regex(/^[1-4]Q\d{2}$/i, 'Use XQYY: quarter and 2-digit year, e.g. 1Q26'),
   manual_payment_id: z.string(),
 });
 type UploadValues = z.infer<typeof uploadSchema>;
@@ -64,14 +69,14 @@ type UploadValues = z.infer<typeof uploadSchema>;
 type ManualTotals = Record<string, number | string>;
 
 interface UploadFormProps {
-  file: File;
+  files: File[];
   suppliers: Supplier[];
   inference: Schemas['FileNameInference'] | null;
   onSubmitted: (job: Job) => void;
 }
 
-/** Mounted once per picked file, so the filename guesses become the form's defaults. */
-function UploadForm({ file, suppliers, inference, onSubmitted }: UploadFormProps) {
+/** Mounted once per first picked file, so the filename guesses become the form's defaults. */
+function UploadForm({ files, suppliers, inference, onSubmitted }: UploadFormProps) {
   const queryClient = useQueryClient();
   const [formError, setFormError] = useState<string | null>(null);
   const guessedSupplier = suppliers.find((s) => s.id === inference?.supplier_profile_id);
@@ -80,6 +85,7 @@ function UploadForm({ file, suppliers, inference, onSubmitted }: UploadFormProps
     initialValues: {
       supplier_id: guessedSupplier ? String(guessedSupplier.id) : '',
       date_received: inference?.date_received ?? '',
+      timeframe: '',
       manual_payment_id: '',
     },
     validate: schemaResolver(uploadSchema, { sync: true }),
@@ -89,6 +95,7 @@ function UploadForm({ file, suppliers, inference, onSubmitted }: UploadFormProps
 
   // Tier C rules with no automated parsing need their confirmed total typed in here (FINDINGS F9).
   const isPivot = selected?.job_type === 'pivot_allocation';
+  const tooManyFiles = isPivot && files.length > 1;
   const extractionRules = useQuery({
     ...extractionRulesQuery(selected?.id ?? 0),
     enabled: isPivot,
@@ -115,9 +122,10 @@ function UploadForm({ file, suppliers, inference, onSubmitted }: UploadFormProps
       unwrap(
         api.POST('/api/jobs', {
           body: {
-            file,
+            files,
             supplier_profile_id: Number(v.supplier_id),
             date_received: v.date_received,
+            timeframe: v.timeframe.trim().toUpperCase(),
             manual_payment_id: blankToNull(v.manual_payment_id),
             manual_totals:
               manualRules.length > 0
@@ -186,12 +194,26 @@ function UploadForm({ file, suppliers, inference, onSubmitted }: UploadFormProps
             {...form.getInputProps('date_received')}
           />
         </SimpleGrid>
-        <TextInput
-          label="Payment ID override"
-          description="Optional. Normally resolved automatically from the payment ledger."
-          maw={360}
-          {...form.getInputProps('manual_payment_id')}
-        />
+        <SimpleGrid cols={{ base: 1, sm: 2 }}>
+          <TextInput
+            label="Timeframe"
+            withAsterisk
+            placeholder="e.g. 1Q26"
+            description="The quarter this payment represents. Written to “Pmt For (Time Frame)” on every row."
+            {...form.getInputProps('timeframe')}
+          />
+          <TextInput
+            label="Payment ID override"
+            description="Optional, for reference. The Upload template leaves Payment ID blank; it is filled in from the ledger afterwards."
+            {...form.getInputProps('manual_payment_id')}
+          />
+        </SimpleGrid>
+        {tooManyFiles && (
+          <Alert color="red" icon={<IconAlertTriangle />}>
+            {selected.name} is an aggregate/pivot supplier and takes one file per job. Remove the
+            extra files.
+          </Alert>
+        )}
         {isPivot &&
           (extractionRules.error ? (
             <QueryError
@@ -249,9 +271,11 @@ function UploadForm({ file, suppliers, inference, onSubmitted }: UploadFormProps
             type="submit"
             leftSection={<IconPlayerPlay size={16} />}
             loading={submit.isPending}
-            disabled={isPivot && !extractionRules.isSuccess}
+            disabled={tooManyFiles || (isPivot && !extractionRules.isSuccess)}
           >
-            Process file
+            {files.length > 1
+              ? `Combine and process ${String(files.length)} files`
+              : 'Process file'}
           </Button>
         </Group>
       </Stack>
@@ -315,6 +339,15 @@ function JobResult({ jobId }: { jobId: number }) {
   }
 
   const complete = j.status === 'completed';
+  const rec = j.reconciliation;
+  const keyExceptions = (rec?.exception_rows ?? 0) - (j.unmatched_count ?? 0);
+  const reasons = [
+    j.unmatched_count ? pluralize(j.unmatched_count, 'unmatched row') : null,
+    keyExceptions > 0
+      ? `${pluralize(keyExceptions, 'row')} not verified against the GPO key`
+      : null,
+    rec && !rec.balanced ? 'totals do not reconcile' : null,
+  ].filter(Boolean);
   return (
     <Stack gap="md">
       <Alert
@@ -323,7 +356,7 @@ function JobResult({ jobId }: { jobId: number }) {
         title={
           complete
             ? `Processing complete (job #${j.id})`
-            : `Processing complete: ${pluralize(j.unmatched_count ?? 0, 'unmatched customer')} ${(j.unmatched_count ?? 0) === 1 ? 'needs' : 'need'} review (job #${j.id})`
+            : `Processing complete; needs review${reasons.length ? `: ${reasons.join(', ')}` : ''} (job #${j.id})`
         }
       >
         <Group gap="md">
@@ -333,14 +366,20 @@ function JobResult({ jobId }: { jobId: number }) {
             </Anchor>
           )}
           <Anchor component={Link} to={jobLink(routes.export, j.id)} inherit>
-            Preview and download on the Export page
+            Check exceptions, preview and download on the Export page
           </Anchor>
         </Group>
       </Alert>
       <SimpleGrid cols={{ base: 2, md: 4 }}>
-        <StatCard label="Total rows" value={formatInteger(j.row_count)} />
-        <StatCard label="Matched" value={formatInteger(j.matched_count)} />
-        <StatCard label="Unmatched" value={formatInteger(j.unmatched_count)} />
+        <StatCard
+          label={j.file_count > 1 ? `Total rows (${String(j.file_count)} files)` : 'Total rows'}
+          value={formatInteger(j.row_count)}
+        />
+        <StatCard label="In output" value={formatInteger(j.matched_count)} />
+        <StatCard
+          label="Exceptions"
+          value={formatInteger(rec?.exception_rows ?? j.unmatched_count)}
+        />
         <StatCard
           label="Total revenue"
           value={j.total_revenue ? formatCurrency(j.total_revenue) : '—'}
@@ -354,19 +393,23 @@ function JobResult({ jobId }: { jobId: number }) {
             .join(' · ')}
         </Text>
       )}
-      {j.payment_id ? (
-        <Text size="sm">
-          Payment ID <Code>{j.payment_id}</Code> (source: {formatText(j.payment_id_source)})
+      {rec && (
+        <Text size="sm" {...(rec.balanced ? {} : { c: 'red' })}>
+          {rec.balanced ? 'Totals reconcile' : 'Totals do not reconcile'}: input revenue{' '}
+          {formatCurrency(rec.input.revenue)} = output {formatCurrency(rec.output_revenue)} +
+          exceptions {formatCurrency(rec.exceptions_revenue)}.
         </Text>
-      ) : (
-        <Alert color="red" icon={<IconAlertTriangle />} title="Payment ID could not be resolved">
-          Set it on the{' '}
-          <Anchor component={Link} to={jobLink(routes.export, j.id)} inherit>
-            Export page
-          </Anchor>
-          , or upload again with a Payment ID override.
-        </Alert>
       )}
+      <Text size="sm" c="dimmed">
+        {j.payment_id ? (
+          <>
+            Payment ID <Code>{j.payment_id}</Code> (source: {formatText(j.payment_id_source)}), for
+            reference; the Upload template leaves it blank.
+          </>
+        ) : (
+          'No Payment ID was resolved from the ledger. The Upload template leaves it blank either way.'
+        )}
+      </Text>
     </Stack>
   );
 }
@@ -453,17 +496,18 @@ function RecentJobs({ onOpen }: { onOpen: (jobId: number) => void }) {
 export function UploadPage() {
   const suppliers = useQuery(suppliersQuery());
   const meta = useQuery(metaQuery);
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const first = files[0];
   const [jobId, setJobId] = useSearchParamState(searchParamNames.job, idCodec);
   const inference = useQuery({
-    ...fileNameInferenceQuery(file?.name ?? ''),
-    enabled: file !== null,
+    ...fileNameInferenceQuery(first?.name ?? ''),
+    enabled: first !== undefined,
   });
 
   const header = (
     <PageHeader
       title="Upload & process"
-      description="Upload a supplier file. The supplier and date received are inferred from the file name."
+      description="Upload a supplier file, or every file for one month; they are combined before processing. The supplier and date received are inferred from the first file name."
     />
   );
 
@@ -500,21 +544,21 @@ export function UploadPage() {
       <Stack gap="xl">
         <Paper p="lg">
           <Stack gap="md">
-            <FileDropzone
-              label="Supplier file"
+            <FileListDropzone
+              label="Supplier file(s)"
               extensions={meta.data?.upload_extensions ?? DEFAULT_EXTENSIONS}
-              file={file}
-              onChange={setFile}
+              files={files}
+              onChange={setFiles}
             />
-            {file &&
+            {first &&
               (suppliers.data && !inference.isPending ? (
                 <UploadForm
-                  key={`${file.name}:${String(file.lastModified)}:${String(file.size)}`}
-                  file={file}
+                  key={`${first.name}:${String(first.lastModified)}:${String(first.size)}`}
+                  files={files}
                   suppliers={suppliers.data}
                   inference={inference.data ?? null}
                   onSubmitted={(job) => {
-                    setFile(null);
+                    setFiles([]);
                     setJobId(job.id);
                   }}
                 />

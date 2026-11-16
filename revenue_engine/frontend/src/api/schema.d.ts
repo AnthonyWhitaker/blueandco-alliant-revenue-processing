@@ -82,8 +82,8 @@ export interface paths {
     get: operations['list_jobs_api_jobs_get'];
     put?: never;
     /**
-     * Upload a supplier file and start processing
-     * @description Returns immediately with the job in 'uploaded' status. Poll GET /jobs/{job_id} until status is completed, needs_review, or failed.
+     * Upload one or more supplier files for one month and start processing
+     * @description Several files are combined into one job before processing. Returns immediately with the job in 'uploaded' status. Poll GET /jobs/{job_id} until status is completed, needs_review, or failed.
      */
     post: operations['create_job_api_jobs_post'];
     delete?: never;
@@ -178,15 +178,53 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/jobs/{job_id}/export': {
+  '/api/jobs/{job_id}/files': {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    /** Download the Salesforce workbook */
-    get: operations['export_api_jobs__job_id__export_get'];
+    /** The source files combined in this job */
+    get: operations['list_files_api_jobs__job_id__files_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/jobs/{job_id}/outputs': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Stored output files of the job, newest first */
+    get: operations['list_outputs_api_jobs__job_id__outputs_get'];
+    put?: never;
+    /**
+     * Write a new version of the processed and exceptions workbooks
+     * @description Files are timestamped and never overwrite an earlier version. Processing writes the first version; generate another after review decisions or sign-off.
+     */
+    post: operations['create_outputs_api_jobs__job_id__outputs_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/jobs/{job_id}/outputs/{output_id}/content': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Download a stored output file */
+    get: operations['download_output_api_jobs__job_id__outputs__output_id__content_get'];
     put?: never;
     post?: never;
     delete?: never;
@@ -275,6 +313,27 @@ export interface paths {
     get: operations['get_supplier_api_suppliers__supplier_id__get'];
     /** Update Supplier */
     put: operations['update_supplier_api_suppliers__supplier_id__put'];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/suppliers/{supplier_id}/gpo-key': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** The GPO key loaded for a supplier */
+    get: operations['get_gpo_key_api_suppliers__supplier_id__gpo_key_get'];
+    /**
+     * Replace a supplier's GPO key from a CSV/XLSX key file
+     * @description The key lists, per supplier account, the account name, address and correct GPO ID. Column names default to the placeholders in engine/gpo_key.KeyColumns.
+     */
+    put: operations['put_gpo_key_api_suppliers__supplier_id__gpo_key_put'];
     post?: never;
     delete?: never;
     options?: never;
@@ -636,10 +695,10 @@ export interface components {
     /** Body_create_job_api_jobs_post */
     Body_create_job_api_jobs_post: {
       /**
-       * File
-       * @description Supplier remittance file (.xlsx, .xls, .xlsm, .csv)
+       * Files
+       * @description Supplier remittance file(s) (.xlsx, .xls, .xlsm, .csv) for the same supplier and month. Tier C suppliers take exactly one.
        */
-      file: Blob;
+      files: Blob[];
       /** Supplier Profile Id */
       supplier_profile_id: number;
       /**
@@ -647,6 +706,11 @@ export interface components {
        * Format: date
        */
       date_received: string;
+      /**
+       * Timeframe
+       * @description Written to "Pmt For (Time Frame)" on every Upload row: the quarter the payment represents. Format XQYY: quarter and 2-digit year, e.g. 1Q26.
+       */
+      timeframe?: string | null;
       /** Manual Payment Id */
       manual_payment_id?: string | null;
       /**
@@ -686,6 +750,41 @@ export interface components {
     Body_infer_column_mappings_api_suppliers__supplier_id__column_mappings_inference_post: {
       /** File */
       file: Blob;
+    };
+    /** Body_put_gpo_key_api_suppliers__supplier_id__gpo_key_put */
+    Body_put_gpo_key_api_suppliers__supplier_id__gpo_key_put: {
+      /**
+       * File
+       * @description Key file (.csv, .xlsx, .xls, .xlsm)
+       */
+      file: Blob;
+      /**
+       * Account Number Column
+       * @default Medline Account Number
+       */
+      account_number_column?: string;
+      /**
+       * Account Name Column
+       * @default Medline Account Name
+       */
+      account_name_column?: string;
+      /**
+       * Address Column
+       * @default Medline Street
+       */
+      address_column?: string;
+      /**
+       * Gpo Id Column
+       * @default Final GPO ID
+       */
+      gpo_id_column?: string;
+      /** Sheet Name */
+      sheet_name?: string | null;
+      /**
+       * Header Row
+       * @default 0
+       */
+      header_row?: number;
     };
     /** ColumnMapping */
     ColumnMapping: {
@@ -907,6 +1006,33 @@ export interface components {
       /** Deposit Amount */
       deposit_amount: number | null;
     };
+    /** GpoKeyImportResult */
+    GpoKeyImportResult: {
+      /** Loaded */
+      loaded: number;
+      /**
+       * Skipped Blank Account
+       * @description Key rows without an account number (not loaded).
+       */
+      skipped_blank_account: number;
+      /** Accounts With Several Entries */
+      accounts_with_several_entries: number;
+      key: components['schemas']['GpoKeySummary'];
+    };
+    /**
+     * GpoKeySummary
+     * @description The GPO key currently loaded for a supplier (identity_mode = 'gpo_key').
+     */
+    GpoKeySummary: {
+      /** Entry Count */
+      entry_count: number;
+      /** Account Count */
+      account_count: number;
+      /** Source File Name */
+      source_file_name: string | null;
+      /** Loaded At */
+      loaded_at: string | null;
+    };
     /** HealthStatus */
     HealthStatus: {
       /** Status */
@@ -1032,6 +1158,18 @@ export interface components {
         [key: string]: number;
       };
       /**
+       * Timeframe
+       * @description "Pmt For (Time Frame)" for every Upload row, entered at upload.
+       */
+      timeframe: string | null;
+      /**
+       * File Count
+       * @description Number of source files combined in this job.
+       */
+      file_count: number;
+      /** @description Totals check from the last processing run or review decision. Null before processing. */
+      reconciliation?: components['schemas']['Reconciliation'] | null;
+      /**
        * Created At
        * Format: date-time
        */
@@ -1059,6 +1197,53 @@ export interface components {
        * Format: date-time
        */
       created_at: string;
+    };
+    /**
+     * JobFile
+     * @description One source file of a job.
+     */
+    JobFile: {
+      /** Id */
+      id: number;
+      /** Original File Name */
+      original_file_name: string;
+      /** Sha256 */
+      sha256: string;
+      /**
+       * Row Count
+       * @description Data rows read from this file (set when processing finishes).
+       */
+      row_count: number | null;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+    };
+    /**
+     * JobOutput
+     * @description A stored output file. Each export writes a new version; none is ever overwritten.
+     */
+    JobOutput: {
+      /** Id */
+      id: number;
+      /**
+       * Artifact Type
+       * @enum {string}
+       */
+      artifact_type: 'salesforce_upload' | 'exception_report' | 'validation_report' | 'jde_mapping';
+      /** File Name */
+      file_name: string;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /**
+       * Available
+       * @description False when the file is no longer on disk (e.g. lost in a server restart).
+       */
+      available: boolean;
     };
     /** JobPatch */
     JobPatch: {
@@ -1179,6 +1364,10 @@ export interface components {
       payment_id_sources: ('ledger' | 'manual' | 'column')[];
       /** Job Types */
       job_types: ('row_level' | 'pivot_allocation')[];
+      /** Identity Modes */
+      identity_modes: ('member_match' | 'gpo_key')[];
+      /** Volume Modes */
+      volume_modes: ('sum' | 'blank')[];
       /** Extraction Methods */
       extraction_methods: (
         | 'named_cell'
@@ -1240,6 +1429,75 @@ export interface components {
       instance?: string | null;
       /** Errors */
       errors?: components['schemas']['FieldError'][] | null;
+    };
+    /**
+     * Reconciliation
+     * @description Input totals = Upload tab output + exceptions report, checked on every run.
+     */
+    Reconciliation: {
+      input: components['schemas']['ReconciliationInput'];
+      /** Output Rows */
+      output_rows: number;
+      /** Output Volume */
+      output_volume: number | null;
+      /** Output Revenue */
+      output_revenue: number;
+      /** Exception Rows */
+      exception_rows: number;
+      /** Exceptions Volume */
+      exceptions_volume: number;
+      /** Exceptions Revenue */
+      exceptions_revenue: number;
+      /**
+       * Volume Checked
+       * @description False when the supplier's Volume is left blank.
+       */
+      volume_checked: boolean;
+      /** Volume Difference */
+      volume_difference: number | null;
+      /** Revenue Difference */
+      revenue_difference: number;
+      /** Balanced */
+      balanced: boolean;
+    };
+    /** ReconciliationInput */
+    ReconciliationInput: {
+      /** Rows */
+      rows: number;
+      /** Volume */
+      volume: number;
+      /** Revenue */
+      revenue: number;
+      /**
+       * Unparseable Volume
+       * @default 0
+       */
+      unparseable_volume?: number;
+      /**
+       * Unparseable Revenue
+       * @default 0
+       */
+      unparseable_revenue?: number;
+      /**
+       * Dropped Rows
+       * @description Summary/total rows stripped before processing (not part of the input).
+       * @default 0
+       */
+      dropped_rows?: number;
+      /**
+       * Dropped Volume
+       * @default 0
+       */
+      dropped_volume?: number;
+      /**
+       * Dropped Revenue
+       * @default 0
+       */
+      dropped_revenue?: number;
+      /** Rows Per File */
+      rows_per_file?: {
+        [key: string]: number;
+      };
     };
     /** ReviewApproval */
     ReviewApproval: {
@@ -1350,6 +1608,16 @@ export interface components {
       job_type: 'row_level' | 'pivot_allocation';
       /** Requires Manual Confirmation */
       requires_manual_confirmation: boolean;
+      /**
+       * Identity Mode
+       * @enum {string}
+       */
+      identity_mode: 'member_match' | 'gpo_key';
+      /**
+       * Volume Mode
+       * @enum {string}
+       */
+      volume_mode: 'sum' | 'blank';
       /** Fuzzy Zip State Threshold */
       fuzzy_zip_state_threshold: number;
       /** Fuzzy City State Threshold */
@@ -1417,6 +1685,20 @@ export interface components {
        * @default false
        */
       requires_manual_confirmation?: boolean;
+      /**
+       * Identity Mode
+       * @description Row-level only. 'member_match': fuzzy/exact member matching with a Review queue. 'gpo_key': GPO ID verified against the supplier's key file; unverified rows go to the exceptions report.
+       * @default member_match
+       * @enum {string}
+       */
+      identity_mode?: 'member_match' | 'gpo_key';
+      /**
+       * Volume Mode
+       * @description 'sum': Volume = sum of sales amounts. 'blank': Volume is left empty.
+       * @default sum
+       * @enum {string}
+       */
+      volume_mode?: 'sum' | 'blank';
       /** Fee Rate */
       fee_rate?: number | null;
       /**
@@ -1986,7 +2268,7 @@ export interface operations {
       };
     };
   };
-  export_api_jobs__job_id__export_get: {
+  list_files_api_jobs__job_id__files_get: {
     parameters: {
       query?: never;
       header?: never;
@@ -1997,13 +2279,93 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description 4-tab XLSX */
+      /** @description Successful Response */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': Blob;
+          'application/json': components['schemas']['JobFile'][];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  list_outputs_api_jobs__job_id__outputs_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['JobOutput'][];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  create_outputs_api_jobs__job_id__outputs_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['JobOutput'][];
         };
       };
       /** @description Not Found */
@@ -2017,6 +2379,47 @@ export interface operations {
       };
       /** @description Conflict */
       409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  download_output_api_jobs__job_id__outputs__output_id__content_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: number;
+        output_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description XLSX */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': Blob;
+        };
+      };
+      /** @description Not Found */
+      404: {
         headers: {
           [name: string]: unknown;
         };
@@ -2325,6 +2728,99 @@ export interface operations {
       };
       /** @description Conflict */
       409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  get_gpo_key_api_suppliers__supplier_id__gpo_key_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        supplier_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GpoKeySummary'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  put_gpo_key_api_suppliers__supplier_id__gpo_key_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        supplier_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'multipart/form-data': components['schemas']['Body_put_gpo_key_api_suppliers__supplier_id__gpo_key_put'];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['GpoKeyImportResult'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Payload Too Large */
+      413: {
         headers: {
           [name: string]: unknown;
         };

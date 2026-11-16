@@ -10,6 +10,7 @@ PYTHON="${PYTHON:-.venv/bin/python}"
 
 export REVENUE_DB_PATH="$DATA_DIR/revenue.db"
 export REVENUE_UPLOAD_DIR="$DATA_DIR/uploads"
+export REVENUE_OUTPUT_DIR="$DATA_DIR/outputs"
 export STATIC_DIR="frontend/dist"
 export LOG_LEVEL="${LOG_LEVEL:-WARNING}"
 unset AZURE_SQL_CONNECTION_STRING

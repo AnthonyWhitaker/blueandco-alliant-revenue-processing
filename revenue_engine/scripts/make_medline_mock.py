@@ -1,6 +1,6 @@
 """
-Generate a synthetic Medline remittance file plus the Account List and payment
-ledger it reconciles against, for demos and testing without real data.
+Generate a synthetic Medline remittance file plus the Account List, payment
+ledger and GPO key it reconciles against, for demos and testing without real data.
 
 Every name, address, account number and code is made up. The remittance has
 the same 22 columns as Medline's real item-level file (one row per invoice
@@ -13,11 +13,17 @@ line), and the data deliberately covers the cases the matcher has to handle:
   * customers that aren't in the Account List at all (end up on Review)
   * credit lines (negative quantities) and a grand-total row at the bottom
 
+The GPO key (GPO Key (mock).csv, default KeyColumns headers) lists the correct
+GPO ID per Medline account. Against it, the file has GPO IDs that are blank
+(filled from the key), wrong (corrected), an address that differs from the
+key (exception), and accounts that aren't in the key at all (exceptions).
+
 Usage:
     .venv/bin/python scripts/make_medline_mock.py [--out samples/medline] [--seed 7]
 """
 
 import argparse
+import csv
 import random
 from datetime import date, timedelta
 from pathlib import Path
@@ -143,10 +149,10 @@ def _customers(rng: random.Random) -> list[dict]:
     return customers
 
 
-def _remittance_rows(rng: random.Random) -> list[list]:
+def _remittance_rows(rng: random.Random, customers: list[dict]) -> list[list]:
     rows = []
     invoice_no = 4_100_000_000
-    for c in _customers(rng):
+    for c in customers:
         for _ in range(c["volume"] * 4):  # invoices per customer this period
             invoice_no += rng.randint(1, 40)
             invoice_date = PERIOD_START + timedelta(days=rng.randint(0, 29))
@@ -211,6 +217,25 @@ def write_account_list(path: Path, rng: random.Random) -> None:
     wb.save(path)
 
 
+# How the key differs from the file for one account: the key spells the street out differently,
+# so verification (exact after normalizing) fails with an address mismatch.
+KEY_ADDRESS_OVERRIDES = {"ST BRIGIDS HOSPITAL": "500 MISSION ST"}
+
+
+def write_gpo_key(path: Path, customers: list[dict]) -> None:
+    """Medline account -> correct GPO ID, for every customer that is a known facility."""
+    pec_by_street = {street.upper(): pec for _, street, _, _, _, pec in FACILITIES}
+    pec_by_street.update({street: FACILITIES[i][5] for i, (_, street) in FUZZY_VARIANTS.items()})
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["Medline Account Number", "Medline Account Name", "Medline Street", "Medline Zip", "Final GPO ID"])
+        for c in customers:
+            pec = pec_by_street.get(c["street"])
+            if pec is None:
+                continue  # not a known facility: not in the key
+            w.writerow([c["acct"], c["name"], KEY_ADDRESS_OVERRIDES.get(c["name"], c["street"]), c["zip"], pec])
+
+
 def write_ledger(path: Path, deposit: float) -> None:
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -232,7 +257,8 @@ def main() -> None:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
 
-    rows = _remittance_rows(rng)
+    customers = _customers(rng)
+    rows = _remittance_rows(rng, customers)
     deposit = round(sum(r[21] for r in rows), 2)
     remittance = out / f"{PAYOR} {RECEIVED:%Y.%m.%d} {deposit:.2f}.xlsx"
     for old in out.glob(f"{PAYOR} *.xlsx"):
@@ -240,8 +266,9 @@ def main() -> None:
     write_remittance(remittance, rows)
     write_account_list(out / "Account List (mock).xlsx", rng)
     write_ledger(out / "Ledger (mock).xlsx", deposit)
+    write_gpo_key(out / "GPO Key (mock).csv", customers)
     print(f"{remittance.name}: {len(rows)} invoice lines, GPO fees {deposit:,.2f}")
-    print(f"Wrote it, the Account List and the Ledger to {out}")
+    print(f"Wrote it, the Account List, the Ledger and the GPO key to {out}")
 
 
 if __name__ == "__main__":

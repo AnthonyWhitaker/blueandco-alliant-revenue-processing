@@ -36,23 +36,56 @@ from .constants import (
     EXC_EXTRACTION_NOT_FOUND, EXC_ALLOCATION_INCOMPLETE,
     EXC_MISSING_ENTITY_CODE, EXC_MANUAL_TOTAL,
     REVIEW_PENDING, JOB_TYPE_PIVOT_ALLOCATION,
+    IDENTITY_GPO_KEY, VOLUME_BLANK, ROW_KEY_EXCEPTION, MATCH_GPO_KEY,
+    EXC_KEY_VERIFICATION, EXC_GPO_ID_CORRECTED, EXC_DUPLICATE_ROWS, EXC_DUPLICATE_FILE,
+    EXC_RECONCILIATION, EXC_DROPPED_ROWS, EXC_TIMEFRAME_MISSING,
+)
+from .combine import (
+    SOURCE_FILE_COL, DuplicateFinder, SourceFile,
+    amount_totals, content_columns, read_files,
 )
 from .db import execute_upsert, execute_insert_ignore, get_last_insert_id
-from .file_reader import read_supplier_file
+from .file_reader import SOURCE_ROW_COL
+from .gpo_key import GpoKey
 from .member_matcher import MemberMatcher
 from .normalizer import parse_date, first_of_month, get_quarter_label, parse_deposit_amount_from_filename, parse_date_from_filename
 from .payment_resolver import resolve_payment_id
 from .pivot_extractor import extract_totals, ExtractionError
 from .allocation_engine import allocate, AllocationError
+from .reconciliation import (
+    InputTotals, Reconciliation, input_totals_from_json, input_totals_from_rows, reconcile,
+)
+
+
+def _is_blank(val) -> bool:
+    if val is None:
+        return True
+    if isinstance(val, str):
+        return not val.strip()
+    try:
+        return bool(pd.isna(val))
+    except (TypeError, ValueError):
+        return False
+
+
+def _text(val) -> str:
+    """Cell value as stripped text; blank/NaN cells become '' (not the string 'nan')."""
+    return "" if _is_blank(val) else str(val).strip()
 
 
 def _safe_float(val) -> Optional[float]:
-    if val is None:
+    if _is_blank(val):
         return None
     try:
-        return float(str(val).replace(",", "").strip())
+        f = float(str(val).replace(",", "").strip())
     except (ValueError, TypeError):
         return None
+    return None if f != f else f   # NaN
+
+
+def _safe_int(val) -> Optional[int]:
+    f = _safe_float(val)
+    return None if f is None else int(f)
 
 
 def _job_log(conn: object, job_id: int, exc_type: str, message: str, severity: str = "warning", row_id: Optional[int] = None) -> None:
@@ -86,9 +119,10 @@ def process_job(
         raise ValueError(f"Supplier profile {job['supplier_profile_id']} not found")
     supplier = dict(supplier)
 
-    file_path = job["file_path"]
-    if not file_path or not Path(file_path).exists():
-        raise FileNotFoundError(f"File not found: {file_path}")
+    files = _job_files(conn, job)
+    missing = [f.path for f in files if not f.path or not Path(f.path).exists()]
+    if missing:
+        raise FileNotFoundError(f"File not found: {', '.join(str(m) for m in missing)}")
 
     # Mark job as processing
     conn.execute(
@@ -99,9 +133,12 @@ def process_job(
 
     try:
         if supplier.get("job_type") == JOB_TYPE_PIVOT_ALLOCATION:
-            return _run_pivot_allocation_pipeline(conn, job, supplier, file_path, manual_payment_id)
-        return _run_pipeline(conn, job, supplier, file_path, manual_payment_id)
+            if len(files) > 1:
+                raise ValueError("Aggregate/pivot (Tier C) suppliers take one file per job.")
+            return _run_pivot_allocation_pipeline(conn, job, supplier, files[0].path, manual_payment_id)
+        return _run_pipeline(conn, job, supplier, files, manual_payment_id)
     except Exception as e:
+        conn.rollback()      # drop rows inserted before the failure
         conn.execute(
             "UPDATE revenue_job SET status = ?, error_message = ? WHERE id = ?",
             (STATUS_FAILED, str(e)[:2000], job_id),
@@ -111,38 +148,110 @@ def process_job(
         raise
 
 
+def _job_files(conn: object, job: dict) -> list[SourceFile]:
+    """The job's source files in upload order. Jobs created before multi-file upload have only revenue_job.file_path."""
+    rows = conn.execute(
+        "SELECT original_file_name, file_path FROM revenue_job_file WHERE job_id = ? ORDER BY id", (job["id"],)
+    ).fetchall()
+    if rows:
+        return [SourceFile(r["original_file_name"], r["file_path"]) for r in rows]
+    path = job.get("file_path")
+    return [SourceFile(job.get("original_file_name") or Path(path or "").name, path)]
+
+
+def _log_duplicate_files(conn: object, job_id: int) -> None:
+    rows = conn.execute(
+        "SELECT original_file_name, sha256 FROM revenue_job_file WHERE job_id = ? ORDER BY id", (job_id,)
+    ).fetchall()
+    first_by_hash: dict[str, str] = {}
+    for r in rows:
+        if r["sha256"] in first_by_hash:
+            _job_log(
+                conn, job_id, EXC_DUPLICATE_FILE,
+                f"{r['original_file_name']} is byte-for-byte identical to {first_by_hash[r['sha256']]}. "
+                f"Both were processed; every row in it is reported as a duplicate.",
+                "warning",
+            )
+        else:
+            first_by_hash[r["sha256"]] = r["original_file_name"]
+
+
+class _InputCounter:
+    """Input totals, added up file by file (InputTotals once every file is read)."""
+
+    _DETAIL_LIMIT = 1000
+
+    def __init__(self) -> None:
+        self.t = InputTotals(rows=0, volume=0.0, revenue=0.0, rows_per_file={}, dropped_detail=[])
+
+    def add(self, name: str, df: pd.DataFrame, dropped: pd.DataFrame) -> None:
+        t = self.t
+        volume, bad_volume = amount_totals(df, CANONICAL_SALES_AMOUNT)
+        revenue, bad_revenue = amount_totals(df, CANONICAL_FEE_AMOUNT)
+        t.rows += len(df)
+        t.volume += volume
+        t.revenue += revenue
+        t.unparseable_volume += bad_volume
+        t.unparseable_revenue += bad_revenue
+        t.rows_per_file[name] = t.rows_per_file.get(name, 0) + len(df)
+        if dropped.empty:
+            return
+        t.dropped_rows += len(dropped)
+        t.dropped_volume += amount_totals(dropped, CANONICAL_SALES_AMOUNT)[0]
+        t.dropped_revenue += amount_totals(dropped, CANONICAL_FEE_AMOUNT)[0]
+        room = self._DETAIL_LIMIT - len(t.dropped_detail)
+        t.dropped_detail.extend(
+            {"source_file": r.get(SOURCE_FILE_COL), "source_row": _safe_int(r.get(SOURCE_ROW_COL)),
+             "volume": _safe_float(r.get(CANONICAL_SALES_AMOUNT)), "revenue": _safe_float(r.get(CANONICAL_FEE_AMOUNT))}
+            for r in dropped.head(max(room, 0)).to_dict("records")
+        )
+
+
+_INSERT_ROW_SQL = """
+    INSERT INTO revenue_row (
+        job_id, row_number, raw_row_json,
+        jde_number, customer_name, process_date,
+        city, state, zip, address,
+        sales_amount, fee_amount, product_line, contract_number,
+        matched_member_id, match_method, match_score, match_geo_filter,
+        entity_code, account_id, account_name_db,
+        match_status, validation_status,
+        source_file, source_row, file_entity_code, exception_reason, duplicate_group
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+"""
+_INSERT_BATCH = 5000
+_RECORD_CHUNK = 50_000
+
+
+def _iter_records(df: pd.DataFrame):
+    """Rows as dicts, converted a slice at a time: the whole frame as dicts costs several times the frame."""
+    for start in range(0, len(df), _RECORD_CHUNK):
+        yield from df.iloc[start:start + _RECORD_CHUNK].to_dict("records")
+
+
 def _run_pipeline(
     conn: object,
     job: dict,
     supplier: dict,
-    file_path: str,
+    files: list[SourceFile],
     manual_payment_id: Optional[str],
 ) -> dict:
     job_id = job["id"]
     supplier_id = supplier["id"]
+    gpo_key_mode = supplier.get("identity_mode") == IDENTITY_GPO_KEY
+
+    _log_duplicate_files(conn, job_id)
+    if not (job.get("timeframe") or "").strip():
+        _job_log(conn, job_id, EXC_TIMEFRAME_MISSING,
+                 "No timeframe was entered for this run, so 'Pmt For (Time Frame)' is blank.", "warning")
 
     # ------------------------------------------------------------------
-    # Step 1: Read file
-    # ------------------------------------------------------------------
-    df, file_warnings = read_supplier_file(file_path, supplier, conn)
-    for w in file_warnings:
-        _job_log(conn, job_id, "file_warning", w, "info")
-
-    # Store confirmed column mapping in job record
-    col_mapping = {c: c for c in df.columns}
-    conn.execute(
-        "UPDATE revenue_job SET column_mapping_json = ?, row_count = ? WHERE id = ?",
-        (json.dumps(col_mapping), len(df), job_id),
-    )
-    conn.commit()
-
-    # ------------------------------------------------------------------
-    # Step 2: Resolve Payment ID
+    # Step 1: Resolve Payment ID
     # ------------------------------------------------------------------
     payment_id, deposit_amount, pid_source = resolve_payment_id(
         conn=conn,
         supplier_profile_id=supplier_id,
-        filename=job.get("original_file_name") or Path(file_path).name,
+        filename=files[0].name,
         payor_filter=supplier.get("payor_filter_name"),
         manual_payment_id=manual_payment_id or job.get("payment_id"),
     )
@@ -161,154 +270,244 @@ def _run_pipeline(
     conn.commit()
 
     # ------------------------------------------------------------------
-    # Step 3: Initialize MemberMatcher
+    # Step 2: Identity: GPO key verification, or MemberMatcher
     # ------------------------------------------------------------------
-    matcher = MemberMatcher(
-        conn=conn,
-        supplier_profile_id=supplier_id,
-        zip_state_threshold=supplier.get("fuzzy_zip_state_threshold", 75),
-        city_state_threshold=supplier.get("fuzzy_city_state_threshold", 75),
-        state_threshold=supplier.get("fuzzy_state_threshold", 80),
-        nationwide_threshold=supplier.get("fuzzy_nationwide_threshold", 85),
-    )
-    matcher.load()
-
-    # ------------------------------------------------------------------
-    # Step 4: Deduplicate customers, match each unique customer once
-    # ------------------------------------------------------------------
-    # Group by JDE number (or customer name if no JDE) to avoid redundant matching
-    if CANONICAL_JDE_NUMBER in df.columns:
-        jde_col = CANONICAL_JDE_NUMBER
+    matcher = None
+    gpo_key = None
+    members_by_code: dict[str, dict] = {}
+    if gpo_key_mode:
+        gpo_key = GpoKey.from_db(conn, supplier_id)
+        if not len(gpo_key):
+            _job_log(
+                conn, job_id, EXC_KEY_VERIFICATION,
+                f"No GPO key is loaded for {supplier['name']}, so no row could be verified. "
+                f"Load the key (Admin > Suppliers) and upload the file again.",
+                "error",
+            )
+        # Only to fill in the Salesforce Account ID / name of a verified GPO ID; never for identity.
+        for m in conn.execute(
+            "SELECT id, entity_code, account_id, name FROM member WHERE is_active = 1 AND entity_code IS NOT NULL"
+        ).fetchall():
+            members_by_code.setdefault(str(m["entity_code"]).strip().upper(), dict(m))
     else:
-        jde_col = None
+        matcher = MemberMatcher(
+            conn=conn,
+            supplier_profile_id=supplier_id,
+            zip_state_threshold=supplier.get("fuzzy_zip_state_threshold", 75),
+            city_state_threshold=supplier.get("fuzzy_city_state_threshold", 75),
+            state_threshold=supplier.get("fuzzy_state_threshold", 80),
+            nationwide_threshold=supplier.get("fuzzy_nationwide_threshold", 85),
+        )
+        matcher.load()
 
-    # Build unique customer list for matching
-    group_cols = []
-    if jde_col:
-        group_cols.append(jde_col)
-    group_cols.append(CANONICAL_CUSTOMER_NAME)
+    # Cache: jde_or_name → MatchResult / (account, name, address, zip) → Verification
+    match_cache: dict[object, object] = {}
+    jde_col: Optional[str] = None      # set per file
 
-    # Cache: jde_or_name → MatchResult
-    match_cache: dict[str, object] = {}
-
-    def get_cache_key(row_series) -> str:
-        if jde_col and pd.notna(row_series.get(jde_col)):
-            return f"jde:{row_series[jde_col]}"
-        aid = row_series.get(CANONICAL_ACCOUNT_ID_HINT)
+    def get_cache_key(row) -> str:
+        if jde_col and pd.notna(row.get(jde_col)):
+            return f"jde:{row[jde_col]}"
+        aid = row.get(CANONICAL_ACCOUNT_ID_HINT)
         if pd.notna(aid) and str(aid).strip():
             return f"aid:{aid}"
-        ec = row_series.get(CANONICAL_ENTITY_CODE_HINT)
+        ec = row.get(CANONICAL_ENTITY_CODE_HINT)
         if pd.notna(ec) and str(ec).strip():
             # Some supplier files (e.g. Bon Secours) reuse the same entity
             # code across multiple distinct facility names, so the hint
             # alone is not a safe cache key on its own — fold in name/state
             # too, otherwise the first row's (possibly unmatched) fuzzy
             # result gets wrongly reused for every other name sharing the code.
-            name = row_series.get(CANONICAL_CUSTOMER_NAME, "")
-            state = row_series.get(CANONICAL_STATE, "")
+            name = row.get(CANONICAL_CUSTOMER_NAME, "")
+            state = row.get(CANONICAL_STATE, "")
             return f"ec:{ec}|{name}|{state}"
-        return f"name:{row_series.get(CANONICAL_CUSTOMER_NAME, '')}"
+        return f"name:{row.get(CANONICAL_CUSTOMER_NAME, '')}"
 
     # ------------------------------------------------------------------
-    # Step 5: Process each row
+    # Step 3: Read the files one at a time; process each row (inserted in
+    # batches). Nothing is committed until every file is in, so a file
+    # that fails leaves no partial job behind.
     # ------------------------------------------------------------------
-    row_ids: list[int] = []
     matched_count = 0
     unmatched_count = 0
+    key_exception_count = 0
+    corrected_gpo_ids: dict[tuple[str, str], int] = {}
+    date_start: Optional[str] = None
+    date_end: Optional[str] = None
+    batch: list[tuple] = []
+    counter = _InputCounter()
+    duplicates = DuplicateFinder()
+    col_mapping: dict[str, str] = {}
+    filename_date = parse_date_from_filename(files[0].name)
+    # parse_date is slow per call (pandas) and a month has few distinct dates.
+    date_cache: dict[str, Optional[str]] = {}
 
-    # Parse dates from process_date column
-    dates_seen: list[str] = []
+    def row_date(value) -> Optional[str]:
+        if _is_blank(value):
+            return filename_date
+        key = str(value)
+        if key not in date_cache:
+            date_cache[key] = parse_date(value)
+        return date_cache[key] or filename_date
 
-    for row_num, (_, row) in enumerate(df.iterrows(), start=1):
-        # Parse canonical values
-        jde_num   = str(row.get(CANONICAL_JDE_NUMBER, "") or "").strip() if jde_col else None
-        cust_name = str(row.get(CANONICAL_CUSTOMER_NAME, "") or "").strip()
-        entity_code_hint = str(row.get(CANONICAL_ENTITY_CODE_HINT, "") or "").strip() or None
-        account_id_hint  = str(row.get(CANONICAL_ACCOUNT_ID_HINT, "") or "").strip() or None
-        if not cust_name:
-            # Fall back to the identity hint for display purposes (review UI, logs)
-            cust_name = entity_code_hint or account_id_hint or ""
-        proc_date = parse_date(row.get(CANONICAL_PROCESS_DATE))
-        if not proc_date:
-            proc_date = parse_date_from_filename(
-                job.get("original_file_name") or ""
+    def flush() -> None:
+        if batch:
+            conn.executemany(_INSERT_ROW_SQL, batch)
+            batch.clear()
+
+    row_num = 0
+    for file_index, (source, result) in enumerate(read_files(files, supplier, conn)):
+        df = result.df
+        prefix = f"{source.name}: " if len(files) > 1 else ""
+        for w in result.warnings:
+            _job_log(conn, job_id, "file_warning", prefix + w, "info")
+        counter.add(source.name, df, result.dropped)
+        duplicates.add(df, file_index)
+        raw_cols = content_columns(df)
+        col_mapping.update((c, c) for c in raw_cols if c != SOURCE_ROW_COL)
+        jde_col = CANONICAL_JDE_NUMBER if CANONICAL_JDE_NUMBER in df.columns else None
+
+        for row in _iter_records(df):
+            row_num += 1
+            # Parse canonical values
+            jde_num   = _text(row.get(CANONICAL_JDE_NUMBER)) if jde_col else None
+            cust_name = _text(row.get(CANONICAL_CUSTOMER_NAME))
+            entity_code_hint = _text(row.get(CANONICAL_ENTITY_CODE_HINT)) or None
+            account_id_hint  = _text(row.get(CANONICAL_ACCOUNT_ID_HINT)) or None
+            if not cust_name:
+                # Fall back to the identity hint for display purposes (review UI, logs)
+                cust_name = entity_code_hint or account_id_hint or ""
+            proc_date = row_date(row.get(CANONICAL_PROCESS_DATE))
+            city      = _text(row.get(CANONICAL_CITY))
+            state     = _text(row.get(CANONICAL_STATE))
+            zip_code  = _text(row.get(CANONICAL_ZIP))
+            address   = _text(row.get(CANONICAL_ADDRESS))
+            sales_amt = _safe_float(row.get(CANONICAL_SALES_AMOUNT))
+            fee_amt   = _safe_float(row.get(CANONICAL_FEE_AMOUNT))
+            product   = _text(row.get(CANONICAL_PRODUCT_LINE))
+            contract  = _text(row.get(CANONICAL_CONTRACT_NUMBER))
+
+            if proc_date:
+                if date_start is None or proc_date < date_start:
+                    date_start = proc_date
+                if date_end is None or proc_date > date_end:
+                    date_end = proc_date
+
+            exception_reason = None
+            if gpo_key_mode:
+                vkey = (jde_num, cust_name, address, zip_code)
+                verification = match_cache.get(vkey)
+                if verification is None:
+                    verification = gpo_key.verify(jde_num, cust_name, address, zip_code)
+                    match_cache[vkey] = verification
+                if verification.verified:
+                    gpo_id = verification.gpo_id
+                    member = members_by_code.get(gpo_id.strip().upper(), {})
+                    ident = (member.get("id"), MATCH_GPO_KEY, 100, None, gpo_id, member.get("account_id"),
+                             member.get("name"))
+                    row_status, validation = ROW_MATCHED, "valid"
+                    matched_count += 1
+                    if entity_code_hint and entity_code_hint.strip().upper() != gpo_id.strip().upper():
+                        pair = (entity_code_hint, gpo_id)
+                        corrected_gpo_ids[pair] = corrected_gpo_ids.get(pair, 0) + 1
+                else:
+                    ident = (None, MATCH_UNMATCHED, None, None, None, None, None)
+                    row_status, validation = ROW_KEY_EXCEPTION, "invalid"
+                    exception_reason = verification.reason
+                    key_exception_count += 1
+            else:
+                # Run match (from cache if same JDE/name already matched)
+                cache_key = get_cache_key(row)
+                match = match_cache.get(cache_key)
+                if match is None:
+                    match = matcher.match(
+                        customer_name=cust_name,
+                        jde_number=jde_num,
+                        city=city,
+                        state=state,
+                        zip_code=zip_code,
+                        entity_code_hint=entity_code_hint,
+                        account_id_hint=account_id_hint,
+                    )
+                    match_cache[cache_key] = match
+                    # Persist JDE history for successful matches
+                    if match.matched and jde_num:
+                        matcher.record_jde_match(jde_num, match.member_id, job_id)
+                ident = (match.member_id, match.match_method, match.match_score, match.geo_filter,
+                         match.entity_code, match.account_id, match.account_name)
+                if match.matched:
+                    row_status = ROW_ALIAS_MATCHED if match.match_method == MATCH_ALIAS else ROW_MATCHED
+                    validation = "valid"
+                    matched_count += 1
+                else:
+                    row_status, validation = ROW_UNMATCHED, "pending"
+                    unmatched_count += 1
+
+            # Persist raw row as JSON (all original columns)
+            raw_json = json.dumps(
+                {c: (None if _is_blank(row.get(c)) else str(row.get(c))) for c in raw_cols},
+                default=str,
             )
-        city      = str(row.get(CANONICAL_CITY, "") or "").strip()
-        state     = str(row.get(CANONICAL_STATE, "") or "").strip()
-        zip_code  = str(row.get(CANONICAL_ZIP, "") or "").strip()
-        address   = str(row.get(CANONICAL_ADDRESS, "") or "").strip()
-        sales_amt = _safe_float(row.get(CANONICAL_SALES_AMOUNT))
-        fee_amt   = _safe_float(row.get(CANONICAL_FEE_AMOUNT))
-        product   = str(row.get(CANONICAL_PRODUCT_LINE, "") or "").strip()
-        contract  = str(row.get(CANONICAL_CONTRACT_NUMBER, "") or "").strip()
-
-        if proc_date:
-            dates_seen.append(proc_date)
-
-        # Run match (from cache if same JDE/name already matched)
-        cache_key = get_cache_key(row)
-        if cache_key not in match_cache:
-            result = matcher.match(
-                customer_name=cust_name,
-                jde_number=jde_num,
-                city=city,
-                state=state,
-                zip_code=zip_code,
-                entity_code_hint=entity_code_hint,
-                account_id_hint=account_id_hint,
-            )
-            match_cache[cache_key] = result
-            # Persist JDE history for successful matches
-            if result.matched and jde_num:
-                matcher.record_jde_match(jde_num, result.member_id, job_id)
-        else:
-            result = match_cache[cache_key]
-
-        # Determine row status
-        if result.matched:
-            row_status = ROW_ALIAS_MATCHED if result.match_method == MATCH_ALIAS else ROW_MATCHED
-            matched_count += 1
-        else:
-            row_status = ROW_UNMATCHED
-            unmatched_count += 1
-
-        # Persist raw row as JSON (all columns)
-        raw_json = json.dumps(
-            {c: (None if pd.isna(v) else str(v)) for c, v in row.items()},
-            default=str,
-        )
-
-        cursor = conn.execute(
-            """
-            INSERT INTO revenue_row (
-                job_id, row_number, raw_row_json,
-                jde_number, customer_name, process_date,
-                city, state, zip, address,
-                sales_amount, fee_amount, product_line, contract_number,
-                matched_member_id, match_method, match_score, match_geo_filter,
-                entity_code, account_id, account_name_db,
-                match_status, validation_status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
+            batch.append((
                 job_id, row_num, raw_json,
                 jde_num or None, cust_name or None, proc_date,
                 city or None, state or None, zip_code or None, address or None,
                 sales_amt, fee_amt, product or None, contract or None,
-                result.member_id, result.match_method, result.match_score,
-                result.geo_filter,
-                result.entity_code, result.account_id, result.account_name,
-                row_status, "valid" if result.matched else "pending",
-            ),
-        )
-        row_ids.append(get_last_insert_id(conn, cursor))
+                *ident,
+                row_status, validation,
+                row.get(SOURCE_FILE_COL), _safe_int(row.get(SOURCE_ROW_COL)), entity_code_hint,
+                exception_reason, None,      # duplicate_group: set below, once every file is read
+            ))
+            if len(batch) >= _INSERT_BATCH:
+                flush()
+        del df, result
 
+    flush()
+    input_totals = counter.t
+    dup = duplicates.result()
+    if dup.row_count:
+        conn.executemany(
+            "UPDATE revenue_row SET duplicate_group = ? WHERE job_id = ? AND row_number = ?",
+            [(int(g), job_id, i + 1) for i, g in enumerate(dup.groups) if g],
+        )
+    for name, n in input_totals.rows_per_file.items():
+        conn.execute("UPDATE revenue_job_file SET row_count = ? WHERE job_id = ? AND original_file_name = ?",
+                     (n, job_id, name))
+    # Store confirmed column mapping in job record
+    conn.execute(
+        "UPDATE revenue_job SET column_mapping_json = ?, row_count = ? WHERE id = ?",
+        (json.dumps(col_mapping), input_totals.rows, job_id),
+    )
     conn.commit()
+
+    if input_totals.dropped_rows:
+        _job_log(
+            conn, job_id, EXC_DROPPED_ROWS,
+            f"{input_totals.dropped_rows} summary/total row(s) left out of the input "
+            f"(blank '{supplier.get('skip_rows_where_col_null')}'): volume {input_totals.dropped_volume:,.2f}, "
+            f"revenue {input_totals.dropped_revenue:,.2f}. Listed on the exceptions report.",
+            "info",
+        )
+    for label, n in (("volume", input_totals.unparseable_volume), ("revenue", input_totals.unparseable_revenue)):
+        if n:
+            _job_log(conn, job_id, "file_warning",
+                     f"{n} row(s) have a {label} value that isn't a number; it counts as 0.", "warning")
+    if dup.group_count:
+        _job_log(
+            conn, job_id, EXC_DUPLICATE_ROWS,
+            f"{dup.row_count} rows fall into {dup.group_count} group(s) of identical rows"
+            f" ({dup.cross_file_groups} spanning more than one file). They were kept and are counted;"
+            f" check the Duplicates tab of the exceptions report.",
+            "warning" if dup.cross_file_groups else "info",
+        )
+
+    if gpo_key_mode:
+        _log_key_results(conn, job_id, key_exception_count, corrected_gpo_ids)
 
     # ------------------------------------------------------------------
     # Step 6: Build review items for unmatched customers
     # ------------------------------------------------------------------
-    _build_review_items(conn, job_id, supplier_id, matcher)
+    if matcher is not None:
+        _build_review_items(conn, job_id, supplier_id, matcher)
 
     # ------------------------------------------------------------------
     # Step 7: Aggregate matched rows → revenue_output_row
@@ -316,7 +515,7 @@ def _run_pipeline(
     total_revenue, total_volume = _aggregate_output(conn, job_id, job, supplier, payment_id)
 
     # ------------------------------------------------------------------
-    # Step 8: Revenue reconciliation check
+    # Step 8: Reconciliation checks
     # ------------------------------------------------------------------
     if deposit_amount and total_revenue:
         diff = abs(total_revenue - deposit_amount)
@@ -327,13 +526,16 @@ def _run_pipeline(
                 f"deposit amount ${deposit_amount:.2f} by ${diff:.2f}.",
                 "warning",
             )
+    reconciliation = _check_totals(conn, job_id, supplier, input_totals)
 
     # ------------------------------------------------------------------
     # Step 9: Finalize job status
     # ------------------------------------------------------------------
-    final_status = STATUS_NEEDS_REVIEW if unmatched_count > 0 else STATUS_COMPLETED
-    date_start = min(dates_seen) if dates_seen else None
-    date_end   = max(dates_seen) if dates_seen else None
+    final_status = (
+        STATUS_NEEDS_REVIEW
+        if unmatched_count or key_exception_count or dup.cross_file_groups or not reconciliation.balanced
+        else STATUS_COMPLETED
+    )
 
     conn.execute(
         """
@@ -356,15 +558,64 @@ def _run_pipeline(
     return {
         "job_id":           job_id,
         "status":           final_status,
-        "row_count":        len(df),
+        "row_count":        input_totals.rows,
         "matched_count":    matched_count,
         "unmatched_count":  unmatched_count,
+        "key_exception_count": key_exception_count,
+        "duplicate_rows":   dup.row_count,
+        "cross_file_duplicate_groups": dup.cross_file_groups,
         "total_volume":     total_volume,
         "total_revenue":    total_revenue,
         "deposit_amount":   deposit_amount,
         "payment_id":       payment_id,
         "payment_id_source": pid_source,
+        "reconciliation":   reconciliation,
     }
+
+
+def _log_key_results(
+    conn: object, job_id: int, exception_count: int, corrected: dict[tuple[str, str], int],
+) -> None:
+    if exception_count:
+        rows = conn.execute(
+            """
+            SELECT exception_reason, COUNT(*) AS n, SUM(sales_amount) AS vol, SUM(fee_amount) AS rev
+            FROM revenue_row WHERE job_id = ? AND match_status = ?
+            GROUP BY exception_reason ORDER BY exception_reason
+            """,
+            (job_id, ROW_KEY_EXCEPTION),
+        ).fetchall()
+        detail = "; ".join(
+            f"{r['exception_reason']}: {r['n']} row(s), volume {r['vol'] or 0:,.2f}, revenue {r['rev'] or 0:,.2f}"
+            for r in rows
+        )
+        _job_log(
+            conn, job_id, EXC_KEY_VERIFICATION,
+            f"{exception_count} row(s) could not be verified against the GPO key and are not in the output. "
+            f"They are on the exceptions report. {detail}.",
+            "warning",
+        )
+    if corrected:
+        n = sum(corrected.values())
+        pairs = ", ".join(f"{old} -> {new}" for (old, new) in sorted(corrected)[:20])
+        more = "" if len(corrected) <= 20 else f" and {len(corrected) - 20} more"
+        _job_log(conn, job_id, EXC_GPO_ID_CORRECTED,
+                 f"{n} row(s) had a GPO ID in the file that differs from the key and now use the key's: "
+                 f"{pairs}{more}.", "info")
+    conn.commit()
+
+
+def _check_totals(conn: object, job_id: int, supplier: dict, input_totals: InputTotals) -> Reconciliation:
+    """Run the input = output + exceptions check, store it on the job, and log the result."""
+    result = reconcile(conn, job_id, supplier.get("volume_mode"), input_totals)
+    conn.execute("UPDATE revenue_job SET reconciliation_json = ? WHERE id = ?", (result.to_json(), job_id))
+    _job_log(
+        conn, job_id, EXC_RECONCILIATION,
+        ("Totals reconcile: " if result.balanced else "Totals DO NOT reconcile: ") + result.summary() + ".",
+        "info" if result.balanced else "error",
+    )
+    conn.commit()
+    return result
 
 
 def _run_pivot_allocation_pipeline(
@@ -510,13 +761,16 @@ def _run_pivot_allocation_pipeline(
                 f"deposit amount ${deposit_amount:.2f} by ${diff:.2f}.",
                 "warning",
             )
+    # Input here is the allocated rows themselves; this guards the aggregation step.
+    reconciliation = _check_totals(conn, job_id, supplier, input_totals_from_rows(conn, job_id))
 
     # ------------------------------------------------------------------
     # Step 7: Finalize job status
     # ------------------------------------------------------------------
     has_open_exceptions = bool(extraction.warnings or extraction.manual_entry_rules or alloc_warnings)
     needs_confirmation = bool(supplier.get("requires_manual_confirmation"))
-    final_status = STATUS_NEEDS_REVIEW if (has_open_exceptions or needs_confirmation) else STATUS_COMPLETED
+    final_status = (STATUS_NEEDS_REVIEW if (has_open_exceptions or needs_confirmation or not reconciliation.balanced)
+                    else STATUS_COMPLETED)
 
     conn.execute(
         """
@@ -662,12 +916,13 @@ def _aggregate_output(
         g["total_revenue"] += r["total_revenue"] or 0.0
 
     default_contract_id = job.get("contract_id") or supplier.get("contract_id")
+    volume_blank = supplier.get("volume_mode") == VOLUME_BLANK
     revenue_type = supplier.get("revenue_type", "Admin Fee")
     keep_return  = supplier.get("keep_return_default", "Keep")
     date_received = job.get("date_received")
 
     total_revenue = 0.0
-    total_volume  = 0.0
+    total_volume: Optional[float] = None if volume_blank else 0.0
 
     for r in groups.values():
         earned_period = first_of_month(r["process_date"])
@@ -675,7 +930,10 @@ def _aggregate_output(
         rev = r["total_revenue"] or 0.0
         vol = r["volume"] or 0.0
         total_revenue += rev
-        total_volume  += vol
+        if volume_blank:
+            vol = None
+        else:
+            total_volume += vol
         row_contract_id = r["contract_number"] or default_contract_id
 
         pec = r["entity_code"]
@@ -716,6 +974,25 @@ def _aggregate_output(
 
     conn.commit()
     return total_revenue, total_volume
+
+
+def _has_flagged_rows(conn: object, job_id: int) -> bool:
+    """Rows not verified against the GPO key, or identical rows found in more than one file."""
+    if conn.execute(
+        "SELECT COUNT(*) FROM revenue_row WHERE job_id = ? AND match_status = ?", (job_id, ROW_KEY_EXCEPTION),
+    ).fetchone()[0]:
+        return True
+    cross_file = conn.execute(
+        """
+        SELECT COUNT(*) FROM (
+            SELECT duplicate_group FROM revenue_row
+            WHERE job_id = ? AND duplicate_group IS NOT NULL
+            GROUP BY duplicate_group HAVING COUNT(DISTINCT source_file) > 1
+        ) g
+        """,
+        (job_id,),
+    ).fetchone()[0]
+    return bool(cross_file)
 
 
 def apply_review_decision(
@@ -870,13 +1147,18 @@ def apply_review_decision(
     ).fetchone()
     payment_id = dict(job_row).get("payment_id")
     total_revenue, total_volume = _aggregate_output(conn, job_id, dict(job_row), dict(supplier_row), payment_id)
+    input_totals = (input_totals_from_json(dict(job_row).get("reconciliation_json"))
+                    or input_totals_from_rows(conn, job_id))
+    reconciliation = _check_totals(conn, job_id, dict(supplier_row), input_totals)
 
-    # Update job stats
+    # Update job stats. Anything else that flagged the job (rows not verified
+    # against the GPO key, duplicates across files) still needs a sign-off.
     still_unmatched = conn.execute(
         "SELECT COUNT(*) FROM revenue_row WHERE job_id = ? AND match_status = 'unmatched'",
         (job_id,),
     ).fetchone()[0]
-    new_status = STATUS_COMPLETED if still_unmatched == 0 else STATUS_NEEDS_REVIEW
+    flagged = still_unmatched or not reconciliation.balanced or _has_flagged_rows(conn, job_id)
+    new_status = STATUS_NEEDS_REVIEW if flagged else STATUS_COMPLETED
     conn.execute(
         "UPDATE revenue_job SET status = ?, unmatched_count = ?, total_revenue = ?, total_volume = ? WHERE id = ?",
         (new_status, still_unmatched, total_revenue, total_volume, job_id),

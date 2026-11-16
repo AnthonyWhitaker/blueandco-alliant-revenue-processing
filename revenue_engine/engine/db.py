@@ -111,6 +111,13 @@ class DictConnection:
             cursor.execute(sql)
         return DictCursor(cursor)
 
+    def executemany(self, sql, seq_of_params):
+        cursor = self._conn.cursor()
+        # Sends the batch as one parameter array instead of a round trip per row.
+        cursor.fast_executemany = True
+        cursor.executemany(sql, seq_of_params)
+        return DictCursor(cursor)
+
     def commit(self):
         self._conn.commit()
 
@@ -184,6 +191,18 @@ def init_db(db_path: Optional[str] = None):
     _safe_add_column(conn, "supplier_profile", "requires_manual_confirmation", "INTEGER NOT NULL DEFAULT 0")
     _safe_add_column(conn, "supplier_profile", "fee_rate", "REAL")
     _safe_add_column(conn, "revenue_job", "manual_totals_json", "NVARCHAR(MAX)" if is_mssql() else "TEXT")
+    text, long_text = ("NVARCHAR(500)", "NVARCHAR(MAX)") if is_mssql() else ("TEXT", "TEXT")
+    _safe_add_column(conn, "supplier_profile", "identity_mode", f"{text} NOT NULL DEFAULT 'member_match'")
+    _safe_add_column(conn, "supplier_profile", "volume_mode", f"{text} NOT NULL DEFAULT 'sum'")
+    _safe_add_column(conn, "revenue_job", "timeframe", text)
+    _safe_add_column(conn, "revenue_job", "reconciliation_json", long_text)
+    _safe_add_column(conn, "revenue_row", "source_file", long_text)
+    _safe_add_column(conn, "revenue_row", "source_row", "INTEGER" if not is_mssql() else "INT")
+    _safe_add_column(conn, "revenue_row", "file_entity_code", text)
+    _safe_add_column(conn, "revenue_row", "exception_reason", text)
+    _safe_add_column(conn, "revenue_row", "duplicate_group", "INTEGER" if not is_mssql() else "INT")
+    _safe_add_column(conn, "gpo_key_entry", "zip", text)
+    _safe_add_column(conn, "gpo_key_entry", "zip_norm", text)
 
     return conn
 
