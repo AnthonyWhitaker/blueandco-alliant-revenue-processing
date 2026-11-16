@@ -10,7 +10,7 @@ from fastapi import APIRouter, File, Form, Query, Request, Response, UploadFile,
 from core import jobs, reviews
 from core.errors import InvalidInputError
 from models.enums import JobStatus
-from models.jobs import FileNameInference, Job, JobException, JobPatch, JobPreview
+from models.jobs import FileNameInference, Job, JobException, JobFile, JobOutput, JobPatch, JobPreview
 from models.reviews import ReviewApproval, ReviewDecisionResult, ReviewItem
 
 from ..deps import Conn, Runner, read_upload
@@ -33,27 +33,35 @@ def list_jobs(
 
 @router.post(
     "/jobs", responses=problems(404, 413), response_model=Job, status_code=status.HTTP_202_ACCEPTED,
-    summary="Upload a supplier file and start processing",
-    description="Returns immediately with the job in 'uploaded' status. Poll GET /jobs/{job_id} "
-                "until status is completed, needs_review, or failed.",
+    summary="Upload one or more supplier files for one month and start processing",
+    description="Several files are combined into one job before processing. Returns immediately with the "
+                "job in 'uploaded' status. Poll GET /jobs/{job_id} until status is completed, needs_review, "
+                "or failed.",
 )
 def create_job(
     request: Request,
     response: Response,
     conn: Conn,
     runner: Runner,
-    file: Annotated[UploadFile, File(description="Supplier remittance file (.xlsx, .xls, .xlsm, .csv)")],
+    files: Annotated[list[UploadFile], File(
+        description="Supplier remittance file(s) (.xlsx, .xls, .xlsm, .csv) for the same supplier and month. "
+                    "Tier C suppliers take exactly one.",
+    )],
     supplier_profile_id: Annotated[int, Form()],
     date_received: Annotated[date, Form()],
+    timeframe: Annotated[Optional[str], Form(
+        description='Written to "Pmt For (Time Frame)" on every Upload row: the quarter the payment represents. '
+                    "Format XQYY: quarter and 2-digit year, e.g. 1Q26.",
+    )] = None,
     manual_payment_id: Annotated[Optional[str], Form()] = None,
     manual_totals: Annotated[Optional[str], Form(
         description='Tier C only. JSON object of confirmed totals by manual_entry rule name, e.g. '
                     '{"Total Rebate": 1234.5}. Required when the supplier has manual_entry rules.',
     )] = None,
 ) -> Job:
-    content = read_upload(request, file)
-    job = jobs.create_job(conn, supplier_profile_id, file.filename or "upload", content, date_received,
-                          _parse_manual_totals(manual_totals))
+    uploads = [(f.filename or "upload", read_upload(request, f)) for f in files]
+    job = jobs.create_job(conn, supplier_profile_id, uploads, date_received,
+                          _parse_manual_totals(manual_totals), timeframe)
     runner.submit_job(job.id, (manual_payment_id or "").strip() or None)
     response.headers["Location"] = f"/api/jobs/{job.id}"
     return job
@@ -105,13 +113,34 @@ def preview(conn: Conn, job_id: int) -> JobPreview:
     return jobs.get_preview(conn, job_id)
 
 
+@router.get("/jobs/{job_id}/files", responses=problems(404), response_model=list[JobFile],
+            summary="The source files combined in this job")
+def list_files(conn: Conn, job_id: int) -> list[JobFile]:
+    return jobs.list_job_files(conn, job_id)
+
+
+@router.get("/jobs/{job_id}/outputs", responses=problems(404), response_model=list[JobOutput],
+            summary="Stored output files of the job, newest first")
+def list_outputs(conn: Conn, job_id: int) -> list[JobOutput]:
+    return jobs.list_outputs(conn, job_id)
+
+
+@router.post("/jobs/{job_id}/outputs", responses=problems(404, 409), response_model=list[JobOutput],
+             status_code=status.HTTP_201_CREATED,
+             summary="Write a new version of the processed and exceptions workbooks",
+             description="Files are timestamped and never overwrite an earlier version. Processing writes the "
+                         "first version; generate another after review decisions or sign-off.")
+def create_outputs(conn: Conn, job_id: int) -> list[JobOutput]:
+    return jobs.create_outputs(conn, job_id)
+
+
 @router.get(
-    "/jobs/{job_id}/export", response_class=Response, summary="Download the Salesforce workbook",
+    "/jobs/{job_id}/outputs/{output_id}/content", response_class=Response, summary="Download a stored output file",
     responses={200: {"content": {XLSX: {"schema": {"type": "string", "format": "binary"}}},
-                     "description": "4-tab XLSX"}, **problems(404, 409)},
+                     "description": "XLSX"}, **problems(404)},
 )
-def export(conn: Conn, job_id: int) -> Response:
-    file_name, content = jobs.build_export(conn, job_id)
+def download_output(conn: Conn, job_id: int, output_id: int) -> Response:
+    file_name, content = jobs.read_output(conn, job_id, output_id)
     return Response(
         content, media_type=XLSX,
         headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(file_name)}"},

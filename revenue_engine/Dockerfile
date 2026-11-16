@@ -42,10 +42,10 @@ RUN apt-get update && \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Non-root runtime user (FINDINGS F6). data/ holds the local SQLite DB and
-# uploads when AZURE_SQL_CONNECTION_STRING isn't set, so it must be writable.
+# Non-root runtime user (FINDINGS F6). data/ holds uploads, output workbooks
+# and (when AZURE_SQL_CONNECTION_STRING isn't set) the SQLite DB, so it must be writable.
 RUN useradd --create-home --uid 10001 --shell /usr/sbin/nologin app && \
-    mkdir -p /app/data/uploads && chown -R app:app /app/data
+    mkdir -p /app/data/uploads /app/data/outputs && chown -R app:app /app/data
 
 COPY --chown=app:app . .
 COPY --from=frontend --chown=app:app /frontend/dist ./frontend/dist

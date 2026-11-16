@@ -7,8 +7,8 @@ from pydantic import Field
 
 from .common import ApiModel, InputModel
 from .enums import (
-    AliasScope, AllocationType, CanonicalField, ExtractionMethod, JobType,
-    LabelMatchMode, RangeAxis, SupplierPaymentIdSource, TaskKind, TaskStatus,
+    AliasScope, AllocationType, CanonicalField, ExtractionMethod, IdentityMode, JobType,
+    LabelMatchMode, RangeAxis, SupplierPaymentIdSource, TaskKind, TaskStatus, VolumeMode,
 )
 from .members import LedgerImportResult, MemberImportResult
 
@@ -49,6 +49,8 @@ class Meta(ApiModel):
     keep_return_options: list[str]
     payment_id_sources: list[SupplierPaymentIdSource]
     job_types: list[JobType]
+    identity_modes: list[IdentityMode]
+    volume_modes: list[VolumeMode]
     extraction_methods: list[ExtractionMethod]
     label_match_modes: list[LabelMatchMode]
     range_axes: list[RangeAxis]

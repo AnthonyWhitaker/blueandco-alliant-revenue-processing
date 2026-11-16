@@ -37,6 +37,8 @@ BEGIN
         --                        pre-known facilities (supplier_allocation_rule) instead of matching
         job_type                    NVARCHAR(50) NOT NULL DEFAULT 'row_level',
         requires_manual_confirmation INT NOT NULL DEFAULT 0,
+        identity_mode               NVARCHAR(50) NOT NULL DEFAULT 'member_match',
+        volume_mode                 NVARCHAR(50) NOT NULL DEFAULT 'sum',
         created_at                  DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
         updated_at                  DATETIME2 NOT NULL DEFAULT GETUTCDATE()
     );
@@ -242,10 +244,60 @@ BEGIN
         error_message           NVARCHAR(MAX),
         column_mapping_json     NVARCHAR(MAX),
         manual_totals_json      NVARCHAR(MAX),  -- Tier C: {rule_name: amount} for manual_entry rules
+        timeframe               NVARCHAR(500),
+        reconciliation_json     NVARCHAR(MAX),
         created_at              DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
         completed_at            DATETIME2
     );
 END
+GO
+
+-- ---------------------------------------------------------------------------
+-- REVENUE JOB FILE (source files of a job; see schema.sql)
+-- ---------------------------------------------------------------------------
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'revenue_job_file')
+BEGIN
+    CREATE TABLE revenue_job_file (
+        id                      INT IDENTITY(1,1) PRIMARY KEY,
+        job_id                  INT NOT NULL REFERENCES revenue_job(id) ON DELETE CASCADE,
+        original_file_name      NVARCHAR(MAX) NOT NULL,
+        file_path               NVARCHAR(MAX) NOT NULL,
+        sha256                  NVARCHAR(64) NOT NULL,
+        row_count               INT,
+        created_at              DATETIME2 NOT NULL DEFAULT GETUTCDATE()
+    );
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_job_file_job')
+    CREATE INDEX ix_job_file_job ON revenue_job_file(job_id);
+GO
+
+-- ---------------------------------------------------------------------------
+-- GPO KEY ENTRY (supplier key of correct GPO IDs; see schema.sql)
+-- ---------------------------------------------------------------------------
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'gpo_key_entry')
+BEGIN
+    CREATE TABLE gpo_key_entry (
+        id                      INT IDENTITY(1,1) PRIMARY KEY,
+        supplier_profile_id     INT NOT NULL REFERENCES supplier_profile(id) ON DELETE CASCADE,
+        account_number          NVARCHAR(500) NOT NULL,
+        account_name            NVARCHAR(MAX),
+        address                 NVARCHAR(MAX),
+        zip                     NVARCHAR(50),
+        gpo_id                  NVARCHAR(500),
+        account_number_norm     NVARCHAR(500) NOT NULL,
+        account_name_norm       NVARCHAR(MAX),
+        address_norm            NVARCHAR(MAX),
+        zip_norm                NVARCHAR(50),
+        source_file_name        NVARCHAR(MAX),
+        loaded_at               DATETIME2 NOT NULL DEFAULT GETUTCDATE()
+    );
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_gpo_key_lookup')
+    CREATE INDEX ix_gpo_key_lookup ON gpo_key_entry(supplier_profile_id, account_number_norm);
 GO
 
 -- ---------------------------------------------------------------------------
@@ -278,6 +330,11 @@ BEGIN
         account_name_db         NVARCHAR(MAX),
         match_status            NVARCHAR(500) NOT NULL DEFAULT 'pending',
         validation_status       NVARCHAR(500) NOT NULL DEFAULT 'pending',
+        source_file             NVARCHAR(MAX),
+        source_row              INT,
+        file_entity_code        NVARCHAR(500),
+        exception_reason        NVARCHAR(500),
+        duplicate_group         INT,
         created_at              DATETIME2 NOT NULL DEFAULT GETUTCDATE()
     );
 END
@@ -285,6 +342,11 @@ GO
 
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_rev_row_job')
     CREATE INDEX ix_rev_row_job ON revenue_row(job_id);
+GO
+
+-- Setting duplicate_group on the duplicate rows once every file is read (engine/processor.py).
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_rev_row_job_row')
+    CREATE INDEX ix_rev_row_job_row ON revenue_row(job_id, row_number);
 GO
 
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_rev_row_jde')

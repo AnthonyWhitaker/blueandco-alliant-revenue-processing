@@ -17,6 +17,7 @@ XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 @pytest.fixture
 def client(conn, tmp_path, monkeypatch):
     monkeypatch.setenv("REVENUE_UPLOAD_DIR", str(tmp_path / "uploads"))
+    monkeypatch.setenv("REVENUE_OUTPUT_DIR", str(tmp_path / "outputs"))
     monkeypatch.setenv("MAX_UPLOAD_MB", "1")
     with TestClient(create_app()) as c:
         yield c
@@ -36,7 +37,7 @@ def upload_job(client, supplier_id, tmp_path, file_name=FILE_NAME):
     content = write_supplier_file(tmp_path / "src.xlsx").read_bytes()
     return client.post(
         "/api/jobs",
-        files={"file": (file_name, content, XLSX)},
+        files={"files": (file_name, content, XLSX)},
         data={"supplier_profile_id": str(supplier_id), "date_received": "2025-07-02"},
     )
 
@@ -80,10 +81,19 @@ def test_upload_process_review_export(client, seeded, tmp_path):
     preview = client.get(f"/api/jobs/{job['id']}/preview").json()
     assert sorted(r["total_revenue"] for r in preview["upload"]) == [30.0, 120.0, 150.0]
 
-    export = client.get(f"/api/jobs/{job['id']}/export")
+    # Processing wrote the first version; generating again adds a new version, never overwriting.
+    first = client.get(f"/api/jobs/{job['id']}/outputs").json()
+    assert sorted(o["artifact_type"] for o in first) == ["exception_report", "salesforce_upload"]
+    created = client.post(f"/api/jobs/{job['id']}/outputs")
+    assert created.status_code == 201
+    outputs = client.get(f"/api/jobs/{job['id']}/outputs").json()
+    assert len(outputs) == 4 and len({o["file_name"] for o in outputs}) == 4
+
+    processed = next(o for o in created.json() if o["artifact_type"] == "salesforce_upload")
+    export = client.get(f"/api/jobs/{job['id']}/outputs/{processed['id']}/content")
     assert export.status_code == 200
     assert export.headers["content-type"] == XLSX
-    assert "Processed.xlsx" in export.headers["content-disposition"]
+    assert "Processed" in export.headers["content-disposition"]
     assert openpyxl.load_workbook(BytesIO(export.content)).sheetnames == [
         "Upload", "Validation", "Unmatched", "JDE Mapping"]
 
@@ -98,16 +108,16 @@ def test_failed_processing_is_reported_on_the_job(client, conn, tmp_path):
 
 
 def test_upload_rejections(client, seeded):
-    r = client.post("/api/jobs", files={"file": ("notes.pdf", b"x", "application/pdf")},
+    r = client.post("/api/jobs", files={"files": ("notes.pdf", b"x", "application/pdf")},
                     data={"supplier_profile_id": str(seeded["supplier_id"]), "date_received": "2025-07-02"})
     assert r.status_code == 422 and "Unsupported file type" in r.json()["detail"]
 
     big = b"x" * (1024 * 1024 + 1)
-    r = client.post("/api/jobs", files={"file": ("big.csv", big, "text/csv")},
+    r = client.post("/api/jobs", files={"files": ("big.csv", big, "text/csv")},
                     data={"supplier_profile_id": str(seeded["supplier_id"]), "date_received": "2025-07-02"})
     assert r.status_code == 413
 
-    r = client.post("/api/jobs", files={"file": ("a.csv", b"a", "text/csv")},
+    r = client.post("/api/jobs", files={"files": ("a.csv", b"a", "text/csv")},
                     data={"supplier_profile_id": str(seeded["supplier_id"])})
     assert r.status_code == 422
     assert r.json()["errors"][0]["loc"] == ["body", "date_received"]
@@ -166,7 +176,7 @@ def test_upload_with_manual_totals(client, conn, seeded, tmp_path):
         data = {"supplier_profile_id": str(sid), "date_received": "2025-07-02"}
         if manual_totals is not None:
             data["manual_totals"] = manual_totals
-        return client.post("/api/jobs", files={"file": ("Komet.xlsx", content, XLSX)}, data=data)
+        return client.post("/api/jobs", files={"files": ("Komet.xlsx", content, XLSX)}, data=data)
 
     assert post(None).status_code == 422
     assert post("[1, 2]").status_code == 422

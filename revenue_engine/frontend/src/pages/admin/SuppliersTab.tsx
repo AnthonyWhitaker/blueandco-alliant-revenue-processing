@@ -4,6 +4,7 @@ import {
   Badge,
   Button,
   Checkbox,
+  Fieldset,
   Group,
   Modal,
   NumberInput,
@@ -16,21 +17,22 @@ import {
 } from '@mantine/core';
 import { schemaResolver, useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
-import { IconPencil, IconPlus } from '@tabler/icons-react';
+import { IconPencil, IconPlus, IconUpload } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { z } from 'zod';
 
-import { api, unwrap } from '@/api/client';
+import { api, formData, unwrap } from '@/api/client';
 import type { Schemas } from '@/api/types';
 import { DataTable } from '@/components/DataTable';
 import { EmptyState } from '@/components/EmptyState';
+import { FileDropzone } from '@/components/FileDropzone';
 import { QueryError } from '@/components/QueryError';
 import { applyServerErrors, blankToNull } from '@/lib/forms';
-import { formatText } from '@/lib/format';
+import { formatDateTime, formatInteger, formatText } from '@/lib/format';
 import { queryKeys } from '@/queries/keys';
 import { metaQuery } from '@/queries/reference';
-import { suppliersQuery, type Supplier } from '@/queries/suppliers';
+import { gpoKeyQuery, suppliersQuery, type Supplier } from '@/queries/suppliers';
 
 type SupplierInput = Schemas['SupplierInput'];
 type Meta = Schemas['Meta'];
@@ -52,6 +54,8 @@ const supplierSchema = z.object({
   max_read_columns: z.number({ error: 'Enter 0 for no limit' }).int().min(0),
   job_type: z.enum(['row_level', 'pivot_allocation']),
   requires_manual_confirmation: z.boolean(),
+  identity_mode: z.enum(['member_match', 'gpo_key']),
+  volume_mode: z.enum(['sum', 'blank']),
   /** Empty string = no fee rate. */
   fee_rate: z.union([z.number().min(0, 'Must be 0 or more'), z.literal('')]),
   fuzzy_zip_state_threshold: threshold,
@@ -77,6 +81,8 @@ function newSupplierValues(meta: Meta): SupplierFormValues {
     max_read_columns: 0,
     job_type: meta.job_types[0] ?? 'row_level',
     requires_manual_confirmation: false,
+    identity_mode: 'member_match',
+    volume_mode: 'sum',
     fee_rate: '',
     fuzzy_zip_state_threshold: 75,
     fuzzy_city_state_threshold: 75,
@@ -100,6 +106,8 @@ function supplierValues(s: Supplier): SupplierFormValues {
     max_read_columns: s.max_read_columns ?? 0,
     job_type: s.job_type,
     requires_manual_confirmation: s.requires_manual_confirmation,
+    identity_mode: s.identity_mode,
+    volume_mode: s.volume_mode,
     fee_rate: s.fee_rate ?? '',
     fuzzy_zip_state_threshold: s.fuzzy_zip_state_threshold,
     fuzzy_city_state_threshold: s.fuzzy_city_state_threshold,
@@ -123,6 +131,8 @@ function toInput(v: SupplierFormValues): SupplierInput {
     max_read_columns: v.max_read_columns === 0 ? null : v.max_read_columns,
     job_type: v.job_type,
     requires_manual_confirmation: v.requires_manual_confirmation,
+    identity_mode: v.identity_mode,
+    volume_mode: v.volume_mode,
     fee_rate: v.fee_rate === '' ? null : v.fee_rate,
     fuzzy_zip_state_threshold: v.fuzzy_zip_state_threshold,
     fuzzy_city_state_threshold: v.fuzzy_city_state_threshold,
@@ -132,6 +142,123 @@ function toInput(v: SupplierFormValues): SupplierInput {
 }
 
 const options = (values: readonly string[]) => values.map((v) => ({ value: v, label: v }));
+
+const IDENTITY_LABELS: Record<string, string> = {
+  member_match: 'Match to members (Review queue for unmatched)',
+  gpo_key: 'Verify GPO ID against a key file (exceptions report)',
+};
+const VOLUME_LABELS: Record<string, string> = {
+  sum: 'Sum of sales amounts',
+  blank: 'Leave blank (file carries revenue only)',
+};
+const labelled = (values: readonly string[], labels: Record<string, string>) =>
+  values.map((v) => ({ value: v, label: labels[v] ?? v }));
+
+/** Key file column names; blank = the API's defaults (engine/gpo_key.KeyColumns: the Medline Account Key headers). */
+const KEY_COLUMNS = [
+  {
+    field: 'account_number_column',
+    label: 'Account number column',
+    placeholder: 'Medline Account Number',
+  },
+  {
+    field: 'account_name_column',
+    label: 'Account name column',
+    placeholder: 'Medline Account Name',
+  },
+  { field: 'address_column', label: 'Address column', placeholder: 'Medline Street' },
+  { field: 'gpo_id_column', label: 'GPO ID column', placeholder: 'Final GPO ID' },
+] as const;
+type KeyColumnField = (typeof KEY_COLUMNS)[number]['field'];
+
+/** The supplier's GPO key: what is loaded, and replacing it from a CSV/XLSX file. */
+function GpoKeyPanel({ supplier, extensions }: { supplier: Supplier; extensions: string[] }) {
+  const queryClient = useQueryClient();
+  const key = useQuery(gpoKeyQuery(supplier.id));
+  const [file, setFile] = useState<File | null>(null);
+  const [columns, setColumns] = useState<Record<KeyColumnField, string>>({
+    account_number_column: '',
+    account_name_column: '',
+    address_column: '',
+    gpo_id_column: '',
+  });
+  const upload = useMutation({
+    mutationFn: (f: File) =>
+      unwrap(
+        api.PUT('/api/suppliers/{supplier_id}/gpo-key', {
+          params: { path: { supplier_id: supplier.id } },
+          body: {
+            file: f,
+            ...Object.fromEntries(
+              Object.entries(columns).map(([k, v]) => [k, v.trim() || undefined]),
+            ),
+          },
+          bodySerializer: formData,
+        }),
+      ),
+    onSuccess: async (result) => {
+      notifications.show({
+        color: 'green',
+        title: 'GPO key loaded',
+        message: `${formatInteger(result.loaded)} entries loaded${
+          result.skipped_blank_account
+            ? `; ${formatInteger(result.skipped_blank_account)} rows without an account number skipped`
+            : ''
+        }.`,
+      });
+      setFile(null);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.suppliers.gpoKey(supplier.id) });
+    },
+  });
+  const k = key.data;
+  return (
+    <Fieldset legend="GPO key">
+      <Stack gap="sm">
+        <Text size="sm">
+          {k && k.entry_count > 0
+            ? `${formatInteger(k.entry_count)} entries for ${formatInteger(k.account_count)} accounts, from ${formatText(k.source_file_name)} (loaded ${formatDateTime(k.loaded_at)}).`
+            : 'No key loaded: every row of this supplier’s files will go to the exceptions report.'}
+        </Text>
+        <Text size="xs" c="dimmed">
+          Rows are verified by account number, account name and address; the key’s GPO ID is used.
+          Loading a file replaces the whole key.
+        </Text>
+        <FileDropzone label="Key file" extensions={extensions} file={file} onChange={setFile} />
+        <SimpleGrid cols={{ base: 1, sm: 2 }}>
+          {KEY_COLUMNS.map((c) => (
+            <TextInput
+              key={c.field}
+              label={c.label}
+              placeholder={c.placeholder}
+              value={columns[c.field]}
+              onChange={(e) => {
+                const value = e.currentTarget.value;
+                setColumns((cols) => ({ ...cols, [c.field]: value }));
+              }}
+            />
+          ))}
+        </SimpleGrid>
+        {upload.error && (
+          <Alert color="red" title="Couldn't load the key">
+            {upload.error.message}
+          </Alert>
+        )}
+        <Group>
+          <Button
+            leftSection={<IconUpload size={16} />}
+            disabled={!file}
+            loading={upload.isPending}
+            onClick={() => {
+              if (file) upload.mutate(file);
+            }}
+          >
+            Load key
+          </Button>
+        </Group>
+      </Stack>
+    </Fieldset>
+  );
+}
 
 interface SupplierFormProps {
   meta: Meta;
@@ -264,6 +391,19 @@ export function SupplierForm({ meta, supplier, onDone }: SupplierFormProps) {
             allowDeselect={false}
             {...form.getInputProps('job_type')}
           />
+          <Select
+            label="Facility identity"
+            description="Row-level suppliers only"
+            data={labelled(meta.identity_modes, IDENTITY_LABELS)}
+            allowDeselect={false}
+            {...form.getInputProps('identity_mode')}
+          />
+          <Select
+            label="Volume"
+            data={labelled(meta.volume_modes, VOLUME_LABELS)}
+            allowDeselect={false}
+            {...form.getInputProps('volume_mode')}
+          />
         </SimpleGrid>
         <Checkbox
           label="Requires manual confirmation before completing (recommended for new Tier C suppliers)"
@@ -317,6 +457,10 @@ export function SupplierForm({ meta, supplier, onDone }: SupplierFormProps) {
             </Accordion.Panel>
           </Accordion.Item>
         </Accordion>
+
+        {supplier && form.getValues().identity_mode === 'gpo_key' && (
+          <GpoKeyPanel supplier={supplier} extensions={meta.upload_extensions} />
+        )}
 
         <Group justify="flex-end">
           <Button variant="default" onClick={onDone} disabled={save.isPending}>
@@ -396,6 +540,16 @@ export function SuppliersTab() {
               render: (s) => formatText(s.payor_filter_name),
             },
             { accessor: 'payment_id_source', title: 'Payment ID source' },
+            {
+              accessor: 'identity_mode',
+              title: 'Identity',
+              render: (s) =>
+                s.identity_mode === 'gpo_key' ? (
+                  <Badge color="teal">GPO key</Badge>
+                ) : (
+                  'Member match'
+                ),
+            },
             {
               accessor: 'job_type',
               title: 'Job type',

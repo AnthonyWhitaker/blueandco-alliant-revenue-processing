@@ -5,7 +5,35 @@ from typing import Optional
 from pydantic import Field, field_validator
 
 from .common import ApiModel, InputModel
-from .enums import JobPaymentIdSource, JobStatus, JobType, Severity
+from .enums import ArtifactType, JobPaymentIdSource, JobStatus, JobType, Severity
+
+
+class ReconciliationInput(ApiModel):
+    rows: int
+    volume: float
+    revenue: float
+    unparseable_volume: int = 0
+    unparseable_revenue: int = 0
+    dropped_rows: int = Field(0, description="Summary/total rows stripped before processing (not part of the input).")
+    dropped_volume: float = 0.0
+    dropped_revenue: float = 0.0
+    rows_per_file: dict[str, int] = Field(default_factory=dict)
+
+
+class Reconciliation(ApiModel):
+    """Input totals = Upload tab output + exceptions report, checked on every run."""
+
+    input: ReconciliationInput
+    output_rows: int
+    output_volume: Optional[float]
+    output_revenue: float
+    exception_rows: int
+    exceptions_volume: float
+    exceptions_revenue: float
+    volume_checked: bool = Field(description="False when the supplier's Volume is left blank.")
+    volume_difference: Optional[float]
+    revenue_difference: float
+    balanced: bool
 
 
 class Job(ApiModel):
@@ -33,6 +61,12 @@ class Job(ApiModel):
         default_factory=dict, validation_alias="manual_totals_json",
         description="Tier C: the totals entered at upload for manual_entry extraction rules, by rule name.",
     )
+    timeframe: Optional[str] = Field(description='"Pmt For (Time Frame)" for every Upload row, entered at upload.')
+    file_count: int = Field(description="Number of source files combined in this job.")
+    reconciliation: Optional[Reconciliation] = Field(
+        default=None, validation_alias="reconciliation_json",
+        description="Totals check from the last processing run or review decision. Null before processing.",
+    )
     created_at: datetime
     completed_at: Optional[datetime]
 
@@ -40,6 +74,31 @@ class Job(ApiModel):
     @classmethod
     def _parse_manual_totals(cls, v):
         return json.loads(v) if isinstance(v, str) else (v or {})
+
+    @field_validator("reconciliation", mode="before")
+    @classmethod
+    def _parse_reconciliation(cls, v):
+        return json.loads(v) if isinstance(v, str) else v
+
+
+class JobFile(ApiModel):
+    """One source file of a job."""
+
+    id: int
+    original_file_name: str
+    sha256: str
+    row_count: Optional[int] = Field(description="Data rows read from this file (set when processing finishes).")
+    created_at: datetime
+
+
+class JobOutput(ApiModel):
+    """A stored output file. Each export writes a new version; none is ever overwritten."""
+
+    id: int
+    artifact_type: ArtifactType
+    file_name: str
+    created_at: datetime
+    available: bool = Field(description="False when the file is no longer on disk (e.g. lost in a server restart).")
 
 
 class JobPatch(InputModel):

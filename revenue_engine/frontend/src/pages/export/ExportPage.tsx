@@ -10,16 +10,19 @@ import {
   SimpleGrid,
   Skeleton,
   Stack,
+  Table,
   Tabs,
   Text,
   TextInput,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import {
   IconAlertTriangle,
   IconCircleCheck,
   IconDownload,
+  IconFilePlus,
   IconInfoCircle,
 } from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -41,10 +44,13 @@ import { routes, searchParamNames } from '@/lib/routes';
 import {
   EXPORTABLE_STATUSES,
   jobExceptionsQuery,
+  jobFilesQuery,
+  jobOutputsQuery,
   jobPreviewQuery,
   jobQuery,
   jobsQuery,
   type Job,
+  type JobOutput,
 } from '@/queries/jobs';
 import { queryKeys } from '@/queries/keys';
 
@@ -82,7 +88,8 @@ function PaymentId({ job }: { job: Job }) {
   if (job.payment_id) {
     return (
       <Alert color="ledger" variant="light" icon={<IconInfoCircle />}>
-        Payment ID: <Code>{job.payment_id}</Code>
+        Payment ID: <Code>{job.payment_id}</Code> (for reference; the Upload template leaves Payment
+        ID blank, to be filled in from the ledger afterwards)
       </Alert>
     );
   }
@@ -98,7 +105,7 @@ function PaymentId({ job }: { job: Job }) {
         <Group align="flex-end">
           <TextInput
             label="Payment ID"
-            description="Not set yet. Enter it before downloading."
+            description="Optional, for reference. The Upload template leaves it blank."
             value={value}
             onChange={(e) => {
               setValue(e.currentTarget.value);
@@ -315,19 +322,26 @@ function OutputPreview({ job }: { job: Job }) {
   );
 }
 
-function Download({ job }: { job: Job }) {
+const OUTPUT_LABELS: Record<JobOutput['artifact_type'], string> = {
+  salesforce_upload: 'Processed workbook',
+  exception_report: 'Exceptions report',
+  validation_report: 'Validation report',
+  jde_mapping: 'JDE mapping',
+};
+
+function OutputDownload({ job, output }: { job: Job; output: JobOutput }) {
   const download = useMutation({
     mutationFn: async () => {
-      const { data, error, response } = await api.GET('/api/jobs/{job_id}/export', {
-        params: { path: { job_id: job.id } },
-        parseAs: 'blob',
-      });
+      const { data, error, response } = await api.GET(
+        '/api/jobs/{job_id}/outputs/{output_id}/content',
+        { params: { path: { job_id: job.id, output_id: output.id } }, parseAs: 'blob' },
+      );
       if (!response.ok || !data) throw ApiError.fromResponse(response, error);
       return {
         blob: data,
         name: fileNameFromDisposition(
           response.headers.get('Content-Disposition'),
-          `Job ${job.id} Processed.xlsx`,
+          output.file_name,
         ),
       };
     },
@@ -335,21 +349,170 @@ function Download({ job }: { job: Job }) {
       saveBlob(blob, name);
     },
   });
+  const button = (
+    <Button
+      size="xs"
+      variant="light"
+      leftSection={<IconDownload size={14} />}
+      loading={download.isPending}
+      disabled={!output.available}
+      aria-label={`Download ${output.file_name}`}
+      onClick={() => {
+        download.mutate();
+      }}
+    >
+      Download
+    </Button>
+  );
+  return output.available ? (
+    button
+  ) : (
+    <Tooltip label="No longer on disk (e.g. lost in a server restart). Generate a new version.">
+      <span>{button}</span>
+    </Tooltip>
+  );
+}
+
+/** Stored output files. Processing writes the first version; nothing is ever overwritten. */
+function Outputs({ job }: { job: Job }) {
+  const queryClient = useQueryClient();
+  const outputs = useQuery(jobOutputsQuery(job.id));
+  const generate = useMutation({
+    mutationFn: () =>
+      unwrap(api.POST('/api/jobs/{job_id}/outputs', { params: { path: { job_id: job.id } } })),
+    onSuccess: async () => {
+      notifications.show({ color: 'green', message: 'New version written to the output folder.' });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.jobs.outputs(job.id) });
+    },
+  });
   return (
-    <Group>
-      <Button
-        leftSection={<IconDownload size={16} />}
-        loading={download.isPending}
-        onClick={() => {
-          download.mutate();
-        }}
-      >
-        Download workbook
-      </Button>
-      <Text size="sm" c="dimmed">
-        4-tab XLSX: Upload, Validation, Unmatched, JDE Mapping.
+    <Stack gap="sm">
+      <Group>
+        <Button
+          leftSection={<IconFilePlus size={16} />}
+          loading={generate.isPending}
+          onClick={() => {
+            generate.mutate();
+          }}
+        >
+          Generate new version
+        </Button>
+        <Text size="sm" c="dimmed">
+          Writes a new processed workbook (Upload, Validation, Unmatched, JDE Mapping) and
+          exceptions report from the job as it is now, e.g. after review decisions. Earlier versions
+          are kept.
+        </Text>
+      </Group>
+      {outputs.error ? (
+        <QueryError
+          title="Couldn't load the output files"
+          error={outputs.error}
+          onRetry={() => void outputs.refetch()}
+        />
+      ) : (
+        <DataTable
+          label="Output files"
+          fetching={outputs.isPending}
+          records={outputs.data}
+          noRecordsText="No output files yet"
+          columns={[
+            {
+              accessor: 'artifact_type',
+              title: 'Type',
+              render: (o) => OUTPUT_LABELS[o.artifact_type],
+            },
+            { accessor: 'file_name', title: 'File', noWrap: false },
+            {
+              accessor: 'created_at',
+              title: 'Written',
+              render: (o) => formatDateTime(o.created_at),
+            },
+            {
+              accessor: 'id',
+              title: '',
+              textAlign: 'right',
+              render: (o) => <OutputDownload job={job} output={o} />,
+            },
+          ]}
+        />
+      )}
+    </Stack>
+  );
+}
+
+/** Input = Upload tab + exceptions report, per amount. */
+function ReconciliationSummary({ job }: { job: Job }) {
+  const rec = job.reconciliation;
+  if (!rec) return null;
+  const rows = [
+    {
+      amount: 'Revenue (fee)',
+      input: rec.input.revenue,
+      output: rec.output_revenue,
+      exceptions: rec.exceptions_revenue,
+      difference: rec.revenue_difference,
+    },
+    ...(rec.volume_checked
+      ? [
+          {
+            amount: 'Volume (sales)',
+            input: rec.input.volume,
+            output: rec.output_volume ?? 0,
+            exceptions: rec.exceptions_volume,
+            difference: rec.volume_difference ?? 0,
+          },
+        ]
+      : []),
+  ];
+  return (
+    <Alert
+      color={rec.balanced ? 'green' : 'red'}
+      icon={rec.balanced ? <IconCircleCheck /> : <IconAlertTriangle />}
+      title={rec.balanced ? 'Totals reconcile' : 'Totals do not reconcile'}
+    >
+      <Table withRowBorders={false} verticalSpacing={2} fz="sm" className="tabular" maw={640}>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th />
+            <Table.Th ta="right">Input</Table.Th>
+            <Table.Th ta="right">Output</Table.Th>
+            <Table.Th ta="right">Exceptions</Table.Th>
+            <Table.Th ta="right">Difference</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {rows.map((r) => (
+            <Table.Tr key={r.amount}>
+              <Table.Td>{r.amount}</Table.Td>
+              <Table.Td ta="right">{formatCurrency(r.input)}</Table.Td>
+              <Table.Td ta="right">{formatCurrency(r.output)}</Table.Td>
+              <Table.Td ta="right">{formatCurrency(r.exceptions)}</Table.Td>
+              <Table.Td ta="right">{formatCurrency(r.difference)}</Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+      <Text size="xs" mt="xs">
+        {formatInteger(rec.input.rows)} input rows: {formatInteger(rec.exception_rows)} on the
+        exceptions report, the rest in {pluralize(rec.output_rows, 'Upload row')}.
+        {!rec.volume_checked && ' Volume is left blank for this supplier, so it is not checked.'}
+        {(rec.input.dropped_rows ?? 0) > 0 &&
+          ` ${pluralize(rec.input.dropped_rows ?? 0, 'summary/total row')} left out of the input (listed on the exceptions report).`}
       </Text>
-    </Group>
+    </Alert>
+  );
+}
+
+function SourceFiles({ job }: { job: Job }) {
+  const files = useQuery({ ...jobFilesQuery(job.id), enabled: job.file_count > 1 });
+  if (job.file_count <= 1 || !files.data) return null;
+  return (
+    <Text size="sm">
+      Combined from {pluralize(job.file_count, 'file')}:{' '}
+      {files.data
+        .map((f) => `${f.original_file_name} (${formatInteger(f.row_count)} rows)`)
+        .join(' · ')}
+    </Text>
   );
 }
 
@@ -390,12 +553,17 @@ function JobExport({ jobId }: { jobId: number }) {
             )
           }
         />
-        <StatCard label="Matched rows" value={j && formatInteger(j.matched_count)} />
-        <StatCard label="Unmatched" value={j && formatInteger(j.unmatched_count)} />
+        <StatCard label="Rows in output" value={j && formatInteger(j.matched_count)} />
+        <StatCard
+          label="Exception rows"
+          value={j && formatInteger(j.reconciliation?.exception_rows ?? j.unmatched_count)}
+        />
         <StatCard label="Total revenue" value={j && formatCurrency(j.total_revenue)} />
       </SimpleGrid>
       {j ? (
         <>
+          <SourceFiles job={j} />
+          <ReconciliationSummary job={j} />
           <PaymentId job={j} />
           <SignOff job={j} />
           <Exceptions job={j} />
@@ -404,8 +572,8 @@ function JobExport({ jobId }: { jobId: number }) {
             <OutputPreview job={j} />
           </Stack>
           <Stack gap="sm">
-            <Title order={2}>Download</Title>
-            <Download job={j} />
+            <Title order={2}>Output files</Title>
+            <Outputs job={j} />
           </Stack>
         </>
       ) : (
@@ -423,7 +591,7 @@ export function ExportPage() {
     <>
       <PageHeader
         title="Export"
-        description="Preview the output and download the Salesforce workbook."
+        description="Check the totals and exceptions, preview the output, and download the workbooks."
       />
       {jobs.error ? (
         <QueryError

@@ -65,7 +65,7 @@ There is still no CI service (decision: keep `deploy.sh`). The steps are unchang
 5. Schema init and seed (unchanged commands; they work in the new image).
 6. Summary, now including the image tag and the rollback command.
 
-**New guard (F14):** the script refuses to deploy with public ingress unless `ALLOWED_IP_RANGES` is set or `ALLOW_PUBLIC_INGRESS=true`. The image now serves a scriptable REST API, which is a bigger exposure than the Streamlit UI, and there is no authentication yet.
+**Ingress warning (F14):** if `ALLOWED_IP_RANGES` is unset, the script warns and deploys with public ingress. The image now serves a scriptable REST API, which is a bigger exposure than the Streamlit UI, and there is no authentication yet. This is acceptable for demo deploys only; restore an IP allowlist or add auth before real use.
 
 The full diff is in the commit `ci: build the React app into the image and harden deploy.sh`. **It has not been run against Azure.**
 
@@ -85,7 +85,7 @@ The full diff is in the commit `ci: build the React app into the image and harde
 | `VITE_API_BASE_URL` | not set | **build-time, public** | frontend | Only for a cross-origin API. Never put a secret here. |
 | `API_PROXY_TARGET` | compose / dev shell | dev only | `vite.config.ts` | Where the Vite dev server proxies `/api`. |
 | `RESOURCE_GROUP`, `LOCATION`, `NAME_PREFIX`, `ACR_NAME`, `EXISTING_SQL_SERVER`, `EXISTING_ENVIRONMENT`, `SQL_ADMIN_PASSWORD` | operator shell | deploy | `deploy.sh` | **Unchanged.** |
-| `ALLOWED_IP_RANGES`, `ALLOW_PUBLIC_INGRESS`, `SKIP_CHECKS` | operator shell | deploy | `deploy.sh` | New (see above). |
+| `ALLOWED_IP_RANGES`, `SKIP_CHECKS` | operator shell | deploy | `deploy.sh` | New (see above). |
 
 The Streamlit image read no other environment variables (its settings were command-line flags). Nothing that was read before has been dropped. **No secret reaches the browser.**
 
@@ -118,7 +118,7 @@ az containerapp update -n <prefix>-ui -g <rg> --image <acr>.azurecr.io/revenue-e
 
 ## Before the first deploy of the new app
 
-1. Decide on access (F14): Easy Auth (Entra ID) on the Container App, or `ALLOWED_IP_RANGES`.
+1. Decide on access (F14): Easy Auth (Entra ID) on the Container App, or `ALLOWED_IP_RANGES`. Demo deploys currently run with public ingress.
 2. Check production `revenue_job` for `failed` rows. Azure SQL processing was broken before this branch (F16, F18, F19).
 3. Run `make check` and `make check-mssql` locally.
 4. `make deploy`, then open `/api/health/ready` and the Dashboard, and process one known file end to end.

@@ -17,6 +17,8 @@ export const meta: Schemas['Meta'] = {
   keep_return_options: ['Keep', 'Return'],
   payment_id_sources: ['ledger', 'manual', 'column'],
   job_types: ['row_level', 'pivot_allocation'],
+  identity_modes: ['member_match', 'gpo_key'],
+  volume_modes: ['sum', 'blank'],
   extraction_methods: [
     'named_cell',
     'label_lookup',
@@ -49,6 +51,8 @@ export function supplier(overrides: Partial<Schemas['Supplier']> = {}): Schemas[
     fee_rate: 0.03,
     job_type: 'row_level',
     requires_manual_confirmation: false,
+    identity_mode: 'member_match',
+    volume_mode: 'sum',
     fuzzy_zip_state_threshold: 70,
     fuzzy_city_state_threshold: 72,
     fuzzy_state_threshold: 81,
@@ -97,8 +101,51 @@ export function job(overrides: Partial<Schemas['Job']> = {}): Schemas['Job'] {
     total_revenue: 1234.5,
     error_message: null,
     pending_review_count: 0,
+    timeframe: '1Q26',
+    file_count: 1,
+    reconciliation: reconciliation(),
     created_at: '2026-03-02T09:30:00',
     completed_at: '2026-03-02T09:31:00',
+    ...overrides,
+  };
+}
+
+export function reconciliation(
+  overrides: Partial<Schemas['Reconciliation']> = {},
+): Schemas['Reconciliation'] {
+  return {
+    input: {
+      rows: 10,
+      volume: 52000,
+      revenue: 1300,
+      unparseable_volume: 0,
+      unparseable_revenue: 0,
+      dropped_rows: 1,
+      dropped_volume: 52000,
+      dropped_revenue: 1300,
+      rows_per_file: { 'Acme 2026-03-01 $1,234.50.xlsx': 10 },
+    },
+    output_rows: 3,
+    output_volume: 50000,
+    output_revenue: 1234.5,
+    exception_rows: 1,
+    exceptions_volume: 2000,
+    exceptions_revenue: 65.5,
+    volume_checked: true,
+    volume_difference: 0,
+    revenue_difference: 0,
+    balanced: true,
+    ...overrides,
+  };
+}
+
+export function jobOutput(overrides: Partial<Schemas['JobOutput']> = {}): Schemas['JobOutput'] {
+  return {
+    id: 7,
+    artifact_type: 'salesforce_upload',
+    file_name: 'Acme 2026-03-01 $1,234.50 Processed 20260302-093100.xlsx',
+    created_at: '2026-03-02T09:31:00',
+    available: true,
     ...overrides,
   };
 }

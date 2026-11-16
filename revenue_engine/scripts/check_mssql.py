@@ -8,6 +8,7 @@ runs this inside the app image (it has the ODBC driver). Never point this at a
 real database: it inserts test rows.
 """
 
+import os
 import sys
 import tempfile
 from datetime import date
@@ -39,9 +40,13 @@ conn.execute(
 conn.commit()
 
 src = write_supplier_file(Path(tempfile.mkdtemp()) / "src.xlsx")
-job = jobs.run_job(conn, jobs.create_job(conn, sid, FILE_NAME, src.read_bytes(), date(2025, 7, 2)).id)
+os.environ.setdefault("REVENUE_UPLOAD_DIR", tempfile.mkdtemp())
+os.environ.setdefault("REVENUE_OUTPUT_DIR", tempfile.mkdtemp())
+job = jobs.run_job(conn, jobs.create_job(conn, sid, [(FILE_NAME, src.read_bytes())], date(2025, 7, 2),
+                                         timeframe="3Q25").id)
 check("process job", (job.status, job.unmatched_count, job.total_revenue, job.payment_id)
       == ("needs_review", 1, 270.0, "PAY-1"), job.status)
+check("reconciliation", job.reconciliation is not None and job.reconciliation.balanced and job.file_count == 1)
 check("list jobs with LIMIT", [j.id for j in jobs.list_jobs(conn, has_pending_reviews=True, limit=5)] == [job.id])
 
 item = reviews.list_pending_items(conn, job.id)[0]
@@ -49,8 +54,9 @@ check("review item built", (item.customer_name_sample, item.jde_number) == ("Zyx
 result = reviews.approve(conn, item.id, ReviewApproval(member_id=m["desert"], alias_scope="supplier"))
 check("approve (alias + JDE history upsert)", result.job.status == "completed" and result.job.total_revenue == 300.0)
 
-name, content = jobs.build_export(conn, job.id)
-check("export", content[:2] == b"PK", name)
+outputs = jobs.create_outputs(conn, job.id)
+name, content = jobs.read_output(conn, job.id, outputs[0].id)
+check("export", content[:2] == b"PK" and len(jobs.list_outputs(conn, job.id)) == 4, name)
 check("member search", members.search_members(conn, term="mercy").total == 1)
 check("ledger listing", members.list_ledger_entries(conn, limit=5).total == 1)
 check("aliases", len(misc.list_aliases(conn)) == 1)

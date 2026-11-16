@@ -1,21 +1,24 @@
 """Revenue jobs: creation, listing, payment ID, exceptions, preview, export, sign-off."""
 
+import hashlib
 import json
+import logging
 import math
 import os
-import tempfile
 import uuid
 from datetime import date
 from pathlib import Path
+import re
 from typing import Optional
 
 from engine.constants import EXTRACT_MANUAL_ENTRY, JOB_TYPE_PIVOT_ALLOCATION, STATUS_COMPLETED, STATUS_FAILED, STATUS_NEEDS_REVIEW, STATUS_PROCESSING, STATUS_UPLOADED
+from engine.constants import EXC_PROCESSING_ERROR
 from engine.db import execute_select, get_last_insert_id
-from engine.exporter import export_job, export_to_dataframes
+from engine.exporter import OutputLocationError, export_job, export_to_dataframes
 from engine.normalizer import guess_supplier_from_filename, parse_date_from_filename, parse_deposit_amount_from_filename
 from engine.processor import process_job
 from models.enums import JobStatus
-from models.jobs import FileNameInference, Job, JobException, JobPreview
+from models.jobs import FileNameInference, Job, JobException, JobFile, JobOutput, JobPreview
 
 from .errors import ConflictError, InvalidInputError, NotFoundError
 from .rows import frame_records, row_dict, rows_dicts
@@ -26,11 +29,15 @@ UPLOAD_EXTENSIONS = [".xlsx", ".xls", ".xlsm", ".csv"]
 EXPORTABLE_STATUSES: list[JobStatus] = [STATUS_COMPLETED, STATUS_NEEDS_REVIEW]
 
 _DEFAULT_UPLOAD_DIR = Path(__file__).parent.parent / "data" / "uploads"
+_DEFAULT_OUTPUT_DIR = Path(__file__).parent.parent / "data" / "outputs"
+
+log = logging.getLogger("core.jobs")
 
 _JOB_SELECT = """
     SELECT rj.*, sp.name AS supplier_name, sp.job_type AS job_type,
            (SELECT COUNT(*) FROM member_review_item mri
-             WHERE mri.job_id = rj.id AND mri.status = 'pending') AS pending_review_count
+             WHERE mri.job_id = rj.id AND mri.status = 'pending') AS pending_review_count,
+           (SELECT COUNT(*) FROM revenue_job_file f WHERE f.job_id = rj.id) AS file_count
     FROM revenue_job rj
     JOIN supplier_profile sp ON sp.id = rj.supplier_profile_id
 """
@@ -67,10 +74,27 @@ def upload_dir() -> Path:
     return Path(os.environ.get("REVENUE_UPLOAD_DIR") or _DEFAULT_UPLOAD_DIR)
 
 
+def output_dir() -> Path:
+    """Where output workbooks are written: REVENUE_OUTPUT_DIR, default data/outputs. Never the upload folder."""
+    path = Path(os.environ.get("REVENUE_OUTPUT_DIR") or _DEFAULT_OUTPUT_DIR)
+    if path.resolve() == upload_dir().resolve():
+        raise OutputLocationError(
+            "REVENUE_OUTPUT_DIR is the upload folder. Outputs must go to a separate folder from the source files."
+        )
+    return path
+
+
 def get_job(conn, job_id: int) -> Job:
     row = row_dict(conn.execute(_JOB_SELECT + " WHERE rj.id = ?", (job_id,)).fetchone())
     if not row:
         raise NotFoundError(f"Job {job_id} not found.")
+    return _job(row)
+
+
+def _job(row: dict) -> Job:
+    # Jobs created before multi-file upload have no revenue_job_file rows, only file_path.
+    if not row.get("file_count") and row.get("file_path"):
+        row = {**row, "file_count": 1}
     return Job.model_validate(row)
 
 
@@ -96,7 +120,7 @@ def list_jobs(
     if limit:
         sql += f" LIMIT {int(limit)}"
     rows = execute_select(conn, sql, params or None).fetchall()
-    return [Job.model_validate(r) for r in rows_dicts(rows)]
+    return [_job(r) for r in rows_dicts(rows)]
 
 
 def infer_from_filename(conn, file_name: str) -> FileNameInference:
@@ -155,39 +179,83 @@ def _check_manual_totals(conn, supplier, manual_totals: Optional[dict[str, float
     return manual_totals
 
 
+def job_display_name(file_names: list[str]) -> str:
+    """revenue_job.original_file_name: the file's name, or the first file's name plus a count."""
+    if len(file_names) == 1:
+        return file_names[0]
+    return f"{file_names[0]} (+{len(file_names) - 1} more)"
+
+
+TIMEFRAME_FORMAT = re.compile(r"[1-4]Q\d{2}")
+
+
+def normalize_timeframe(timeframe: Optional[str]) -> Optional[str]:
+    """'1q26 ' -> '1Q26'; blank -> None (processing flags it). Anything not XQYY is rejected."""
+    value = (timeframe or "").strip().upper()
+    if not value:
+        return None
+    if not TIMEFRAME_FORMAT.fullmatch(value):
+        raise InvalidInputError(f"Timeframe must be XQYY: quarter and 2-digit year, e.g. 1Q26 (got {timeframe!r}).")
+    return value
+
+
 def create_job(
     conn,
     supplier_id: int,
-    file_name: str,
-    content: bytes,
+    files: list[tuple[str, bytes]],
     date_received: date,
     manual_totals: Optional[dict[str, float]] = None,
+    timeframe: Optional[str] = None,
 ) -> Job:
-    """Store the file and create a revenue_job in 'uploaded' status. Processing is separate (run_job).
+    """Store the files and create a revenue_job in 'uploaded' status. Processing is separate (run_job).
 
+    files: [(file name, content)], one or more files for the same supplier and month; they are
+           combined before processing (Tier C suppliers take exactly one).
     manual_totals: {rule_name: amount}, required for each of a Tier C supplier's manual_entry rules.
+    timeframe: "Pmt For (Time Frame)" on every Upload row, XQYY (quarter + 2-digit year, e.g. 1Q26).
     """
     supplier = get_supplier(conn, supplier_id)
+    if not files:
+        raise InvalidInputError("Upload at least one file.")
+    if supplier.job_type == JOB_TYPE_PIVOT_ALLOCATION and len(files) > 1:
+        raise InvalidInputError(f"{supplier.name} is an aggregate/pivot supplier: upload one file per job.")
     manual_totals = _check_manual_totals(conn, supplier, manual_totals)
-    path = save_upload(file_name, content)
+    timeframe = normalize_timeframe(timeframe)
+    stored = [(name, save_upload(name, content), hashlib.sha256(content).hexdigest()) for name, content in files]
     cur = conn.execute(
         """
         INSERT INTO revenue_job
             (supplier_profile_id, original_file_name, file_path, status, date_received, contract_id,
-             manual_totals_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+             manual_totals_json, timeframe)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (supplier.id, file_name, str(path), STATUS_UPLOADED, date_received.isoformat(), supplier.contract_id,
-         json.dumps(manual_totals) if manual_totals else None),
+        (supplier.id, job_display_name([n for n, _, _ in stored]), str(stored[0][1]), STATUS_UPLOADED,
+         date_received.isoformat(), supplier.contract_id,
+         json.dumps(manual_totals) if manual_totals else None, timeframe),
     )
+    job_id = get_last_insert_id(conn, cur)
+    for name, path, sha in stored:
+        conn.execute(
+            "INSERT INTO revenue_job_file (job_id, original_file_name, file_path, sha256) VALUES (?, ?, ?, ?)",
+            (job_id, name, str(path), sha),
+        )
     conn.commit()
-    return get_job(conn, get_last_insert_id(conn, cur))
+    return get_job(conn, job_id)
+
+
+def list_job_files(conn, job_id: int) -> list[JobFile]:
+    get_job(conn, job_id)
+    rows = conn.execute(
+        "SELECT id, original_file_name, sha256, row_count, created_at FROM revenue_job_file WHERE job_id = ? ORDER BY id",
+        (job_id,),
+    ).fetchall()
+    return [JobFile.model_validate(r) for r in rows_dicts(rows)]
 
 
 def run_job(conn, job_id: int, manual_payment_id: Optional[str] = None) -> Job:
     """Run the processing pipeline; on any failure the job ends up 'failed' and the error re-raises."""
     try:
-        process_job(conn=conn, job_id=job_id, manual_payment_id=manual_payment_id or None)
+        result = process_job(conn=conn, job_id=job_id, manual_payment_id=manual_payment_id or None)
     except Exception as e:
         # process_job marks the job failed itself, except for errors raised
         # before it starts (missing file/job/supplier), which leave it 'uploaded'.
@@ -198,7 +266,23 @@ def run_job(conn, job_id: int, manual_payment_id: Optional[str] = None) -> Job:
         )
         conn.commit()
         raise
+    if result.get("status") in EXPORTABLE_STATUSES:
+        _write_outputs_after_processing(conn, job_id)
     return get_job(conn, job_id)
+
+
+def _write_outputs_after_processing(conn, job_id: int) -> None:
+    """First version of the output files. A failure here is logged on the job; processing still succeeded."""
+    try:
+        export_job(conn, job_id, output_dir())
+    except Exception as e:
+        log.exception("writing outputs failed job_id=%s", job_id)
+        conn.rollback()
+        conn.execute(
+            "INSERT INTO exception (job_id, exception_type, message, severity) VALUES (?, ?, ?, 'error')",
+            (job_id, EXC_PROCESSING_ERROR, f"Processing finished but the output files could not be written: {e}"),
+        )
+        conn.commit()
 
 
 def fail_interrupted_jobs(conn) -> int:
@@ -245,23 +329,48 @@ def get_preview(conn, job_id: int) -> JobPreview:
     )
 
 
-def export_file_name(job: Job) -> str:
-    return f"{Path(job.original_file_name).stem} Processed.xlsx"
+def _output(row: dict) -> JobOutput:
+    return JobOutput.model_validate({**row, "available": bool(row.get("file_path")) and Path(row["file_path"]).is_file()})
 
 
-def build_export(conn, job_id: int) -> tuple[str, bytes]:
-    """Build the 4-tab Salesforce workbook. Returns (download file name, bytes)."""
+def list_outputs(conn, job_id: int) -> list[JobOutput]:
+    """Stored output files of a job, newest first."""
+    get_job(conn, job_id)
+    rows = conn.execute(
+        "SELECT id, artifact_type, file_name, file_path, created_at FROM export_file WHERE job_id = ? "
+        "ORDER BY created_at DESC, id DESC",
+        (job_id,),
+    ).fetchall()
+    return [_output(r) for r in rows_dicts(rows)]
+
+
+def create_outputs(conn, job_id: int) -> list[JobOutput]:
+    """Write a new version of the processed and exceptions workbooks from the job's current data."""
     job = get_job(conn, job_id)
     if job.status not in EXPORTABLE_STATUSES:
         raise ConflictError(f"Job {job_id} is '{job.status}'; only completed or needs_review jobs can be exported.")
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
-        tmp_path = tmp.name
     try:
-        export_job(conn, job_id, tmp_path)
-        content = Path(tmp_path).read_bytes()
-    finally:
-        os.unlink(tmp_path)
-    return export_file_name(job), content
+        exported = export_job(conn, job_id, output_dir())
+    except OutputLocationError as e:
+        raise ConflictError(str(e)) from e
+    by_id = {o.id: o for o in list_outputs(conn, job_id)}
+    return [by_id[e.id] for e in exported]
+
+
+def read_output(conn, job_id: int, output_id: int) -> tuple[str, bytes]:
+    """(file name, bytes) of a stored output file."""
+    row = row_dict(conn.execute(
+        "SELECT id, artifact_type, file_name, file_path, created_at FROM export_file WHERE id = ? AND job_id = ?",
+        (output_id, job_id),
+    ).fetchone())
+    if not row:
+        raise NotFoundError(f"Output {output_id} of job {job_id} not found.")
+    path = Path(row["file_path"] or "")
+    if not path.is_file():
+        raise NotFoundError(
+            f"{row['file_name']} is recorded but no longer on disk. Generate a new version from the Export page."
+        )
+    return row["file_name"], path.read_bytes()
 
 
 def confirm_job(conn, job_id: int) -> Job:

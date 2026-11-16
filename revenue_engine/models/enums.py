@@ -17,6 +17,9 @@ JobStatus = Literal[
     "uploaded", "validating", "validated", "processing", "needs_review", "completed", "failed",
 ]
 JobType = Literal["row_level", "pivot_allocation"]
+IdentityMode = Literal["member_match", "gpo_key"]
+VolumeMode = Literal["sum", "blank"]
+ArtifactType = Literal["salesforce_upload", "exception_report", "validation_report", "jde_mapping"]
 SupplierPaymentIdSource = Literal["ledger", "manual", "column"]
 JobPaymentIdSource = Literal["ledger_auto", "manual", "column", "not_found"]
 ExtractionMethod = Literal[

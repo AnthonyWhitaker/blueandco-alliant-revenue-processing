@@ -53,6 +53,22 @@ export const jobPreviewQuery = (jobId: number) =>
       unwrap(api.GET('/api/jobs/{job_id}/preview', { params: { path: { job_id: jobId } } })),
   });
 
+export type JobOutput = Schemas['JobOutput'];
+
+export const jobFilesQuery = (jobId: number) =>
+  queryOptions({
+    queryKey: queryKeys.jobs.files(jobId),
+    queryFn: () =>
+      unwrap(api.GET('/api/jobs/{job_id}/files', { params: { path: { job_id: jobId } } })),
+  });
+
+export const jobOutputsQuery = (jobId: number) =>
+  queryOptions({
+    queryKey: queryKeys.jobs.outputs(jobId),
+    queryFn: () =>
+      unwrap(api.GET('/api/jobs/{job_id}/outputs', { params: { path: { job_id: jobId } } })),
+  });
+
 export const reviewItemsQuery = (jobId: number) =>
   queryOptions({
     queryKey: queryKeys.jobs.reviewItems(jobId),
