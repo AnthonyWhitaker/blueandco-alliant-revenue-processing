@@ -27,8 +27,10 @@ def list_jobs(
     status_: Annotated[Optional[list[JobStatus]], Query(alias="status")] = None,
     has_pending_reviews: Optional[bool] = None,
     limit: Annotated[Optional[int], Query(ge=1, le=500)] = None,
+    archived: Annotated[bool, Query(description="List only deleted jobs instead of the others.")] = False,
 ) -> list[Job]:
-    return jobs.list_jobs(conn, statuses=status_, has_pending_reviews=has_pending_reviews, limit=limit)
+    return jobs.list_jobs(conn, statuses=status_, has_pending_reviews=has_pending_reviews, limit=limit,
+                          archived=archived)
 
 
 @router.post(
@@ -95,6 +97,20 @@ def get_job(conn: Conn, job_id: int) -> Job:
 @router.patch("/jobs/{job_id}", responses=problems(404), response_model=Job, summary="Set the job's Salesforce Payment ID")
 def patch_job(conn: Conn, job_id: int, body: JobPatch) -> Job:
     return jobs.set_payment_id(conn, job_id, body.payment_id)
+
+
+@router.delete("/jobs/{job_id}", responses=problems(404, 409), response_model=Job,
+               summary="Delete a job (soft delete)",
+               description="The job is hidden from job lists but nothing is removed: its rows, outputs and "
+                           "files stay, and POST /jobs/{job_id}/restoration brings it back. 409 while processing.")
+def delete_job(conn: Conn, job_id: int) -> Job:
+    return jobs.archive_job(conn, job_id)
+
+
+@router.post("/jobs/{job_id}/restoration", responses=problems(404), response_model=Job,
+             summary="Restore a deleted job")
+def restore_job(conn: Conn, job_id: int) -> Job:
+    return jobs.restore_job(conn, job_id)
 
 
 @router.post("/jobs/{job_id}/confirmation", responses=problems(404, 409), response_model=Job,

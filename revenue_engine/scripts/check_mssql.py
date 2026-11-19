@@ -14,10 +14,13 @@ import tempfile
 from datetime import date
 from pathlib import Path
 
+import openpyxl
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from core import jobs, members, misc, reviews, tier_c  # noqa: E402
 from engine.db import init_db, is_mssql  # noqa: E402
+from models.members import MemberInput  # noqa: E402
 from models.reviews import ReviewApproval  # noqa: E402
 from models.tier_c import AllocationRuleInput, ExtractionRuleInput  # noqa: E402
 from tests.fixtures import COLUMN_MAP, FILE_NAME, make_members, make_supplier, write_supplier_file  # noqa: E402
@@ -59,6 +62,23 @@ name, content = jobs.read_output(conn, job.id, outputs[0].id)
 check("export", content[:2] == b"PK" and len(jobs.list_outputs(conn, job.id)) == 4, name)
 check("member search", members.search_members(conn, term="mercy").total == 1)
 check("ledger listing", members.list_ledger_entries(conn, limit=5).total == 1)
+
+# Members without a Salesforce Account ID: several may exist (ux_member_account_id is filtered),
+# and reloading an Account List with such rows updates them instead of adding them again.
+members.create_member(conn, MemberInput(name="Walk-in Clinic One"))
+members.create_member(conn, MemberInput(name="Walk-in Clinic Two"))
+check("several members without an Account ID", True)
+wb = openpyxl.Workbook()
+wb.active.title = "Account List"
+wb.active.append(["Account Name", "Account ID", "Premier Entity Code", "Billing State/Province"])
+wb.active.append(["No ID Clinic A", None, "EC501", "TX"])
+wb.active.append(["No ID Clinic B", None, "EC502", "TX"])
+accounts = Path(tempfile.mkdtemp()) / "Account List.xlsx"
+wb.save(accounts)
+members.import_account_list(conn, str(accounts), replace_all=False)
+members.import_account_list(conn, str(accounts), replace_all=False)
+no_id = conn.execute("SELECT COUNT(*) FROM member WHERE name LIKE 'No ID Clinic %'").fetchone()[0]
+check("Account List rows without an ID are not duplicated on reload", no_id == 2, no_id)
 check("aliases", len(misc.list_aliases(conn)) == 1)
 check("dashboard", misc.get_dashboard_stats(conn).pending_reviews == 0)
 

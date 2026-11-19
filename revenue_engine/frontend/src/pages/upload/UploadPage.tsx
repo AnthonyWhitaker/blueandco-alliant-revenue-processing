@@ -1,4 +1,5 @@
 import {
+  ActionIcon,
   Alert,
   Anchor,
   Badge,
@@ -9,6 +10,7 @@ import {
   Loader,
   NumberInput,
   Paper,
+  SegmentedControl,
   Select,
   SimpleGrid,
   Skeleton,
@@ -16,9 +18,18 @@ import {
   Text,
   TextInput,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { schemaResolver, useForm } from '@mantine/form';
-import { IconAlertTriangle, IconCircleCheck, IconPlayerPlay } from '@tabler/icons-react';
+import { modals } from '@mantine/modals';
+import { notifications } from '@mantine/notifications';
+import {
+  IconAlertTriangle,
+  IconArrowBackUp,
+  IconCircleCheck,
+  IconPlayerPlay,
+  IconTrash,
+} from '@tabler/icons-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
@@ -34,7 +45,7 @@ import { QueryError } from '@/components/QueryError';
 import { StatCard } from '@/components/StatCard';
 import { applyServerErrors, blankToNull } from '@/lib/forms';
 import { formatCurrency, formatDateTime, formatInteger, formatText, pluralize } from '@/lib/format';
-import { statusColor } from '@/lib/jobs';
+import { statusColor, statusLabel } from '@/lib/jobs';
 import { routes, searchParamNames } from '@/lib/routes';
 import { idCodec, useSearchParamState } from '@/lib/searchParams';
 import {
@@ -47,6 +58,8 @@ import {
 import { queryKeys } from '@/queries/keys';
 import { metaQuery } from '@/queries/reference';
 import { extractionRulesQuery, suppliersQuery, type Supplier } from '@/queries/suppliers';
+
+import { JobDetailsModal } from './JobDetails';
 
 const RECENT_LIMIT = 20;
 /** Same as core.jobs.UPLOAD_EXTENSIONS; /meta is the source once it has loaded. */
@@ -284,7 +297,7 @@ function UploadForm({ files, suppliers, inference, onSubmitted }: UploadFormProp
 }
 
 /** Progress, then the outcome, of the job just submitted (`?job=`). */
-function JobResult({ jobId }: { jobId: number }) {
+function JobResult({ jobId, onDetails }: { jobId: number; onDetails: (jobId: number) => void }) {
   const queryClient = useQueryClient();
   const job = useQuery(jobQuery(jobId));
   const status = job.data?.status;
@@ -333,7 +346,21 @@ function JobResult({ jobId }: { jobId: number }) {
   if (j.status === 'failed') {
     return (
       <Alert color="red" icon={<IconAlertTriangle />} title={`Processing failed (job #${j.id})`}>
-        {j.error_message ?? 'The job failed without an error message.'}
+        <Stack gap="xs" align="flex-start">
+          <Text size="sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+            {j.error_message ?? 'The job failed without an error message.'}
+          </Text>
+          <Button
+            size="xs"
+            variant="white"
+            color="red"
+            onClick={() => {
+              onDetails(j.id);
+            }}
+          >
+            View details
+          </Button>
+        </Stack>
       </Alert>
     );
   }
@@ -414,47 +441,132 @@ function JobResult({ jobId }: { jobId: number }) {
   );
 }
 
-function RecentJobs({ onOpen }: { onOpen: (jobId: number) => void }) {
-  const jobs = useQuery(jobsQuery({ limit: RECENT_LIMIT }));
+type JobListView = 'active' | 'deleted';
+
+/** Soft delete and restore; both refresh every job list and the dashboard counts. */
+function useJobArchive() {
+  const queryClient = useQueryClient();
+  const refresh = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: queryKeys.jobs.all }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
+    ]);
+  const remove = useMutation({
+    mutationFn: (jobId: number) =>
+      unwrap(api.DELETE('/api/jobs/{job_id}', { params: { path: { job_id: jobId } } })),
+    onSuccess: async (job) => {
+      notifications.show({
+        color: 'green',
+        title: `Job #${String(job.id)} deleted`,
+        message: 'Restore it any time from Deleted jobs.',
+      });
+      await refresh();
+    },
+  });
+  const restore = useMutation({
+    mutationFn: (jobId: number) =>
+      unwrap(
+        api.POST('/api/jobs/{job_id}/restoration', { params: { path: { job_id: jobId } } }),
+      ),
+    onSuccess: async (job) => {
+      notifications.show({
+        color: 'green',
+        title: `Job #${String(job.id)} restored`,
+        message: 'It is back in Recent jobs.',
+      });
+      await refresh();
+    },
+  });
+  const confirmDelete = (j: Job) => {
+    modals.openConfirmModal({
+      title: `Delete job #${String(j.id)}?`,
+      children: (
+        <Text size="sm">
+          {j.original_file_name} ({j.supplier_name}) is removed from Recent jobs, Review and Export.
+          Nothing is erased: you can restore it from Deleted jobs.
+        </Text>
+      ),
+      labels: { confirm: 'Delete job', cancel: 'Cancel' },
+      confirmProps: { color: 'red' },
+      onConfirm: () => {
+        remove.mutate(j.id);
+      },
+    });
+  };
+  return { confirmDelete, restore };
+}
+
+interface RecentJobsProps {
+  onOpen: (jobId: number) => void;
+  onDetails: (jobId: number) => void;
+}
+
+function RecentJobs({ onOpen, onDetails }: RecentJobsProps) {
+  const [view, setView] = useState<JobListView>('active');
+  const deleted = view === 'deleted';
+  const jobs = useQuery(jobsQuery({ limit: RECENT_LIMIT, archived: deleted }));
+  const { confirmDelete, restore } = useJobArchive();
   return (
     <Stack gap="sm">
-      <Title order={2}>Recent jobs</Title>
+      <Group justify="space-between">
+        <Title order={2}>{deleted ? 'Deleted jobs' : 'Recent jobs'}</Title>
+        <SegmentedControl
+          size="xs"
+          aria-label="Which jobs"
+          value={view}
+          onChange={(v) => {
+            setView(v);
+          }}
+          data={[
+            { value: 'active', label: 'Recent' },
+            { value: 'deleted', label: 'Deleted' },
+          ]}
+        />
+      </Group>
       {jobs.error ? (
         <QueryError
-          title="Couldn't load recent jobs"
+          title={`Couldn't load ${deleted ? 'deleted' : 'recent'} jobs`}
           error={jobs.error}
           onRetry={() => void jobs.refetch()}
         />
       ) : (
         <DataTable
-          label="Recent jobs"
+          label={deleted ? 'Deleted jobs' : 'Recent jobs'}
           fetching={jobs.isPending}
           records={jobs.data}
-          noRecordsText="No jobs yet"
+          noRecordsText={deleted ? 'No deleted jobs' : 'No jobs yet'}
+          pinLastColumn
           columns={[
             {
               accessor: 'id',
               title: 'Job #',
-              render: (j) => (
-                <Anchor
-                  component="button"
-                  type="button"
-                  size="sm"
-                  onClick={() => {
-                    onOpen(j.id);
-                  }}
-                  aria-label={`Open job ${j.id}`}
-                >
-                  #{j.id}
-                </Anchor>
-              ),
+              render: (j) =>
+                deleted ? (
+                  `#${String(j.id)}`
+                ) : (
+                  <Anchor
+                    component="button"
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      onOpen(j.id);
+                    }}
+                    aria-label={`Open job ${j.id}`}
+                  >
+                    #{j.id}
+                  </Anchor>
+                ),
             },
             { accessor: 'supplier_name', title: 'Supplier' },
             { accessor: 'original_file_name', title: 'File' },
             {
               accessor: 'status',
               title: 'Status',
-              render: (j) => <Badge color={statusColor(j.status)}>{j.status}</Badge>,
+              render: (j) => (
+                <Badge color={statusColor(j.status)} style={{ overflow: 'visible' }}>
+                  {statusLabel(j.status)}
+                </Badge>
+              ),
             },
             {
               accessor: 'row_count',
@@ -482,9 +594,55 @@ function RecentJobs({ onOpen }: { onOpen: (jobId: number) => void }) {
               render: (j) => formatCurrency(j.total_revenue),
             },
             {
-              accessor: 'created_at',
-              title: 'Created',
-              render: (j) => formatDateTime(j.created_at),
+              accessor: deleted ? 'archived_at' : 'created_at',
+              title: deleted ? 'Deleted' : 'Created',
+              render: (j) => formatDateTime(deleted ? j.archived_at : j.created_at),
+            },
+            {
+              accessor: 'actions',
+              title: '',
+              render: (j) => (
+                <Group gap={4} wrap="nowrap">
+                  <Button
+                    size="compact-xs"
+                    variant="default"
+                    onClick={() => {
+                      onDetails(j.id);
+                    }}
+                    aria-label={`Details of job ${j.id}`}
+                  >
+                    Details
+                  </Button>
+                  {deleted ? (
+                    <Button
+                      size="compact-xs"
+                      variant="default"
+                      leftSection={<IconArrowBackUp size={14} />}
+                      loading={restore.isPending && restore.variables === j.id}
+                      onClick={() => {
+                        restore.mutate(j.id);
+                      }}
+                      aria-label={`Restore job ${j.id}`}
+                    >
+                      Restore
+                    </Button>
+                  ) : (
+                    <Tooltip label={isInProgress(j.status) ? 'Still processing' : 'Delete job'}>
+                      <ActionIcon
+                        variant="subtle"
+                        color="red"
+                        disabled={isInProgress(j.status)}
+                        onClick={() => {
+                          confirmDelete(j);
+                        }}
+                        aria-label={`Delete job ${j.id}`}
+                      >
+                        <IconTrash size={16} />
+                      </ActionIcon>
+                    </Tooltip>
+                  )}
+                </Group>
+              ),
             },
           ]}
         />
@@ -499,6 +657,7 @@ export function UploadPage() {
   const [files, setFiles] = useState<File[]>([]);
   const first = files[0];
   const [jobId, setJobId] = useSearchParamState(searchParamNames.job, idCodec);
+  const [detailsJobId, setDetailsJobId] = useState<number | null>(null);
   const inference = useQuery({
     ...fileNameInferenceQuery(first?.name ?? ''),
     enabled: first !== undefined,
@@ -567,14 +726,21 @@ export function UploadPage() {
               ))}
           </Stack>
         </Paper>
-        {jobId !== null && <JobResult key={jobId} jobId={jobId} />}
+        {jobId !== null && <JobResult key={jobId} jobId={jobId} onDetails={setDetailsJobId} />}
         <RecentJobs
           onOpen={(id) => {
             setJobId(id);
             window.scrollTo({ top: 0, behavior: 'smooth' });
           }}
+          onDetails={setDetailsJobId}
         />
       </Stack>
+      <JobDetailsModal
+        jobId={detailsJobId}
+        onClose={() => {
+          setDetailsJobId(null);
+        }}
+      />
     </>
   );
 }

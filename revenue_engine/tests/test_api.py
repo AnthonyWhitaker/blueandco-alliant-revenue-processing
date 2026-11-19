@@ -105,6 +105,33 @@ def test_failed_processing_is_reported_on_the_job(client, conn, tmp_path):
                    lambda b: b["status"] not in ("uploaded", "processing"))
     assert job["status"] == "failed"
     assert job["error_message"]
+    assert "Traceback" in job["error_detail"]
+
+
+def test_delete_hides_the_job_until_restored(client, conn, seeded, tmp_path, caplog):
+    job = upload_job(client, seeded["supplier_id"], tmp_path).json()
+    job = wait_for(lambda: client.get(f"/api/jobs/{job['id']}").json(),
+                   lambda b: b["status"] not in ("uploaded", "processing"))
+    listed = lambda **params: [j["id"] for j in client.get("/api/jobs", params=params).json()]
+    assert client.get("/api/dashboard").json()["jobs"] == 1
+
+    deleted = client.delete(f"/api/jobs/{job['id']}")
+    assert deleted.status_code == 200 and deleted.json()["archived_at"]
+    assert listed() == [] and listed(has_pending_reviews="true") == []
+    assert listed(archived="true") == [job["id"]]
+    assert client.get("/api/dashboard").json()["jobs"] == 0
+    assert client.get(f"/api/jobs/{job['id']}/review-items").json()      # nothing was removed
+
+    restored = client.post(f"/api/jobs/{job['id']}/restoration")
+    assert restored.json()["archived_at"] is None
+    assert listed() == [job["id"]] and listed(archived="true") == []
+
+    conn.execute("UPDATE revenue_job SET status = 'processing' WHERE id = ?", (job["id"],))
+    conn.commit()
+    with caplog.at_level("WARNING", logger="api.errors"):
+        assert client.delete(f"/api/jobs/{job['id']}").status_code == 409
+    assert "still processing" in caplog.text            # rejected requests are logged with the reason
+    assert client.delete("/api/jobs/999").status_code == 404
 
 
 def test_upload_rejections(client, seeded):
@@ -317,3 +344,13 @@ def test_responses_are_gzipped_when_the_client_accepts_it(spa_client):
     (spa_client.app.state.settings.static_dir / "assets" / "big.js").write_text("x" * 5000)
     r = spa_client.get("/assets/big.js", headers={"Accept-Encoding": "gzip"})
     assert r.headers["content-encoding"] == "gzip"
+
+
+def test_templates_download(client):
+    for url, name in (("/api/member-imports/template", "Account%20List%20template.xlsx"),
+                      ("/api/ledger-imports/template", "Ledger%20template.xlsx")):
+        r = client.get(url)
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith("application/vnd.openxmlformats")
+        assert r.headers["content-disposition"].endswith(name)
+        openpyxl.load_workbook(BytesIO(r.content))

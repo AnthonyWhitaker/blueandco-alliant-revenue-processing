@@ -9,6 +9,7 @@ import uuid
 from datetime import date
 from pathlib import Path
 import re
+import traceback
 from typing import Optional
 
 from engine.constants import EXTRACT_MANUAL_ENTRY, JOB_TYPE_PIVOT_ALLOCATION, STATUS_COMPLETED, STATUS_FAILED, STATUS_NEEDS_REVIEW, STATUS_PROCESSING, STATUS_UPLOADED
@@ -16,7 +17,7 @@ from engine.constants import EXC_PROCESSING_ERROR
 from engine.db import execute_select, get_last_insert_id
 from engine.exporter import OutputLocationError, export_job, export_to_dataframes
 from engine.normalizer import guess_supplier_from_filename, parse_date_from_filename, parse_deposit_amount_from_filename
-from engine.processor import process_job
+from engine.processor import failure_message, process_job
 from models.enums import JobStatus
 from models.jobs import FileNameInference, Job, JobException, JobFile, JobOutput, JobPreview
 
@@ -103,8 +104,10 @@ def list_jobs(
     statuses: Optional[list[JobStatus]] = None,
     has_pending_reviews: Optional[bool] = None,
     limit: Optional[int] = None,
+    archived: bool = False,
 ) -> list[Job]:
-    where: list[str] = []
+    """Jobs newest first. Deleted (archived) jobs are listed only with archived=True, and then only they."""
+    where: list[str] = [f"rj.archived_at IS {'NOT ' if archived else ''}NULL"]
     params: list = []
     if statuses:
         where.append(f"rj.status IN ({', '.join('?' for _ in statuses)})")
@@ -113,9 +116,7 @@ def list_jobs(
         exists = ("EXISTS (SELECT 1 FROM member_review_item p "
                   "WHERE p.job_id = rj.id AND p.status = 'pending')")
         where.append(exists if has_pending_reviews else f"NOT {exists}")
-    sql = _JOB_SELECT
-    if where:
-        sql += " WHERE " + " AND ".join(where)
+    sql = _JOB_SELECT + " WHERE " + " AND ".join(where)
     sql += " ORDER BY rj.created_at DESC, rj.id DESC"
     if limit:
         sql += f" LIMIT {int(limit)}"
@@ -261,8 +262,8 @@ def run_job(conn, job_id: int, manual_payment_id: Optional[str] = None) -> Job:
         # before it starts (missing file/job/supplier), which leave it 'uploaded'.
         conn.rollback()
         conn.execute(
-            "UPDATE revenue_job SET status = ?, error_message = ? WHERE id = ? AND status = ?",
-            (STATUS_FAILED, str(e)[:2000], job_id, STATUS_UPLOADED),
+            "UPDATE revenue_job SET status = ?, error_message = ?, error_detail = ? WHERE id = ? AND status = ?",
+            (STATUS_FAILED, failure_message(e)[:2000], traceback.format_exc(), job_id, STATUS_UPLOADED),
         )
         conn.commit()
         raise
@@ -298,6 +299,25 @@ def fail_interrupted_jobs(conn) -> int:
     )
     conn.commit()
     return cur.rowcount
+
+
+def archive_job(conn, job_id: int) -> Job:
+    """Delete a job softly: it leaves every list but keeps its rows and files, so restore_job brings it back."""
+    job = get_job(conn, job_id)
+    if job.status in (STATUS_UPLOADED, STATUS_PROCESSING):
+        raise ConflictError(f"Job {job_id} is still processing. Wait for it to finish, then delete it.")
+    if job.archived_at is None:
+        conn.execute("UPDATE revenue_job SET archived_at = CURRENT_TIMESTAMP WHERE id = ?", (job_id,))
+        conn.commit()
+    return get_job(conn, job_id)
+
+
+def restore_job(conn, job_id: int) -> Job:
+    """Undo archive_job."""
+    get_job(conn, job_id)
+    conn.execute("UPDATE revenue_job SET archived_at = NULL WHERE id = ?", (job_id,))
+    conn.commit()
+    return get_job(conn, job_id)
 
 
 def set_payment_id(conn, job_id: int, payment_id: str) -> Job:

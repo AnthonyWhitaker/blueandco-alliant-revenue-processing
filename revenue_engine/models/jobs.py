@@ -56,6 +56,9 @@ class Job(ApiModel):
     total_volume: Optional[float]
     total_revenue: Optional[float]
     error_message: Optional[str]
+    error_detail: Optional[str] = Field(
+        default=None, description="Technical details of a processing failure (the traceback), for support.",
+    )
     pending_review_count: int
     manual_totals: dict[str, float] = Field(
         default_factory=dict, validation_alias="manual_totals_json",
@@ -69,6 +72,9 @@ class Job(ApiModel):
     )
     created_at: datetime
     completed_at: Optional[datetime]
+    archived_at: Optional[datetime] = Field(
+        default=None, description="When the job was deleted. Deleted jobs are hidden from lists and can be restored.",
+    )
 
     @field_validator("manual_totals", mode="before")
     @classmethod

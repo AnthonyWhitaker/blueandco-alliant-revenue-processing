@@ -196,6 +196,8 @@ def init_db(db_path: Optional[str] = None):
     _safe_add_column(conn, "supplier_profile", "volume_mode", f"{text} NOT NULL DEFAULT 'sum'")
     _safe_add_column(conn, "revenue_job", "timeframe", text)
     _safe_add_column(conn, "revenue_job", "reconciliation_json", long_text)
+    _safe_add_column(conn, "revenue_job", "error_detail", long_text)
+    _safe_add_column(conn, "revenue_job", "archived_at", "DATETIME2" if is_mssql() else "TIMESTAMP")
     _safe_add_column(conn, "revenue_row", "source_file", long_text)
     _safe_add_column(conn, "revenue_row", "source_row", "INTEGER" if not is_mssql() else "INT")
     _safe_add_column(conn, "revenue_row", "file_entity_code", text)

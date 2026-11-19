@@ -41,8 +41,11 @@ def get_dashboard_stats(conn) -> DashboardStats:
     return DashboardStats(
         active_members=count("SELECT COUNT(*) FROM member WHERE is_active = 1"),
         suppliers=count("SELECT COUNT(*) FROM supplier_profile"),
-        jobs=count("SELECT COUNT(*) FROM revenue_job"),
-        pending_reviews=count("SELECT COUNT(*) FROM member_review_item WHERE status = 'pending'"),
+        jobs=count("SELECT COUNT(*) FROM revenue_job WHERE archived_at IS NULL"),
+        pending_reviews=count(
+            "SELECT COUNT(*) FROM member_review_item mri JOIN revenue_job rj ON rj.id = mri.job_id "
+            "WHERE mri.status = 'pending' AND rj.archived_at IS NULL"
+        ),
     )
 
 

@@ -17,6 +17,7 @@ in the supplier_profile and supplier_column_map database records.
 """
 
 import json
+import traceback
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
@@ -139,13 +140,27 @@ def process_job(
         return _run_pipeline(conn, job, supplier, files, manual_payment_id)
     except Exception as e:
         conn.rollback()      # drop rows inserted before the failure
+        message = failure_message(e)
         conn.execute(
-            "UPDATE revenue_job SET status = ?, error_message = ? WHERE id = ?",
-            (STATUS_FAILED, str(e)[:2000], job_id),
+            "UPDATE revenue_job SET status = ?, error_message = ?, error_detail = ? WHERE id = ?",
+            (STATUS_FAILED, message[:2000], traceback.format_exc(), job_id),
         )
-        _job_log(conn, job_id, EXC_PROCESSING_ERROR, str(e), "error")
+        _job_log(conn, job_id, EXC_PROCESSING_ERROR, message, "error")
         conn.commit()
         raise
+
+
+# Errors raised on purpose with a message written for the user; anything else is a bug or an
+# environment problem, so its message gets the exception type to make it recognisable.
+_USER_FACING_ERRORS = (ValueError, FileNotFoundError, ExtractionError, AllocationError)
+
+
+def failure_message(e: BaseException) -> str:
+    """error_message for a failed job: the exception's message, prefixed with its type when unexpected."""
+    message = str(e).strip()
+    if isinstance(e, _USER_FACING_ERRORS) and message:
+        return message
+    return f"Unexpected error ({type(e).__name__}){': ' + message if message else ''}"
 
 
 def _job_files(conn: object, job: dict) -> list[SourceFile]:

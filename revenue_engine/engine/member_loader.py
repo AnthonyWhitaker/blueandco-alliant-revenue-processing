@@ -38,6 +38,21 @@ def _find_col(df_cols: list[str], candidates: list[str]) -> Optional[str]:
     return None
 
 
+def _cell(row, col: Optional[str]) -> str:
+    """A cell as stripped text; blank and missing cells (NaN) are ''."""
+    if not col:
+        return ""
+    value = row.get(col)
+    if value is None or (not isinstance(value, str) and pd.isna(value)):
+        return ""
+    return str(value).strip()
+
+
+def _identity(canonical: str, entity_code: str, norm_state: str) -> tuple[str, str, str]:
+    """How a row without a Salesforce Account ID is recognised on a later load: name, entity code and state."""
+    return canonical, entity_code.upper(), norm_state
+
+
 def _account_list_member_ids(conn: object, active: bool) -> set[int]:
     rows = conn.execute(
         "SELECT id FROM member WHERE account_id IS NOT NULL AND is_active = ?", (1 if active else 0,)
@@ -62,6 +77,12 @@ def load_account_list(
                      List that are not in this file are deactivated. They are
                      never deleted, because jobs, review items, allocation
                      rules, aliases and JDE history refer to them (FINDINGS F23).
+
+    Rows are matched to existing members by Salesforce Account ID. A row
+    without one is matched by name + entity code + state instead (see
+    _identity), so loading the same list again updates it rather than adding
+    it again. A member first loaded without an ID takes the ID when a later
+    list has one.
 
     Returns:
         (inserted_count, skipped_count, deactivated_count)
@@ -102,21 +123,36 @@ def load_account_list(
         active_before = _account_list_member_ids(conn, active=True)
         conn.execute("UPDATE member SET is_active = 0 WHERE account_id IS NOT NULL")
 
+    # Existing members by Account ID, and by identity for matching rows without one.
+    by_account_id: dict[str, Optional[int]] = {}       # None: added by this load (id not looked up)
+    by_identity: dict[tuple[str, str, str], int] = {}
+    by_identity_without_id: dict[tuple[str, str, str], int] = {}
+    for m in conn.execute(
+        "SELECT id, account_id, canonical_key, entity_code, norm_state FROM member ORDER BY id"
+    ).fetchall():
+        key = _identity(m["canonical_key"] or "", m["entity_code"] or "", m["norm_state"] or "")
+        if m["account_id"]:
+            by_account_id[m["account_id"]] = m["id"]
+        else:
+            by_identity_without_id.setdefault(key, m["id"])
+        by_identity.setdefault(key, m["id"])
+
+    from .db import execute_upsert, get_last_insert_id
     inserted = 0
     skipped = 0
 
     for _, row in df.iterrows():
-        name = str(row.get(col_name, "") or "").strip()
+        name = _cell(row, col_name)
         if not name:
             skipped += 1
             continue
 
-        pec     = str(row.get(col_pec, "") or "").strip() if col_pec else ""
-        alliant = str(row.get(col_alliant, "") or "").strip() if col_alliant else ""
-        acct_id = str(row.get(col_acct_id, "") or "").strip() if col_acct_id else None
-        city    = str(row.get(col_city, "") or "").strip() if col_city else ""
-        state   = str(row.get(col_state, "") or "").strip() if col_state else ""
-        zip_raw = str(row.get(col_zip, "") or "").strip() if col_zip else ""
+        pec     = _cell(row, col_pec)
+        alliant = _cell(row, col_alliant)
+        acct_id = _cell(row, col_acct_id)
+        city    = _cell(row, col_city)
+        state   = _cell(row, col_state)
+        zip_raw = _cell(row, col_zip)
 
         # Determine effective entity code
         entity_code = pec if pec else alliant
@@ -125,48 +161,86 @@ def load_account_list(
         norm_city  = normalize_city(city)
         norm_state = normalize_state(state)
         norm_zip   = normalize_zip(zip_raw)
+        key = _identity(canonical, entity_code, norm_state or "")
+
+        fields = (
+            pec or None,
+            alliant or None,
+            entity_code or None,
+            name,
+            canonical,
+            city or None,
+            state or None,
+            zip_raw or None,
+            norm_city or None,
+            norm_state or None,
+            norm_zip or None,
+        )
+        # The member this row updates without an Account ID upsert: a row without an ID that matches by
+        # identity, or a row with a new ID whose facility was loaded earlier without one (it takes the ID).
+        if acct_id:
+            existing = None if acct_id in by_account_id else by_identity_without_id.pop(key, None)
+        else:
+            existing = by_identity.get(key)
 
         try:
-            from .db import execute_upsert
-            execute_upsert(
-                conn,
-                """
-                INSERT INTO member (
-                    account_id, premier_entity_code, alliant_entity_code, entity_code,
-                    name, canonical_key,
-                    billing_city, billing_state, billing_zip,
-                    norm_city, norm_state, norm_zip
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(account_id) DO UPDATE SET
-                    premier_entity_code = excluded.premier_entity_code,
-                    alliant_entity_code = excluded.alliant_entity_code,
-                    entity_code         = excluded.entity_code,
-                    name                = excluded.name,
-                    canonical_key       = excluded.canonical_key,
-                    billing_city        = excluded.billing_city,
-                    billing_state       = excluded.billing_state,
-                    billing_zip         = excluded.billing_zip,
-                    norm_city           = excluded.norm_city,
-                    norm_state          = excluded.norm_state,
-                    norm_zip            = excluded.norm_zip,
-                    is_active           = 1,
-                    updated_at          = CURRENT_TIMESTAMP
-                """,
-                (
-                    acct_id or None,
-                    pec or None,
-                    alliant or None,
-                    entity_code or None,
-                    name,
-                    canonical,
-                    city or None,
-                    state or None,
-                    zip_raw or None,
-                    norm_city or None,
-                    norm_state or None,
-                    norm_zip or None,
-                ),
-            )
+            if existing is not None:
+                conn.execute(
+                    """
+                    UPDATE member SET
+                        account_id          = COALESCE(?, account_id),
+                        premier_entity_code = ?, alliant_entity_code = ?, entity_code = ?,
+                        name = ?, canonical_key = ?,
+                        billing_city = ?, billing_state = ?, billing_zip = ?,
+                        norm_city = ?, norm_state = ?, norm_zip = ?,
+                        is_active = 1, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (acct_id or None, *fields, existing),
+                )
+                if acct_id:
+                    by_account_id[acct_id] = existing
+            elif not acct_id:
+                cur = conn.execute(
+                    """
+                    INSERT INTO member (
+                        account_id, premier_entity_code, alliant_entity_code, entity_code,
+                        name, canonical_key,
+                        billing_city, billing_state, billing_zip,
+                        norm_city, norm_state, norm_zip
+                    ) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    fields,
+                )
+                by_identity[key] = get_last_insert_id(conn, cur)
+            else:
+                execute_upsert(
+                    conn,
+                    """
+                    INSERT INTO member (
+                        account_id, premier_entity_code, alliant_entity_code, entity_code,
+                        name, canonical_key,
+                        billing_city, billing_state, billing_zip,
+                        norm_city, norm_state, norm_zip
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(account_id) DO UPDATE SET
+                        premier_entity_code = excluded.premier_entity_code,
+                        alliant_entity_code = excluded.alliant_entity_code,
+                        entity_code         = excluded.entity_code,
+                        name                = excluded.name,
+                        canonical_key       = excluded.canonical_key,
+                        billing_city        = excluded.billing_city,
+                        billing_state       = excluded.billing_state,
+                        billing_zip         = excluded.billing_zip,
+                        norm_city           = excluded.norm_city,
+                        norm_state          = excluded.norm_state,
+                        norm_zip            = excluded.norm_zip,
+                        is_active           = 1,
+                        updated_at          = CURRENT_TIMESTAMP
+                    """,
+                    (acct_id, *fields),
+                )
+                by_account_id.setdefault(acct_id, None)
             inserted += 1
         except Exception:
             skipped += 1
