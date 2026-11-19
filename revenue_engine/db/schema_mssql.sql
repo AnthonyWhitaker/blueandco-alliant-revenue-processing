@@ -69,7 +69,7 @@ IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'member')
 BEGIN
     CREATE TABLE member (
         id                      INT IDENTITY(1,1) PRIMARY KEY,
-        account_id              NVARCHAR(500) UNIQUE,
+        account_id              NVARCHAR(500),     -- unique when set: ux_member_account_id below
         premier_entity_code     NVARCHAR(500),
         alliant_entity_code     NVARCHAR(500),
         entity_code             NVARCHAR(500),
@@ -86,6 +86,25 @@ BEGIN
         updated_at              DATETIME2 NOT NULL DEFAULT GETUTCDATE()
     );
 END
+GO
+
+-- account_id is unique when set; any number of members may have none (added by hand during
+-- Review, or from an Account List row without an ID). A plain UNIQUE column allows only one
+-- NULL on SQL Server, so databases created with one have that constraint replaced here.
+DECLARE @uq sysname = (
+    SELECT TOP 1 kc.name
+    FROM sys.key_constraints kc
+    JOIN sys.index_columns ic ON ic.object_id = kc.parent_object_id AND ic.index_id = kc.unique_index_id
+    JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+    WHERE kc.parent_object_id = OBJECT_ID('member') AND kc.type = 'UQ' AND c.name = 'account_id'
+);
+IF @uq IS NOT NULL
+BEGIN
+    DECLARE @drop NVARCHAR(400) = N'ALTER TABLE member DROP CONSTRAINT ' + QUOTENAME(@uq);
+    EXEC sp_executesql @drop;
+END
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'ux_member_account_id')
+    CREATE UNIQUE INDEX ux_member_account_id ON member(account_id) WHERE account_id IS NOT NULL;
 GO
 
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_member_canonical_key')
@@ -242,12 +261,14 @@ BEGIN
         total_volume            FLOAT,
         total_revenue           FLOAT,
         error_message           NVARCHAR(MAX),
+        error_detail            NVARCHAR(MAX),
         column_mapping_json     NVARCHAR(MAX),
         manual_totals_json      NVARCHAR(MAX),  -- Tier C: {rule_name: amount} for manual_entry rules
         timeframe               NVARCHAR(500),
         reconciliation_json     NVARCHAR(MAX),
         created_at              DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
-        completed_at            DATETIME2
+        completed_at            DATETIME2,
+        archived_at             DATETIME2
     );
 END
 GO

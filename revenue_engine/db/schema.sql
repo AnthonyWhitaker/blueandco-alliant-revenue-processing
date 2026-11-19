@@ -236,12 +236,14 @@ CREATE TABLE IF NOT EXISTS revenue_job (
     total_volume            REAL,              -- Sum of sales_amount
     total_revenue           REAL,              -- Sum of fee_amount
     error_message           TEXT,
+    error_detail            TEXT,              -- Traceback of a processing failure, for support
     column_mapping_json     TEXT,              -- Confirmed column→canonical mapping
     manual_totals_json      TEXT,              -- Tier C: {rule_name: amount} for manual_entry rules, entered at upload
     timeframe               TEXT,              -- "Pmt For (Time Frame)", entered per run (free text)
     reconciliation_json     TEXT,              -- Input vs output + exceptions totals (engine/reconciliation.py)
     created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    completed_at            TIMESTAMP
+    completed_at            TIMESTAMP,
+    archived_at             TIMESTAMP              -- Set when deleted (soft delete); NULL to restore
 );
 
 -- ---------------------------------------------------------------------------

@@ -22,6 +22,7 @@ import { DataTable } from '@/components/DataTable';
 import { FileDropzone } from '@/components/FileDropzone';
 import { QueryError } from '@/components/QueryError';
 import { StatCard } from '@/components/StatCard';
+import { TemplateDownload } from '@/components/TemplateDownload';
 import { applyServerErrors, blankToNull } from '@/lib/forms';
 import { formatInteger, formatText } from '@/lib/format';
 import { queryKeys } from '@/queries/keys';
@@ -67,7 +68,8 @@ function AccountListImport() {
           Members from an earlier Account List that are not in this file are deactivated: they are
           no longer matched or offered on the Review page. Nothing is deleted, so past jobs, aliases
           and Tier C rules keep working, and a member is reactivated if a later file includes it
-          again. Facilities added by hand on the Review page are not affected.
+          again. Members without a Salesforce Account ID, such as facilities added by hand on the
+          Review page, are not affected.
         </Text>
       ),
       labels: { confirm: 'Deactivate missing and reload', cancel: 'Cancel' },
@@ -81,15 +83,23 @@ function AccountListImport() {
   return (
     <Paper p="lg">
       <Stack gap="md">
-        <div>
-          <Title order={2} size="h3">
-            Load the Account List
-          </Title>
-          <Text size="sm" c="dimmed" mt={4}>
-            Upload Account List.xlsx to load or refresh the member database. Existing members are
-            updated by Salesforce Account ID.
-          </Text>
-        </div>
+        <Group justify="space-between" align="flex-start" wrap="nowrap">
+          <div>
+            <Title order={2} size="h3">
+              Load the Account List
+            </Title>
+            <Text size="sm" c="dimmed" mt={4}>
+              Upload Account List.xlsx to load or refresh the member database. Existing members are
+              updated by Salesforce Account ID (rows without one, by name, entity code and state).
+              Not sure of the format? Download the template: it lists the columns and explains each
+              one.
+            </Text>
+          </div>
+          <TemplateDownload
+            path="/api/member-imports/template"
+            fileName="Account List template.xlsx"
+          />
+        </Group>
         <FileDropzone
           label="Account List.xlsx"
           extensions={['.xlsx', '.xls']}

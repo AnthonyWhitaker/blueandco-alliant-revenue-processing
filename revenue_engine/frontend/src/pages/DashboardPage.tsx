@@ -80,14 +80,14 @@ export function DashboardPage() {
             <Anchor component={Link} to={routes.admin.members}>
               Admin › Members
             </Anchor>
-            .
+            . A template with the expected columns is there to download.
           </List.Item>
           <List.Item>
             Import the payment ledger in{' '}
             <Anchor component={Link} to={routes.admin.ledger}>
               Admin › Payment Ledger
             </Anchor>
-            .
+            , which also has a template.
           </List.Item>
           <List.Item>
             Check supplier profiles in{' '}

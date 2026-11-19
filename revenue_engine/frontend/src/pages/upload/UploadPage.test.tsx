@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { extractionRule, job, meta, supplier } from '@/test/fixtures';
@@ -256,6 +256,83 @@ describe('Upload page', () => {
     await renderRoute('/upload?job=42');
     expect(await screen.findByText('Processing failed (job #42)')).toBeInTheDocument();
     expect(screen.getByText('No column mapped to fee_amount')).toBeInTheDocument();
+  });
+
+  it('shows the full error, technical details and log of a failed job', async () => {
+    const user = userEvent.setup();
+    const failed = job({
+      status: 'failed',
+      error_message: 'Unexpected error (KeyError): Fee',
+      error_detail: 'Traceback (most recent call last):\n  File "processor.py"',
+    });
+    stubFetch({
+      'GET /api/suppliers': () => json(suppliers),
+      'GET /api/meta': () => json(meta),
+      'GET /api/jobs': () => json([failed]),
+      'GET /api/jobs/42': () => json(failed),
+      'GET /api/jobs/42/files': () => json([]),
+      'GET /api/jobs/42/exceptions': () =>
+        json([
+          {
+            id: 1,
+            exception_type: 'processing_error',
+            message: 'Unexpected error (KeyError): Fee',
+            severity: 'error',
+            status: 'open',
+            created_at: '2026-03-02T09:31:00',
+          },
+        ]),
+    });
+    await renderRoute('/upload');
+    await user.click(await screen.findByRole('button', { name: 'Details of job 42' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Job #42' });
+    expect(within(dialog).getByText('Why it failed')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Traceback \(most recent call last\)/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Copy error report' })).toBeInTheDocument();
+    expect(await within(dialog).findByText('processing_error')).toBeInTheDocument();
+  });
+
+  it('deletes a job after confirmation and restores it from Deleted jobs', async () => {
+    const user = userEvent.setup();
+    const deleted = vi.fn();
+    const restored = vi.fn();
+    stubFetch({
+      'GET /api/suppliers': () => json(suppliers),
+      'GET /api/meta': () => json(meta),
+      'GET /api/jobs': (request) =>
+        new URL(request.url).searchParams.get('archived') === 'true'
+          ? json([job({ id: 7, archived_at: '2026-03-03T10:00:00' })])
+          : json([job()]),
+      'DELETE /api/jobs/42': () => {
+        deleted();
+        return json(job({ archived_at: '2026-03-03T10:00:00' }));
+      },
+      'POST /api/jobs/7/restoration': () => {
+        restored();
+        return json(job({ id: 7 }));
+      },
+      'GET /api/dashboard': () => json({}),
+    });
+    await renderRoute('/upload');
+
+    await user.click(await screen.findByRole('button', { name: 'Delete job 42' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete job #42?' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(deleted).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Delete job 42' }));
+    await user.click(await screen.findByRole('button', { name: 'Delete job' }));
+    await waitFor(() => {
+      expect(deleted).toHaveBeenCalledTimes(1);
+    });
+
+    await user.click(screen.getByRole('radio', { name: 'Deleted' }));
+    expect(await screen.findByRole('table', { name: 'Deleted jobs' })).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Restore job 7' }));
+    await waitFor(() => {
+      expect(restored).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('points to Admin when no suppliers exist', async () => {

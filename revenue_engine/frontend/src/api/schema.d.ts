@@ -120,11 +120,32 @@ export interface paths {
     get: operations['get_job_api_jobs__job_id__get'];
     put?: never;
     post?: never;
-    delete?: never;
+    /**
+     * Delete a job (soft delete)
+     * @description The job is hidden from job lists but nothing is removed: its rows, outputs and files stay, and POST /jobs/{job_id}/restoration brings it back. 409 while processing.
+     */
+    delete: operations['delete_job_api_jobs__job_id__delete'];
     options?: never;
     head?: never;
     /** Set the job's Salesforce Payment ID */
     patch: operations['patch_job_api_jobs__job_id__patch'];
+    trace?: never;
+  };
+  '/api/jobs/{job_id}/restoration': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Restore a deleted job */
+    post: operations['restore_job_api_jobs__job_id__restoration_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   '/api/jobs/{job_id}/confirmation': {
@@ -545,6 +566,40 @@ export interface paths {
     put?: never;
     /** Load a Ledger workbook in the background */
     post: operations['import_ledger_api_ledger_imports_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/member-imports/template': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Blank Account List workbook with the columns the import reads */
+    get: operations['account_list_template_api_member_imports_template_get'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/ledger-imports/template': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Blank Ledger workbook with the columns the import reads */
+    get: operations['ledger_template_api_ledger_imports_template_get'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1148,6 +1203,11 @@ export interface components {
       total_revenue: number | null;
       /** Error Message */
       error_message: string | null;
+      /**
+       * Error Detail
+       * @description Technical details of a processing failure (the traceback), for support.
+       */
+      error_detail?: string | null;
       /** Pending Review Count */
       pending_review_count: number;
       /**
@@ -1176,6 +1236,11 @@ export interface components {
       created_at: string;
       /** Completed At */
       completed_at: string | null;
+      /**
+       * Archived At
+       * @description When the job was deleted. Deleted jobs are hidden from lists and can be restored.
+       */
+      archived_at?: string | null;
     };
     /** JobException */
     JobException: {
@@ -1946,6 +2011,8 @@ export interface operations {
           | null;
         has_pending_reviews?: boolean | null;
         limit?: number | null;
+        /** @description List only deleted jobs instead of the others. */
+        archived?: boolean;
       };
       header?: never;
       path?: never;
@@ -2095,6 +2162,55 @@ export interface operations {
       };
     };
   };
+  delete_job_api_jobs__job_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Job'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
   patch_job_api_jobs__job_id__patch: {
     parameters: {
       query?: never;
@@ -2109,6 +2225,46 @@ export interface operations {
         'application/json': components['schemas']['JobPatch'];
       };
     };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Job'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  restore_job_api_jobs__job_id__restoration_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        job_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
     responses: {
       /** @description Successful Response */
       200: {
@@ -3622,6 +3778,64 @@ export interface operations {
         };
         content: {
           'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  account_list_template_api_member_imports_template_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Excel workbook */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': Blob;
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  ledger_template_api_ledger_imports_template_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Excel workbook */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': Blob;
         };
       };
       /** @description Unprocessable Content */

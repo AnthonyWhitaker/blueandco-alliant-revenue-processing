@@ -120,6 +120,47 @@ def test_full_refresh_deactivates_instead_of_deleting(conn, processed_job, tmp_p
     assert members.get_member(conn, ids["mercy"]).is_active is True
 
 
+def _members(conn):
+    return [tuple(r) for r in conn.execute(
+        "SELECT id, account_id, name, entity_code, billing_city, billing_state FROM member ORDER BY id")]
+
+
+def test_rows_without_account_id_are_updated_not_added_again(conn, tmp_path):
+    path = _account_list(tmp_path / "a.xlsx", (None, "Clinic A", "EC1", "Austin", "TX"),
+                         (None, "Clinic B", None, None, "TX"))
+    members.import_account_list(conn, path, replace_all=False)
+    first = _members(conn)
+    assert [m[1:] for m in first] == [(None, "Clinic A", "EC1", "Austin", "TX"),
+                                      (None, "Clinic B", None, None, "TX")]   # blanks stay blank, not 'nan'
+    members.import_account_list(conn, _account_list(
+        tmp_path / "b.xlsx", (None, "CLINIC A", "EC1", "Round Rock", "TX"),   # same facility, moved
+        (None, "Clinic B", None, None, "TX")), replace_all=False)
+    assert [(m[0], m[2], m[4]) for m in _members(conn)] == [
+        (first[0][0], "CLINIC A", "Round Rock"), (first[1][0], "Clinic B", None)]
+
+
+def test_a_member_loaded_without_an_id_takes_it_later(conn, tmp_path):
+    members.import_account_list(conn, _account_list(tmp_path / "a.xlsx", (None, "Clinic A", "EC1", "Austin", "TX")),
+                                replace_all=False)
+    [(member_id, *_)] = _members(conn)
+    members.import_account_list(conn, _account_list(tmp_path / "b.xlsx", ("001X", "Clinic A", "EC1", "Austin", "TX")),
+                                replace_all=False)
+    assert [m[:2] for m in _members(conn)] == [(member_id, "001X")]
+
+
+def test_rows_without_an_id_match_on_name_entity_code_and_state(conn, tmp_path):
+    members.import_account_list(conn, _account_list(tmp_path / "a.xlsx", ("001X", "Clinic A", "EC1", "Austin", "TX")),
+                                replace_all=False)
+    members.import_account_list(conn, _account_list(
+        tmp_path / "b.xlsx",
+        (None, "Clinic A", "EC1", "Austin", "TX"),     # the member above: updated, keeps its ID
+        (None, "Clinic A", "EC1", "Tulsa", "OK"),      # another state: a different facility
+        (None, "Clinic A", "EC7", "Austin", "TX"),     # another entity code: a different facility
+    ), replace_all=False)
+    assert [(m[1], m[3], m[5]) for m in _members(conn)] == [
+        ("001X", "EC1", "TX"), (None, "EC1", "OK"), (None, "EC7", "TX")]
+
+
 def test_import_ledger_and_list(conn, tmp_path):
     path = tmp_path / "Ledger.xlsx"
     wb = openpyxl.Workbook()

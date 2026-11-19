@@ -2,10 +2,12 @@
 
 import os
 from typing import Annotated, Callable, Optional
+from urllib.parse import quote
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, Request, Response, UploadFile, status
 
 from core import members, misc
+from engine import import_templates
 from models.common import Page
 from models.enums import TaskKind
 from models.members import LedgerEntry, Member, MemberInput
@@ -16,6 +18,15 @@ from ..deps import Conn, Runner, upload_to_temp_file
 from ..errors import PROBLEM_RESPONSES, problems
 
 router = APIRouter(responses=PROBLEM_RESPONSES)
+
+_XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+_XLSX_RESPONSE = {200: {"content": {_XLSX: {"schema": {"type": "string", "format": "binary"}}},
+                        "description": "Excel workbook"}}
+
+
+def _attachment(content: bytes, file_name: str) -> Response:
+    return Response(content, media_type=_XLSX,
+                    headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(file_name)}"})
 
 
 @router.get("/members", response_model=Page[Member], tags=["members"],
@@ -79,6 +90,18 @@ def import_ledger(
 ) -> Task:
     return _start_import(request, response, runner, file, "ledger_import",
                          lambda conn, path: members.import_ledger(conn, path, sheet_name))
+
+
+@router.get("/member-imports/template", response_class=Response, responses=_XLSX_RESPONSE, tags=["members"],
+            summary="Blank Account List workbook with the columns the import reads")
+def account_list_template() -> Response:
+    return _attachment(import_templates.account_list_template(), import_templates.ACCOUNT_LIST_FILE_NAME)
+
+
+@router.get("/ledger-imports/template", response_class=Response, responses=_XLSX_RESPONSE, tags=["ledger"],
+            summary="Blank Ledger workbook with the columns the import reads")
+def ledger_template() -> Response:
+    return _attachment(import_templates.ledger_template(), import_templates.LEDGER_FILE_NAME)
 
 
 @router.get("/tasks/{task_id}", responses=problems(404), response_model=Task, tags=["tasks"], summary="Status of a background import")

@@ -53,6 +53,10 @@ PROBLEM_RESPONSES = problems(422)
 
 def problem_response(status: int, detail: Optional[str], request: Request,
                      errors: Optional[list[FieldError]] = None) -> JSONResponse:
+    if status != 500:
+        # Rejected requests (a refused upload, say) otherwise leave only a status code in the access log.
+        log.warning("%s %s rejected with %s: %s", request.method, request.url.path, status,
+                    detail if not errors else "; ".join(f"{'.'.join(e.loc)}: {e.msg}" for e in errors))
     body = Problem(title=_TITLES.get(status, "Error"), status=status, detail=detail,
                    instance=request.url.path, errors=errors)
     return JSONResponse(body.model_dump(exclude_none=True), status_code=status, media_type=PROBLEM_MEDIA_TYPE)

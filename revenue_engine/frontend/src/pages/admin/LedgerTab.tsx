@@ -7,6 +7,7 @@ import { DataTable } from '@/components/DataTable';
 import { FileDropzone } from '@/components/FileDropzone';
 import { QueryError } from '@/components/QueryError';
 import { StatCard } from '@/components/StatCard';
+import { TemplateDownload } from '@/components/TemplateDownload';
 import { formatCurrency, formatDate, formatInteger } from '@/lib/format';
 import { queryKeys } from '@/queries/keys';
 import { ledgerEntriesQuery } from '@/queries/members';
@@ -52,14 +53,18 @@ export function LedgerTab() {
 
       <Paper p="lg">
         <Stack gap="md">
-          <div>
-            <Title order={2} size="h3">
-              Import the payment ledger
-            </Title>
-            <Text size="sm" c="dimmed" mt={4}>
-              Upload Ledger.xlsx to import the Salesforce Payment IDs for deposit amounts.
-            </Text>
-          </div>
+          <Group justify="space-between" align="flex-start" wrap="nowrap">
+            <div>
+              <Title order={2} size="h3">
+                Import the payment ledger
+              </Title>
+              <Text size="sm" c="dimmed" mt={4}>
+                Upload Ledger.xlsx to import the Salesforce Payment IDs for deposit amounts. The
+                template lists the columns the import reads.
+              </Text>
+            </div>
+            <TemplateDownload path="/api/ledger-imports/template" fileName="Ledger template.xlsx" />
+          </Group>
           <FileDropzone
             label="Ledger.xlsx"
             extensions={['.xlsx', '.xls']}

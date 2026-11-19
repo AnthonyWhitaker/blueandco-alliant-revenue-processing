@@ -81,6 +81,36 @@ describe('Admin › Payment Ledger', () => {
 });
 
 describe('Admin › Members', () => {
+  it('downloads the Account List template', async () => {
+    // jsdom has no object URLs.
+    const createObjectURL = vi.fn(() => 'blob:template');
+    Object.assign(URL, { createObjectURL, revokeObjectURL: vi.fn() });
+    const clicked = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {
+      /* jsdom can't navigate to a blob URL */
+    });
+    stubFetch({
+      'GET /api/members': () => json({ items: [], total: 0 }),
+      'GET /api/member-imports/template': () =>
+        new Response('xlsx', {
+          headers: {
+            'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition': "attachment; filename*=UTF-8''Account%20List%20template.xlsx",
+          },
+        }),
+    });
+    const user = userEvent.setup();
+    await renderRoute('/admin/members');
+
+    await user.click(await screen.findByRole('button', { name: 'Download template' }));
+    await waitFor(() => {
+      expect(clicked).toHaveBeenCalled();
+    });
+    expect((clicked.mock.instances[0] as HTMLAnchorElement).download).toBe(
+      'Account List template.xlsx',
+    );
+    clicked.mockRestore();
+  });
+
   it('asks before a full refresh', async () => {
     const posted = vi.fn(() => json(task({ kind: 'member_import' }), 202));
     stubFetch({
