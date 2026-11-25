@@ -9,6 +9,11 @@ from pathlib import Path
 
 import openpyxl
 
+from engine.supplier_presets import MEDLINE
+
+# The Medline preset runs member_match; the key, rollup and multi-file tests exercise gpo_key verification.
+MEDLINE_GPO_KEY = {**MEDLINE, "profile": {**MEDLINE["profile"], "identity_mode": "gpo_key"}}
+
 HEADERS = [
     "InvoiceNumber", "InvoiceDate", "Medline Account #", "Account Name", "Account Street",
     "Account City", "Account State", "Account Zip", "GPO ID", "Extended Price Amount",
@@ -37,10 +42,10 @@ ROWS = [
     line("INV4", "2026-10-02", "1001", "GENERAL HOSPITAL", "1 MAIN ST", "EC001", 10.00, 0.30),
     line("INV5", "2026-09-05", "2001", "MERCY MEDICAL CENTER", "200 ELM ST", "EC999", 300.00, 9.00),
     line("INV6", "2026-09-06", "2001", "MERCY MEDICAL CENTER", "200 ELM ST", "EC999", -40.00, -1.20),
-    line("INV7", "2026-09-07", "3001", "DESERT REGIONAL HEALTH", "9 SAND ROAD", "EC003", 70.00, 2.10),
+    line("INV7", "2026-09-07", "3001", "DESERT REGIONAL HEALTH", "19 SAND ROAD", "EC003", 70.00, 2.10),
     line("INV8", "2026-09-08", "4001", "UNKNOWN CLINIC", "5 NOWHERE LN", "EC001", 25.00, 0.75),
     line("INV9", "2026-09-09", None, "GENERAL HOSPITAL", "1 MAIN ST", "EC001", 15.00, 0.45),
-    line("INV10", "2026-09-11", "2001", "MERCY MED CTR", "200 ELM ST", "EC002", 30.00, 0.90),
+    line("INV10", "2026-09-11", "2001", "MERCY CLINIC EAST", "200 ELM ST", "EC002", 30.00, 0.90),
 ]
 INPUT_VOLUME = 760.00
 INPUT_REVENUE = 22.80

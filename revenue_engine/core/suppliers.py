@@ -15,6 +15,8 @@ _ALL_FIELDS = [
     "header_row", "max_read_columns", "job_type", "requires_manual_confirmation",
     "identity_mode", "volume_mode", "fee_rate", "fuzzy_zip_state_threshold", "fuzzy_city_state_threshold",
     "fuzzy_state_threshold", "fuzzy_nationwide_threshold",
+    "fuzzy_strong_name_threshold", "fuzzy_street_name_threshold", "auto_match_min_confidence",
+    "gpo_id_min_name_score",
 ]
 
 

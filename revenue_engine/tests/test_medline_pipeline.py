@@ -1,5 +1,5 @@
 """
-Medline (identity_mode = 'gpo_key') through the real pipeline: GPO ID
+Medline in gpo_key mode (mock.MEDLINE_GPO_KEY) through the real pipeline: GPO ID
 verification, rollup to one row per GPO ID per month, the Upload template,
 the totals check, and the output files. Mock data: tests/medline_mock.py.
 """
@@ -33,7 +33,7 @@ def dirs(tmp_path, monkeypatch):
 @pytest.fixture
 def medline(conn, tmp_path):
     members = make_members(conn)
-    sid = apply_preset(conn, MEDLINE)
+    sid = apply_preset(conn, mock.MEDLINE_GPO_KEY)
     conn.execute("UPDATE supplier_profile SET contract_id = 'CON-MED' WHERE id = ?", (sid,))
     conn.commit()
     load_gpo_key(conn, sid, str(mock.write_key_csv(tmp_path / "key.csv")))
@@ -86,7 +86,7 @@ def test_verified_rows_use_the_keys_gpo_id(conn, medline, tmp_path):
 
 def test_no_key_loaded_means_every_row_is_an_exception(conn, tmp_path):
     make_members(conn)
-    sid = apply_preset(conn, MEDLINE)
+    sid = apply_preset(conn, mock.MEDLINE_GPO_KEY)
     job = run_medline(conn, sid, tmp_path)
     assert job.matched_count == 0
     assert {r["exception_reason"] for r in rows_of(conn, job.id)} == {"account_not_in_key", "missing_account_number"}
@@ -187,7 +187,7 @@ def test_missing_timeframe_is_flagged(conn, medline, tmp_path):
 
 def test_empty_upload_tab_keeps_the_template_header(conn, tmp_path):
     make_members(conn)
-    sid = apply_preset(conn, MEDLINE)    # no key loaded: nothing verifies, nothing to upload
+    sid = apply_preset(conn, mock.MEDLINE_GPO_KEY)    # no key loaded: nothing verifies, nothing to upload
     job = run_medline(conn, sid, tmp_path)
     processed = next(o for o in jobs.list_outputs(conn, job.id) if o.artifact_type == "salesforce_upload")
     ws = openpyxl.load_workbook(BytesIO(jobs.read_output(conn, job.id, processed.id)[1]))["Upload"]

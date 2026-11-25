@@ -16,7 +16,7 @@ import pytest
 from core import jobs
 from engine.combine import assign_duplicate_groups
 from engine.gpo_key import load_gpo_key
-from engine.supplier_presets import MEDLINE, apply_preset
+from engine.supplier_presets import apply_preset
 
 from . import medline_mock as mock
 from .conftest import make_members
@@ -31,7 +31,7 @@ def dirs(tmp_path, monkeypatch):
 @pytest.fixture
 def sid(conn, tmp_path):
     make_members(conn)
-    supplier_id = apply_preset(conn, MEDLINE)
+    supplier_id = apply_preset(conn, mock.MEDLINE_GPO_KEY)
     load_gpo_key(conn, supplier_id, str(mock.write_key_csv(tmp_path / "key.csv")))
     return supplier_id
 

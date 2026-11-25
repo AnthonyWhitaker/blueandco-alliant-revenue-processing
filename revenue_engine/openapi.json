@@ -1137,6 +1137,78 @@
         }
       }
     },
+    "/api/review-items/{item_id}/not-member": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Mark the customer as not a member: its rows leave the review queue now and in later files",
+        "operationId": "not_member_api_review_items__item_id__not_member_post",
+        "parameters": [
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Item Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewNotMember"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReviewDecisionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Content",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/suppliers": {
       "get": {
         "tags": [
@@ -5010,7 +5082,8 @@
               "type": "string",
               "enum": [
                 "member_match",
-                "gpo_key"
+                "gpo_key",
+                "gpo_key_then_member"
               ]
             },
             "type": "array",
@@ -5408,6 +5481,113 @@
         ],
         "title": "ReviewApproval"
       },
+      "ReviewCandidate": {
+        "properties": {
+          "member_id": {
+            "type": "integer",
+            "title": "Member Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "entity_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity Code"
+          },
+          "street": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Street"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "zip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zip"
+          },
+          "score": {
+            "type": "integer",
+            "title": "Score",
+            "description": "Name score (0-100) against the file's name."
+          },
+          "matched": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "name",
+                "street",
+                "zip",
+                "jde",
+                "gpo_id"
+              ]
+            },
+            "type": "array",
+            "title": "Matched",
+            "description": "Fields that agree with the file's row."
+          },
+          "via": {
+            "type": "string",
+            "title": "Via",
+            "description": "How the candidate was found: jde, gpo_id, name, or the match step."
+          }
+        },
+        "type": "object",
+        "required": [
+          "member_id",
+          "name",
+          "entity_code",
+          "street",
+          "city",
+          "state",
+          "zip",
+          "score",
+          "matched",
+          "via"
+        ],
+        "title": "ReviewCandidate",
+        "description": "A member the reviewer can pick, with the evidence for it."
+      },
       "ReviewDecisionResult": {
         "properties": {
           "updated_rows": {
@@ -5529,7 +5709,8 @@
               "pending",
               "approved",
               "dismissed",
-              "skipped"
+              "skipped",
+              "not_member"
             ],
             "title": "Status"
           },
@@ -5542,6 +5723,38 @@
                 "type": "null"
               }
             ]
+          },
+          "review_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Reason",
+            "description": "Why the row needs review beyond 'no match': gpo_id_conflict, jde_gpo_conflict, entity_code_no_primary, fuzzy_suggestion, low_confidence or gpo_key_fallback."
+          },
+          "key_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key Reason",
+            "description": "gpo_key_then_member: why the row failed the GPO key (account_not_in_key, name_mismatch, ...)."
+          },
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ReviewCandidate"
+            },
+            "type": "array",
+            "title": "Candidates",
+            "description": "Up to 3, best first."
           }
         },
         "type": "object",
@@ -5560,6 +5773,18 @@
           "suggestion"
         ],
         "title": "ReviewItem"
+      },
+      "ReviewNotMember": {
+        "properties": {
+          "notes": {
+            "type": "string",
+            "title": "Notes",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ReviewNotMember"
       },
       "ReviewSuggestion": {
         "properties": {
@@ -5744,7 +5969,8 @@
             "type": "string",
             "enum": [
               "member_match",
-              "gpo_key"
+              "gpo_key",
+              "gpo_key_then_member"
             ],
             "title": "Identity Mode"
           },
@@ -5771,6 +5997,22 @@
           "fuzzy_nationwide_threshold": {
             "type": "integer",
             "title": "Fuzzy Nationwide Threshold"
+          },
+          "fuzzy_strong_name_threshold": {
+            "type": "integer",
+            "title": "Fuzzy Strong Name Threshold"
+          },
+          "fuzzy_street_name_threshold": {
+            "type": "integer",
+            "title": "Fuzzy Street Name Threshold"
+          },
+          "auto_match_min_confidence": {
+            "type": "integer",
+            "title": "Auto Match Min Confidence"
+          },
+          "gpo_id_min_name_score": {
+            "type": "integer",
+            "title": "Gpo Id Min Name Score"
           },
           "created_at": {
             "type": "string",
@@ -5806,6 +6048,10 @@
           "fuzzy_city_state_threshold",
           "fuzzy_state_threshold",
           "fuzzy_nationwide_threshold",
+          "fuzzy_strong_name_threshold",
+          "fuzzy_street_name_threshold",
+          "auto_match_min_confidence",
+          "gpo_id_min_name_score",
           "created_at",
           "updated_at"
         ],
@@ -5929,10 +6175,11 @@
             "type": "string",
             "enum": [
               "member_match",
-              "gpo_key"
+              "gpo_key",
+              "gpo_key_then_member"
             ],
             "title": "Identity Mode",
-            "description": "Row-level only. 'member_match': fuzzy/exact member matching with a Review queue. 'gpo_key': GPO ID verified against the supplier's key file; unverified rows go to the exceptions report.",
+            "description": "Row-level only. 'member_match': fuzzy/exact member matching with a Review queue. 'gpo_key': GPO ID verified against the supplier's key file; unverified rows go to the exceptions report. 'gpo_key_then_member': gpo_key first; rows whose account, name or address doesn't agree with the key go through member matching to the Review queue (never auto-matched).",
             "default": "member_match"
           },
           "volume_mode": {
@@ -5984,6 +6231,38 @@
             "minimum": 0.0,
             "title": "Fuzzy Nationwide Threshold",
             "default": 85
+          },
+          "fuzzy_strong_name_threshold": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Fuzzy Strong Name Threshold",
+            "description": "ZIP/city steps: a name score that auto-matches even though the row's street differs from the member's.",
+            "default": 95
+          },
+          "fuzzy_street_name_threshold": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Fuzzy Street Name Threshold",
+            "description": "ZIP/city steps: the name score that is enough when street + ZIP are equal (names contained in a longer one count).",
+            "default": 60
+          },
+          "auto_match_min_confidence": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Auto Match Min Confidence",
+            "description": "member_match: a match whose confidence (match score) is below this goes to review instead.",
+            "default": 80
+          },
+          "gpo_id_min_name_score": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Gpo Id Min Name Score",
+            "description": "member_match: a GPO ID match is used only if the file's name scores at least this against the member it points to, or the street + ZIP match.",
+            "default": 50
           }
         },
         "additionalProperties": false,

@@ -71,8 +71,16 @@ def put_gpo_key(
 ) -> GpoKeyImportResult:
     path = upload_to_temp_file(request, file)
     try:
-        columns = KeyColumns(account_number_column, account_name_column, address_column, gpo_id_column,
-                             (sheet_name or "").strip() or None, header_row)
+        # zip=None: uploads here compare the street only (ZIP comparison for UI uploads not decided yet).
+        columns = KeyColumns(
+            account_number=account_number_column,
+            account_name=account_name_column,
+            address=address_column,
+            gpo_id=gpo_id_column,
+            zip=None,
+            sheet_name=(sheet_name or "").strip() or None,
+            header_row=header_row,
+        )
         return gpo_key.import_key(conn, supplier_id, path, file.filename or "key", columns)
     finally:
         os.unlink(path)

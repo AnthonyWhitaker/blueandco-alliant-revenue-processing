@@ -56,7 +56,7 @@ def get_meta() -> Meta:
         keep_return_options=["Keep", "Return"],
         payment_id_sources=["ledger", "manual", "column"],
         job_types=[JOB_TYPE_ROW_LEVEL, JOB_TYPE_PIVOT_ALLOCATION],
-        identity_modes=["member_match", "gpo_key"],
+        identity_modes=["member_match", "gpo_key", "gpo_key_then_member"],
         volume_modes=["sum", "blank"],
         extraction_methods=[
             EXTRACT_NAMED_CELL, EXTRACT_LABEL_LOOKUP, EXTRACT_LABEL_RANGE_SUM,

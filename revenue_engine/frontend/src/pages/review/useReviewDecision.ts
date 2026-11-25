@@ -11,10 +11,11 @@ type ReviewItem = Schemas['ReviewItem'];
 
 export type ReviewDecision =
   | { kind: 'approve'; memberId: number; createAlias: boolean; aliasScope: AliasScope }
-  | { kind: 'dismiss' };
+  | { kind: 'dismiss' }
+  | { kind: 'not_member' };
 
 /**
- * Approve or dismiss one review item. The card leaves the queue immediately
+ * Approve, dismiss, or mark one review item as not a member. The card leaves the queue immediately
  * (optimistic); on failure the queue is refetched, which brings it back
  * without undoing other cards' decisions.
  */
@@ -26,8 +27,9 @@ export function useReviewDecision(item: ReviewItem) {
   return useMutation({
     mutationFn: (decision: ReviewDecision) => {
       const path = { params: { path: { item_id: item.id } } };
-      return decision.kind === 'approve'
-        ? unwrap(
+      switch (decision.kind) {
+        case 'approve':
+          return unwrap(
             api.POST('/api/review-items/{item_id}/approval', {
               ...path,
               body: {
@@ -36,8 +38,12 @@ export function useReviewDecision(item: ReviewItem) {
                 alias_scope: decision.aliasScope,
               },
             }),
-          )
-        : unwrap(api.POST('/api/review-items/{item_id}/dismissal', path));
+          );
+        case 'dismiss':
+          return unwrap(api.POST('/api/review-items/{item_id}/dismissal', path));
+        case 'not_member':
+          return unwrap(api.POST('/api/review-items/{item_id}/not-member', { ...path, body: {} }));
+      }
     },
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: itemsKey });
@@ -48,13 +54,13 @@ export function useReviewDecision(item: ReviewItem) {
     onSuccess: async (result, decision) => {
       discardReviewDraft(item.id);
       queryClient.setQueryData(queryKeys.jobs.detail(result.job.id), result.job);
-      notifications.show({
-        color: 'green',
-        message:
-          decision.kind === 'approve'
-            ? `Approved “${item.customer_name_sample ?? 'customer'}”: updated ${pluralize(result.updated_rows, 'row')}, output re-aggregated.`
-            : `Dismissed “${item.customer_name_sample ?? 'customer'}”: it stays on the Unmatched tab.`,
-      });
+      const customer = item.customer_name_sample ?? 'customer';
+      const messages: Record<ReviewDecision['kind'], string> = {
+        approve: `Approved “${customer}”: updated ${pluralize(result.updated_rows, 'row')}, output re-aggregated.`,
+        dismiss: `Dismissed “${customer}”: it stays on the Unmatched tab.`,
+        not_member: `Marked “${customer}” as not a member: later files won't send it to review.`,
+      };
+      notifications.show({ color: 'green', message: messages[decision.kind] });
       const savesAlias =
         decision.kind === 'approve' && decision.createAlias && decision.aliasScope !== 'job_only';
       await Promise.all([

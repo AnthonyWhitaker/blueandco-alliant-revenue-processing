@@ -7,15 +7,18 @@ import re
 import unicodedata
 from typing import Optional
 
+from .address_abbreviations import ADDRESS_ABBREV, HASH_UNIT, UNITS
+from .name_abbreviations import NAME_ABBREV
 from .constants import LEGAL_SUFFIXES, STATE_ABBREV, STATE_FULL_TO_ABBREV
 
 
 def normalize_name(name: Optional[str]) -> str:
     """
-    Normalize a facility/customer name for fuzzy matching.
-    - Converts to ASCII, uppercases
+    Normalize a facility/customer name (fuzzy matching, aliases, gpo_key name comparison).
+    - Converts to ASCII, uppercases, '&' -> 'AND'
     - Strips punctuation (except spaces)
     - Removes common legal suffixes (INC, LLC, LP, CORP, etc.)
+    - Expands abbreviations (engine/name_abbreviations.py): HOSP -> HOSPITAL, MC -> MEDICAL CENTER, ST -> SAINT
     - Collapses whitespace
     """
     if not name or not isinstance(name, str):
@@ -23,30 +26,57 @@ def normalize_name(name: Optional[str]) -> str:
     # Normalize unicode to ASCII approximation
     text = unicodedata.normalize("NFKD", name)
     text = text.encode("ascii", "ignore").decode("ascii")
-    text = text.upper()
+    text = text.upper().replace("&", " AND ")
     # Remove legal suffixes
     for suffix in LEGAL_SUFFIXES:
         text = re.sub(suffix, "", text)
     # Remove punctuation except spaces
     text = re.sub(r"[^\w\s]", " ", text)
-    # Collapse whitespace
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
+    # Expand abbreviations (engine/name_abbreviations.py), collapsing whitespace
+    return " ".join(NAME_ABBREV.get(w, w) for w in text.split())
+
+
+def normalize_address(address: Optional[object]) -> str:
+    """
+    Normalize a street address for comparison (member_match ship-to sites, gpo_key verification).
+    - ASCII, upper case, '&' -> 'AND', punctuation becomes spaces
+    - Suffixes, directions and unit words spelled one way (engine/address_abbreviations.py):
+      PARKWAY -> PKWY, EAST -> E, SUITE -> STE; a bare '#' before a number is a suite ('#219' -> 'STE 219')
+    """
+    if address is None or (isinstance(address, float) and address != address):   # None / NaN
+        return ""
+    text = unicodedata.normalize("NFKD", str(address)).encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^A-Z0-9#]+", " ", text.upper().replace("&", " AND ").replace("#", " # "))
+    words: list[str] = []
+    for w in text.split():
+        if w == "#":
+            if words and words[-1] in UNITS.values():   # 'STE #5', 'APT #5': the unit word already says it
+                continue
+            w = HASH_UNIT
+        words.append(ADDRESS_ABBREV.get(w, w))
+    return " ".join(words)
 
 
 def normalize_zip(z: Optional[object]) -> str:
     """
-    Extract a clean 5-digit ZIP code from various formats.
-    Handles: '12345', '12345-6789', 12345.0, '012345', etc.
+    A 5-digit ZIP code from the usual spellings: '12345', '12345-6789', 12345.0, '123456789'.
+    Leading zeros Excel dropped are put back: 2134 -> '02134', '21341234' (ZIP+4) -> '02134'.
+    Anything without digits (blank, 'N/A') -> ''.
     """
-    if z is None:
+    if z is None or (isinstance(z, float) and z != z):
         return ""
     s = str(z).strip()
-    # Remove trailing .0 from float representation
-    s = re.sub(r"\.0$", "", s)
-    # Extract first 5 digits
-    digits = re.sub(r"\D", "", s)
-    return digits[:5] if len(digits) >= 5 else digits
+    if re.fullmatch(r"\d+\.0+", s):               # 12345.0 from a float cell
+        s = s.split(".")[0]
+    digits = re.match(r"\d+", s)                    # the first run: '78701-1234' -> '78701'
+    if not digits:
+        return ""
+    d = digits.group()
+    if len(d) <= 5:
+        return d.zfill(5)
+    if len(d) <= 9:                                  # ZIP+4 written without the dash
+        return d.zfill(9)[:5]
+    return d[:5]
 
 
 def normalize_state(state: Optional[str]) -> str:
@@ -86,6 +116,41 @@ def normalize_key(name: Optional[str]) -> str:
     """
     n = normalize_name(name)
     return re.sub(r"\s+", "", n)
+
+
+def parse_amount(value: Optional[object]) -> Optional[float]:
+    """
+    A money/number cell as a float; None when blank or not a number.
+    Accepts what Excel shows for currency typed in as text: '$1,234.50', ' $26.00 ',
+    '-$26.00', '$-26.00', accounting negatives '(1,234.50)' and a trailing minus '26.00-'.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return None if value != value else float(value)   # NaN
+    s = str(value).strip().replace(",", "").replace("$", "").replace(" ", "")
+    if not s:
+        return None
+    negative = False
+    if s.startswith("(") and s.endswith(")"):
+        negative, s = True, s[1:-1]
+    elif s.endswith("-"):
+        negative, s = True, s[:-1]
+    try:
+        f = float(s)
+    except ValueError:
+        return None
+    if f != f:   # NaN
+        return None
+    return -f if negative else f
+
+
+def quarter_start(timeframe: Optional[str]) -> Optional[str]:
+    """'3Q26' -> '2026-07-01' (first day of the quarter); None for blank or anything not XQYY."""
+    m = re.fullmatch(r"([1-4])Q(\d{2})", (timeframe or "").strip().upper())
+    if not m:
+        return None
+    return f"20{m.group(2)}-{(int(m.group(1)) - 1) * 3 + 1:02d}-01"
 
 
 def parse_date(value: Optional[object], dayfirst: bool = False) -> Optional[str]:

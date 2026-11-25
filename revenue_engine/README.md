@@ -151,20 +151,52 @@ Commit `openapi.json` and `src/api/schema.d.ts` together; `make check` fails if 
 
 ---
 
-## Matching Logic (5 Tiers)
+## Matching Logic (member_match)
 
-The `MemberMatcher` class applies these tiers in order, stopping at the first successful match:
+`MemberMatcher.match` (`engine/member_matcher.py`) applies these steps in order, stopping at the first match. Thresholds are per-supplier settings on `supplier_profile`.
 
-| Tier | Strategy | Threshold | Notes |
+| Step | Strategy | Threshold | Notes |
 |---|---|---|---|
-| 1 | **JDE History** | Exact | JDE Customer Number → persistent member mapping from prior jobs |
-| 2 | **Alias Lookup** | Exact | Known alternate names (e.g., "OH MUHLENBERG LLC" → Owensboro Health) |
-| 3 | **ZIP + State** | 75 | Fuzzy name within ZIP+State filtered candidates |
-| 4 | **City + State** | 75 | Fuzzy name within City+State filtered candidates |
-| 5 | **State Only** | 80 | Fuzzy name within State filtered candidates |
-| 6 | **Nationwide** | 85 | Last resort — only for names > 5 characters |
+| 0 | **Salesforce Account ID** | Exact | Only when the file carries one |
+| 1 | **JDE number** | Exact | `jde_member_history` from earlier jobs, or an alias with a JDE number. If the GPO ID fits the row but points to a different member, the row goes to review with both (`jde_gpo_conflict`) |
+| 2 | **GPO ID (entity code hint)** | Name ≥ `gpo_id_min_name_score` (50), or street + ZIP | Picks a ship-to site (below). A GPO ID that doesn't fit the row is ignored and the later steps run. If they find nothing, the row goes to review (`gpo_id_conflict`) |
+| 3 | **Alias Lookup** | Exact | Known alternate names (e.g., "OH MUHLENBERG LLC" → Owensboro Health) |
+| 4 | **ZIP + State** | 75 | Fuzzy name within ZIP+State filtered candidates (street rules below) |
+| 5 | **City + State** | 75 | Fuzzy name within City+State filtered candidates (street rules below) |
+| 6 | **State Only** | 80 | Review suggestions only, never an automatic match |
+| 7 | **Nationwide** | 85 | Review suggestions only — only for names > 5 characters |
 
-Key difference from the Guerbet prototype: matched JDE numbers are **persisted to the database** (`jde_member_history` table), so future jobs get Tier 1 matches immediately for any previously-seen JDE number — across any number of months.
+**Names** are compared after `normalizer.normalize_name`: upper case, `&` → AND, legal suffixes (INC, LLC, ...) removed, and abbreviations expanded from `engine/name_abbreviations.py` (HH → HOME HEALTH, HOSP → HOSPITAL, MC → MEDICAL CENTER, ST → SAINT). **Addresses** use `normalizer.normalize_address` (`engine/address_abbreviations.py`: STREET → ST, SUITE/`#` → STE, EAST → E) and **ZIPs** `normalizer.normalize_zip` (five digits, leading zeros put back). gpo_key verification uses the same three functions, still with exact comparison.
+
+**Street rules in steps 4-5**, when both the row and the member have a street:
+- street + ZIP equal: a weaker name is enough (`fuzzy_street_name_threshold`, 60), and a name contained in a longer one counts (`token_set_ratio`), e.g. "BRANNOCK HOSPITAL" for "Margaret Brannock Memorial Hospital". Method `zip_state_street` / `city_state_street`.
+- different streets: only a near-exact name matches (`fuzzy_strong_name_threshold`, 95). A name at the step's threshold becomes a review suggestion (`fuzzy_suggestion`), so "SAINT ELIAS" no longer matches "Saint Hilda" next door.
+- no street on either side: the step's threshold matches, as before.
+
+**Confidence and review.** Every match has a method and a confidence (`match_score`): 100 for steps 0-3, the name score for steps 4-5, at least 90 when street + ZIP confirm it. Below `auto_match_min_confidence` (80) the row goes to review instead (`low_confidence`). A review item shows up to three candidates with their name score and which fields agree (name, street, ZIP, JDE #, GPO ID), and why it's there (`review_reason`). Approving one saves the file's name as an alias (`member_alias.source` = the supplier) and the JDE number (`record_jde_match`), so the next file matches the account at step 1. "Not a member" is remembered per supplier (`non_member`): the account's rows are set aside (`not_a_member`, on the exceptions report) and it doesn't come back for review.
+
+Matched JDE numbers are **persisted to the database** (`jde_member_history`), so later jobs match those accounts at step 1, across any number of months.
+
+### Identity modes
+
+- `member_match`: the steps above; unmatched rows go to the Review queue.
+- `gpo_key`: the file's account is looked up in the supplier's GPO key (`engine/gpo_key.py`); rows that don't verify go to the exceptions report.
+- `gpo_key_then_member`: `gpo_key` first. Rows the key rejects because the account isn't in it, has no number, or its name or address doesn't agree go through member matching and land in the Review queue, **never auto-matched**, with the key's reason on the item. Ambiguous key entries and entries without a GPO ID stay on the exceptions report.
+
+`scripts/member_quality_diagnostics.py` reports, counts only, on the member master: shared entity codes by primary flag, duplicates and near-duplicates, missing or unreadable fields, and members without a Premier code.
+
+### Entity codes and ship-to sites
+
+- **The entity code** is the member's Premier entity code when it has one, otherwise its Alliant entity code (`engine/member_loader.py`, `entity_code = pec if pec else alliant`). The Salesforce upload's Facility ID uses the same code.
+- **One entity code can cover several sites.** A health system's primary facility and its ship-to locations (pharmacy, dock, home health office) are separate Salesforce accounts, so they are separate `member` rows that share the code. Exactly one of them should be flagged primary (`member.is_primary_site`, from the Account List's primary-site column; NULL when the list doesn't say).
+- **Picking the site** (`_pick_site`), when a code covers several members:
+  1. The one site whose street + ZIP equal the row's, after normalizing (USPS abbreviations and unit words spelled one way: `normalizer.normalize_address`, table in `engine/address_abbreviations.py`). Match method `entity_code_site_address`.
+  2. Otherwise the one site flagged primary: `entity_code_primary_site`.
+  3. Otherwise (no site, or more than one, flagged primary) the row goes to review instead of guessing: `entity_code_no_primary`.
+     Until the Account List has been reloaded with its primary-site column (no member in the database has a primary flag yet), the row keeps the previous behaviour instead: the last site loaded, as `entity_code_unflagged_site`, and the job log says how many rows that affected.
+
+  A code with a single member is `entity_code_exact`.
+- **Sites are never merged.** The Account List loader keys members by Salesforce Account ID. A row without one is keyed by name + entity code + state + street + ZIP (`member_loader._identity`), so sites that share a code, and even a name, stay separate members on every reload. The tests are in `tests/test_entity_code_sites.py`.
 
 ---
 
@@ -182,7 +214,8 @@ Key difference from the Guerbet prototype: matched JDE numbers are **persisted t
 
 A supplier is a profile plus a column map. Add a dict like `MEDLINE` to `engine/supplier_presets.py` and run `scripts/seed_admin_fee_suppliers.py` (part of `make seed`). Relevant profile settings:
 
-- `identity_mode`: `member_match` (default) or `gpo_key` (verify the GPO ID against a key file; load it with `--gpo-key`, `scripts/load_gpo_key.py`, or Admin › Suppliers › Edit)
+- `identity_mode`: `member_match` (default), `gpo_key` (verify the GPO ID against a key file; load it with `--gpo-key`, `scripts/load_gpo_key.py`, or Admin › Suppliers › Edit) or `gpo_key_then_member` (see Identity modes above). The seed switches a preset to a key mode only once its key has loaded; a key without the ZIP column is loaded street-only. At startup the API logs a warning for any supplier in a key mode with no key.
+- Matching thresholds: `fuzzy_*_threshold`, `fuzzy_strong_name_threshold`, `fuzzy_street_name_threshold`, `auto_match_min_confidence`, `gpo_id_min_name_score` (Admin › Suppliers › Edit › Fee rate and matching thresholds). Medline's preset is `member_match` for now.
 - `volume_mode`: `sum` (default) or `blank` (Volume left empty, for files that carry revenue only)
 - `contract_id`: written to every Upload row's Contract ID (a contract number or a Salesforce ID)
 - `skip_rows_where_col_null`: strips summary/total rows. Pick a column only summary rows leave blank, so a data row with a gap isn't stripped.
@@ -238,7 +271,7 @@ The DB schema is designed to be migrated to Azure SQL (the purchasing app's DB) 
 In addition to Guerbet, `scripts/seed_tier_ab_suppliers.py` configures:
 
 - **Tier A** (exact-match fast path via a supplier-provided Premier/Alliant
-  Entity Code or Salesforce Account ID — `MemberMatcher` Tier 0, ahead of
+  Entity Code or Salesforce Account ID — `MemberMatcher` steps 0 and 2, ahead of
   fuzzy matching): **Viscot**, **Zier**
 - **Tier B** (same Tier 0 fast path where available, falling back to the
   existing fuzzy name + geography engine): **Bon Secours**, **Harbinger

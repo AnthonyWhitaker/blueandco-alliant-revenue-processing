@@ -21,7 +21,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from core import jobs, members, misc, reviews, tier_c  # noqa: E402
 from engine.db import init_db, is_mssql  # noqa: E402
 from models.members import MemberInput  # noqa: E402
-from models.reviews import ReviewApproval  # noqa: E402
+from models.reviews import ReviewApproval, ReviewNotMember  # noqa: E402
+from engine.gpo_key import load_gpo_key  # noqa: E402
+from engine.supplier_presets import MEDLINE, apply_preset  # noqa: E402
+from tests import medline_mock  # noqa: E402
 from models.tier_c import AllocationRuleInput, ExtractionRuleInput  # noqa: E402
 from tests.fixtures import COLUMN_MAP, FILE_NAME, make_members, make_supplier, write_supplier_file  # noqa: E402
 
@@ -54,8 +57,16 @@ check("list jobs with LIMIT", [j.id for j in jobs.list_jobs(conn, has_pending_re
 
 item = reviews.list_pending_items(conn, job.id)[0]
 check("review item built", (item.customer_name_sample, item.jde_number) == ("Zyxw Qvbn Clinic", "J300"))
+check("review item candidates/reason columns", isinstance(item.candidates, list) and item.key_reason is None)
 result = reviews.approve(conn, item.id, ReviewApproval(member_id=m["desert"], alias_scope="supplier"))
 check("approve (alias + JDE history upsert)", result.job.status == "completed" and result.job.total_revenue == 300.0)
+src_alias = conn.execute("SELECT source FROM member_alias WHERE raw_name = 'Zyxw Qvbn Clinic'").fetchone()[0]
+check("alias source", src_alias == "Acme Supply", src_alias)
+again = jobs.run_job(conn, jobs.create_job(conn, sid, [(FILE_NAME, src.read_bytes())], date(2025, 7, 2),
+                                           timeframe="3Q25").id)
+j300 = conn.execute("SELECT match_method FROM revenue_row WHERE job_id = ? AND jde_number = 'J300'",
+                    (again.id,)).fetchone()[0]
+check("same file again matches at the JDE step", (again.status, j300) == ("completed", "jde_history"), j300)
 
 outputs = jobs.create_outputs(conn, job.id)
 name, content = jobs.read_output(conn, job.id, outputs[0].id)
@@ -79,8 +90,42 @@ members.import_account_list(conn, str(accounts), replace_all=False)
 members.import_account_list(conn, str(accounts), replace_all=False)
 no_id = conn.execute("SELECT COUNT(*) FROM member WHERE name LIKE 'No ID Clinic %'").fetchone()[0]
 check("Account List rows without an ID are not duplicated on reload", no_id == 2, no_id)
+
+# Ship-to sites sharing a code, name and state stay separate members on reload.
+wb = openpyxl.Workbook()
+wb.active.title = "Account List"
+wb.active.append(["Account Name", "Premier Entity Code", "Billing Street", "Billing State/Province",
+                  "Billing Zip/Postal Code", "Is Primary"])
+wb.active.append(["Site Clinic", "EC600", "1 Main Street", "TX", "78701", "Y"])
+wb.active.append(["Site Clinic", "EC600", "2 Oak Avenue", "TX", "78701", "N"])
+wb.save(accounts)
+members.import_account_list(conn, str(accounts), replace_all=False)
+members.import_account_list(conn, str(accounts), replace_all=False)
+sites = conn.execute("SELECT COUNT(*) FROM member WHERE entity_code = 'EC600'").fetchone()[0]
+check("ship-to sites not merged on reload", sites == 2, sites)
 check("aliases", len(misc.list_aliases(conn)) == 1)
 check("dashboard", misc.get_dashboard_stats(conn).pending_reviews == 0)
+
+# "Not a member" is remembered for the supplier.
+nid = make_supplier(conn, name="Acme Two", column_map=COLUMN_MAP)
+first = jobs.run_job(conn, jobs.create_job(conn, nid, [(FILE_NAME, src.read_bytes())], date(2025, 7, 2)).id)
+nm_item = reviews.list_pending_items(conn, first.id)[0]
+reviews.mark_not_member(conn, nm_item.id, ReviewNotMember())
+second = jobs.run_job(conn, jobs.create_job(conn, nid, [(FILE_NAME, src.read_bytes())], date(2025, 7, 2)).id)
+status = conn.execute("SELECT match_status FROM revenue_row WHERE job_id = ? AND jde_number = 'J300'",
+                      (second.id,)).fetchone()[0]
+check("not a member remembered", (status, reviews.list_pending_items(conn, second.id)) == ("not_a_member", []))
+
+# gpo_key_then_member: key failures go to review with the key's reason.
+gid = apply_preset(conn, {**MEDLINE, "profile": {**MEDLINE["profile"], "identity_mode": "gpo_key_then_member"}})
+tmp = Path(tempfile.mkdtemp())
+load_gpo_key(conn, gid, str(medline_mock.write_key_csv(tmp / "key.csv")))
+content = medline_mock.write_medline_xlsx(tmp / "m.xlsx").read_bytes()
+gjob = jobs.run_job(conn, jobs.create_job(conn, gid, [("Medline 2026.10.15.xlsx", content)], date(2026, 10, 15),
+                                          timeframe="3Q26").id)
+key_reasons = sorted(i.key_reason for i in reviews.list_pending_items(conn, gjob.id))
+check("gpo_key_then_member review items", key_reasons ==
+      ["account_not_in_key", "address_mismatch", "missing_account_number", "name_mismatch"], key_reasons)
 
 pid = make_supplier(conn, name="Komet", job_type="pivot_allocation")
 rule = tier_c.save_extraction_rule(conn, pid, ExtractionRuleInput(

@@ -9,30 +9,36 @@ key's GPO ID. The address is the street plus the ZIP code (first five digits)
 when the key has a ZIP column. Anything else is an exception with a reason. Nothing is guessed:
 there is no fallback to the GPO ID in the file or to fuzzy member matching.
 
-Comparison is on normalized text (upper case, '&' -> 'AND', punctuation and
-repeated whitespace collapsed; account numbers lose a trailing '.0' and
-leading zeros). Similarity tolerance for name/address is configurable via
-VerifyOptions but defaults to exact (100).
+Comparison is on values normalized by the same functions member_match uses
+(engine/normalizer.py): names by normalize_name (upper case, '&' -> 'AND',
+punctuation and legal suffixes like INC/LLC removed), streets by
+normalize_address (USPS abbreviations: STREET = ST, SUITE = STE, EAST = E),
+ZIPs by normalize_zip (five digits, leading zeros restored). Account numbers
+lose a trailing '.0' and leading zeros. Similarity tolerance for name/address
+is configurable via VerifyOptions but defaults to exact (100).
 
 Public API:
     KeyColumns            — which columns of the key file hold which field
     read_gpo_key()        — read a CSV/XLSX key file into a normalized DataFrame
+    without_missing_zip() — drop the ZIP column from KeyColumns when the key file has none
     load_gpo_key()        — replace a supplier's key in gpo_key_entry
+    suppliers_without_key() — suppliers in gpo_key mode with an empty key
     GpoKey                — in-memory key with verify()
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
 
 import pandas as pd
 
 from .constants import (
-    KEY_ACCOUNT_NOT_FOUND, KEY_ADDRESS_MISMATCH, KEY_AMBIGUOUS, KEY_MISSING_ACCOUNT,
+    KEY_IDENTITY_MODES, KEY_ACCOUNT_NOT_FOUND, KEY_ADDRESS_MISMATCH, KEY_AMBIGUOUS, KEY_MISSING_ACCOUNT,
     KEY_NAME_AND_ADDRESS_MISMATCH, KEY_NAME_MISMATCH, KEY_NO_GPO_ID,
 )
 from .file_reader import _normalize_col
+from .normalizer import normalize_address, normalize_name, normalize_zip
 
 
 class KeyFileError(ValueError):
@@ -98,29 +104,6 @@ def normalize_account(value) -> str:
     return s
 
 
-def normalize_text(value) -> str:
-    """Upper case, '&' -> 'AND', anything not a letter or digit becomes a space, spaces collapsed."""
-    if value is None or (isinstance(value, float) and pd.isna(value)):
-        return ""
-    s = str(value).upper().replace("&", " AND ")
-    s = re.sub(r"[^A-Z0-9]+", " ", s)
-    return " ".join(s.split())
-
-
-def normalize_zip(value) -> str:
-    """'78701-1234' / 78701.0 / '78701' -> '78701'; '2134' -> '02134' (Excel drops leading zeros)."""
-    if value is None or (isinstance(value, float) and pd.isna(value)):
-        return ""
-    s = str(value).strip()
-    if re.fullmatch(r"\d+\.0+", s):
-        s = s.split(".")[0]
-    digits = re.match(r"\d+", s)
-    if not digits:
-        return ""
-    d = digits.group()
-    return d.zfill(5)[:5] if len(d) <= 5 else d[:5]
-
-
 def _clean(value) -> Optional[str]:
     """Stripped text, or None for a blank/NaN cell."""
     if value is None or (not isinstance(value, str) and pd.isna(value)):
@@ -154,13 +137,8 @@ def _first_sheet_with_columns(sheets: dict[str, pd.DataFrame], columns: KeyColum
     return next(iter(sheets.values()))   # none fits: the missing-column error names the first sheet's columns
 
 
-def read_gpo_key(path: str, columns: KeyColumns = KeyColumns()) -> pd.DataFrame:
-    """
-    Read a key file (.csv, .xlsx, .xls, .xlsm) and return a DataFrame with
-    columns account_number, account_name, address, gpo_id, zip (None when no
-    ZIP column is configured) and their *_norm versions. Rows without an account number are dropped (see load_gpo_key
-    for the count).
-    """
+def _read_raw(path: str, columns: KeyColumns) -> pd.DataFrame:
+    """The key file's sheet with the configured columns, as text, headers unchanged."""
     suffix = Path(path).suffix.lower()
     try:
         if suffix == ".csv":
@@ -177,7 +155,25 @@ def read_gpo_key(path: str, columns: KeyColumns = KeyColumns()) -> pd.DataFrame:
         raise
     except Exception as e:
         raise KeyFileError(f"Cannot read key file: {e}") from e
+    return raw
 
+
+def without_missing_zip(path: str, columns: KeyColumns = KeyColumns()) -> KeyColumns:
+    """*columns*, with zip=None when the key file has no such ZIP column (the street alone is then compared)."""
+    if not columns.zip:
+        return columns
+    headers = {_normalize_col(str(c)) for c in _read_raw(path, replace(columns, zip=None)).columns}
+    return columns if _normalize_col(columns.zip) in headers else replace(columns, zip=None)
+
+
+def read_gpo_key(path: str, columns: KeyColumns = KeyColumns()) -> pd.DataFrame:
+    """
+    Read a key file (.csv, .xlsx, .xls, .xlsm) and return a DataFrame with
+    columns account_number, account_name, address, gpo_id, zip (None when no
+    ZIP column is configured) and their *_norm versions. Rows without an account number are dropped (see load_gpo_key
+    for the count).
+    """
+    raw = _read_raw(path, columns)
     by_norm = {_normalize_col(str(c)): c for c in raw.columns}
     wanted = _wanted(columns)
     missing = [f"{field} ('{name}')" for field, name in wanted.items() if _normalize_col(name) not in by_norm]
@@ -195,8 +191,8 @@ def read_gpo_key(path: str, columns: KeyColumns = KeyColumns()) -> pd.DataFrame:
     if "zip" not in df:
         df["zip"] = pd.Series([None] * len(df), dtype=object)
     df["account_number_norm"] = df["account_number"].map(normalize_account)
-    df["account_name_norm"] = df["account_name"].map(normalize_text)
-    df["address_norm"] = df["address"].map(normalize_text)
+    df["account_name_norm"] = df["account_name"].map(normalize_name)
+    df["address_norm"] = df["address"].map(normalize_address)
     df["zip_norm"] = df["zip"].map(normalize_zip)
     df.attrs["skipped_blank_account"] = int((df["account_number_norm"] == "").sum())
     return df[df["account_number_norm"] != ""].reset_index(drop=True)
@@ -235,6 +231,20 @@ def load_gpo_key(
         skipped_blank_account=df.attrs.get("skipped_blank_account", 0),
         accounts_with_several_entries=int((counts > 1).sum()),
     )
+
+
+def suppliers_without_key(conn: object) -> list[str]:
+    """Names of suppliers in gpo_key mode with no key loaded: every row of theirs would be an exception."""
+    rows = conn.execute(
+        """
+        SELECT s.name FROM supplier_profile s
+        WHERE s.identity_mode IN (?, ?)
+          AND NOT EXISTS (SELECT 1 FROM gpo_key_entry e WHERE e.supplier_profile_id = s.id)
+        ORDER BY s.name
+        """,
+        KEY_IDENTITY_MODES,
+    ).fetchall()
+    return [r["name"] for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -282,9 +292,11 @@ class GpoKey:
             "FROM gpo_key_entry WHERE supplier_profile_id = ?",
             (supplier_profile_id,),
         ).fetchall()
+        # Normalized again from the stored raw values: the *_norm columns may predate a normalizer change.
         return cls([
             _Entry(r["account_number"], r["account_name"], r["address"], _clean(r["gpo_id"]),
-                   r["account_name_norm"] or "", r["address_norm"] or "", r["zip"], r["zip_norm"] or "")
+                   normalize_name(r["account_name"]), normalize_address(r["address"]), r["zip"],
+                   normalize_zip(r["zip"]))
             for r in rows
         ], options)
 
@@ -309,7 +321,7 @@ class GpoKey:
         if not entries:
             return Verification(None, KEY_ACCOUNT_NOT_FOUND, f"Account {acct} is not in the key.")
 
-        name, addr, zip_norm = normalize_text(account_name), normalize_text(address), normalize_zip(zip_code)
+        name, addr, zip_norm = normalize_name(account_name), normalize_address(address), normalize_zip(zip_code)
         name_ok = [self._agrees(name, e.name_norm, self.options.name_min_score) for e in entries]
         addr_ok = [self._address_agrees(addr, zip_norm, e) for e in entries]
         hits = [e for e, n, a in zip(entries, name_ok, addr_ok) if n and a]

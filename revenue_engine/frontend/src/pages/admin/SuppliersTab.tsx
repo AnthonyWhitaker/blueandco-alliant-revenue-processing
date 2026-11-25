@@ -54,7 +54,7 @@ const supplierSchema = z.object({
   max_read_columns: z.number({ error: 'Enter 0 for no limit' }).int().min(0),
   job_type: z.enum(['row_level', 'pivot_allocation']),
   requires_manual_confirmation: z.boolean(),
-  identity_mode: z.enum(['member_match', 'gpo_key']),
+  identity_mode: z.enum(['member_match', 'gpo_key', 'gpo_key_then_member']),
   volume_mode: z.enum(['sum', 'blank']),
   /** Empty string = no fee rate. */
   fee_rate: z.union([z.number().min(0, 'Must be 0 or more'), z.literal('')]),
@@ -62,6 +62,10 @@ const supplierSchema = z.object({
   fuzzy_city_state_threshold: threshold,
   fuzzy_state_threshold: threshold,
   fuzzy_nationwide_threshold: threshold,
+  fuzzy_strong_name_threshold: threshold,
+  fuzzy_street_name_threshold: threshold,
+  auto_match_min_confidence: threshold,
+  gpo_id_min_name_score: threshold,
 });
 type SupplierFormValues = z.infer<typeof supplierSchema>;
 
@@ -88,6 +92,10 @@ function newSupplierValues(meta: Meta): SupplierFormValues {
     fuzzy_city_state_threshold: 75,
     fuzzy_state_threshold: 80,
     fuzzy_nationwide_threshold: 85,
+    fuzzy_strong_name_threshold: 95,
+    fuzzy_street_name_threshold: 60,
+    auto_match_min_confidence: 80,
+    gpo_id_min_name_score: 50,
   };
 }
 
@@ -113,6 +121,10 @@ function supplierValues(s: Supplier): SupplierFormValues {
     fuzzy_city_state_threshold: s.fuzzy_city_state_threshold,
     fuzzy_state_threshold: s.fuzzy_state_threshold,
     fuzzy_nationwide_threshold: s.fuzzy_nationwide_threshold,
+    fuzzy_strong_name_threshold: s.fuzzy_strong_name_threshold,
+    fuzzy_street_name_threshold: s.fuzzy_street_name_threshold,
+    auto_match_min_confidence: s.auto_match_min_confidence,
+    gpo_id_min_name_score: s.gpo_id_min_name_score,
   };
 }
 
@@ -138,6 +150,10 @@ function toInput(v: SupplierFormValues): SupplierInput {
     fuzzy_city_state_threshold: v.fuzzy_city_state_threshold,
     fuzzy_state_threshold: v.fuzzy_state_threshold,
     fuzzy_nationwide_threshold: v.fuzzy_nationwide_threshold,
+    fuzzy_strong_name_threshold: v.fuzzy_strong_name_threshold,
+    fuzzy_street_name_threshold: v.fuzzy_street_name_threshold,
+    auto_match_min_confidence: v.auto_match_min_confidence,
+    gpo_id_min_name_score: v.gpo_id_min_name_score,
   };
 }
 
@@ -146,6 +162,8 @@ const options = (values: readonly string[]) => values.map((v) => ({ value: v, la
 const IDENTITY_LABELS: Record<string, string> = {
   member_match: 'Match to members (Review queue for unmatched)',
   gpo_key: 'Verify GPO ID against a key file (exceptions report)',
+  gpo_key_then_member:
+    'Verify GPO ID against a key file, then match the rest to members (Review queue)',
 };
 const VOLUME_LABELS: Record<string, string> = {
   sum: 'Sum of sales amounts',
@@ -412,7 +430,7 @@ export function SupplierForm({ meta, supplier, onDone }: SupplierFormProps) {
 
         <Accordion variant="contained">
           <Accordion.Item value="matching">
-            <Accordion.Control>Fee rate and fuzzy-match thresholds</Accordion.Control>
+            <Accordion.Control>Fee rate and matching thresholds</Accordion.Control>
             <Accordion.Panel>
               <Text size="xs" c="dimmed" mb="sm">
                 Not editable in the legacy app. Saved values are kept unless you change them here.
@@ -448,17 +466,50 @@ export function SupplierForm({ meta, supplier, onDone }: SupplierFormProps) {
                 />
                 <NumberInput
                   label="Nationwide threshold"
+                  description="Nationwide results are review suggestions only"
                   min={0}
                   max={100}
                   allowDecimal={false}
                   {...form.getInputProps('fuzzy_nationwide_threshold')}
+                />
+                <NumberInput
+                  label="Strong name threshold"
+                  description="Zip/city match although the streets differ"
+                  min={0}
+                  max={100}
+                  allowDecimal={false}
+                  {...form.getInputProps('fuzzy_strong_name_threshold')}
+                />
+                <NumberInput
+                  label="Name threshold with same street + ZIP"
+                  description="A weaker name is enough when the address matches"
+                  min={0}
+                  max={100}
+                  allowDecimal={false}
+                  {...form.getInputProps('fuzzy_street_name_threshold')}
+                />
+                <NumberInput
+                  label="Minimum confidence to auto-match"
+                  description="Lower-confidence matches go to Review"
+                  min={0}
+                  max={100}
+                  allowDecimal={false}
+                  {...form.getInputProps('auto_match_min_confidence')}
+                />
+                <NumberInput
+                  label="GPO ID minimum name score"
+                  description="Below it, the file's GPO ID is used only if street + ZIP match"
+                  min={0}
+                  max={100}
+                  allowDecimal={false}
+                  {...form.getInputProps('gpo_id_min_name_score')}
                 />
               </SimpleGrid>
             </Accordion.Panel>
           </Accordion.Item>
         </Accordion>
 
-        {supplier && form.getValues().identity_mode === 'gpo_key' && (
+        {supplier && form.getValues().identity_mode !== 'member_match' && (
           <GpoKeyPanel supplier={supplier} extensions={meta.upload_extensions} />
         )}
 
@@ -546,6 +597,8 @@ export function SuppliersTab() {
               render: (s) =>
                 s.identity_mode === 'gpo_key' ? (
                   <Badge color="teal">GPO key</Badge>
+                ) : s.identity_mode === 'gpo_key_then_member' ? (
+                  <Badge color="teal">GPO key, then members</Badge>
                 ) : (
                   'Member match'
                 ),

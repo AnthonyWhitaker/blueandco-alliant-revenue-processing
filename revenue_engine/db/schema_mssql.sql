@@ -23,6 +23,10 @@ BEGIN
         fuzzy_city_state_threshold  INT NOT NULL DEFAULT 75,
         fuzzy_state_threshold       INT NOT NULL DEFAULT 80,
         fuzzy_nationwide_threshold  INT NOT NULL DEFAULT 85,
+        fuzzy_strong_name_threshold INT NOT NULL DEFAULT 95,
+        fuzzy_street_name_threshold INT NOT NULL DEFAULT 60,
+        auto_match_min_confidence   INT NOT NULL DEFAULT 80,
+        gpo_id_min_name_score       INT NOT NULL DEFAULT 50,
         header_row                  INT NOT NULL DEFAULT 0,
         sheet_name                  NVARCHAR(500),
         skip_rows_where_col_null    NVARCHAR(500),
@@ -78,6 +82,8 @@ BEGIN
         billing_city            NVARCHAR(500),
         billing_state           NVARCHAR(500),
         billing_zip             NVARCHAR(500),
+        billing_street          NVARCHAR(500),
+        is_primary_site         INT,
         norm_city               NVARCHAR(500),
         norm_state              NVARCHAR(500),
         norm_zip                NVARCHAR(500),
@@ -197,10 +203,30 @@ BEGIN
         jde_number              NVARCHAR(500),
         approved_by             NVARCHAR(500),
         approved_at             DATETIME2,
+        source                  NVARCHAR(500),
         created_at              DATETIME2 NOT NULL DEFAULT GETUTCDATE(),
         UNIQUE(supplier_profile_id, canonical_key)
     );
 END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'non_member')
+BEGIN
+    CREATE TABLE non_member (
+        id                      INT IDENTITY(1,1) PRIMARY KEY,
+        supplier_profile_id     INT NOT NULL REFERENCES supplier_profile(id) ON DELETE CASCADE,
+        jde_number              NVARCHAR(500),
+        raw_name                NVARCHAR(MAX),
+        source                  NVARCHAR(500),
+        decided_by              NVARCHAR(500),
+        job_id                  INT,              -- the job where the decision was made (no FK: revenue_job is created later)
+        created_at              DATETIME2 NOT NULL DEFAULT GETUTCDATE()
+    );
+END
+GO
+
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_non_member_supplier')
+    CREATE INDEX ix_non_member_supplier ON non_member(supplier_profile_id);
 GO
 
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'ix_member_alias_key')
@@ -398,6 +424,9 @@ BEGIN
         zip                         NVARCHAR(500),
         suggested_member_id         INT REFERENCES member(id),
         suggested_match_score       INT,
+        review_reason               NVARCHAR(500),
+        key_reason                  NVARCHAR(500),
+        candidates_json             NVARCHAR(MAX),
         total_fee                   FLOAT,
         total_sales                 FLOAT,
         affected_row_count          INT,

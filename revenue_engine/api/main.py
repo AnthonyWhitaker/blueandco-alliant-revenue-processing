@@ -20,6 +20,7 @@ from fastapi.responses import PlainTextResponse
 
 from core.jobs import fail_interrupted_jobs
 from engine.db import init_db
+from engine.gpo_key import suppliers_without_key
 
 from .background import BackgroundRunner
 from .errors import install_error_handlers, use_problem_media_type
@@ -45,6 +46,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         interrupted = fail_interrupted_jobs(conn)
         if interrupted:
             log.warning("marked %d interrupted job(s) as failed", interrupted)
+        for name in suppliers_without_key(conn):
+            log.warning("supplier %r is in gpo_key mode but has no GPO key loaded: every row of its files "
+                        "will be an exception. Load a key (Admin > Suppliers) or switch it to member_match.", name)
     finally:
         conn.close()
     app.state.runner = BackgroundRunner()

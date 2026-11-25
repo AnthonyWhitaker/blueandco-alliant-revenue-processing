@@ -11,7 +11,7 @@ import {
   Text,
   Title,
 } from '@mantine/core';
-import { IconCheck, IconUserPlus, IconX } from '@tabler/icons-react';
+import { IconBan, IconCheck, IconUserPlus, IconX } from '@tabler/icons-react';
 
 import type { AliasScope, Schemas } from '@/api/types';
 import { MemberPicker } from '@/components/MemberPicker';
@@ -24,6 +24,34 @@ import { NewFacilityForm } from './NewFacilityForm';
 import { useReviewDecision } from './useReviewDecision';
 
 type ReviewItem = Schemas['ReviewItem'];
+type ReviewCandidate = Schemas['ReviewCandidate'];
+
+/** Why an item is here when it isn't just "no match" (member_review_item.review_reason). */
+const REASONS: Record<string, string> = {
+  gpo_id_conflict: 'GPO ID conflict',
+  jde_gpo_conflict: 'JDE # and GPO ID disagree',
+  entity_code_no_primary: 'Shared GPO ID, no primary site',
+  fuzzy_suggestion: 'Similar name, not confirmed',
+  low_confidence: 'Low-confidence match',
+  gpo_key_fallback: 'Not verified by the GPO key',
+};
+
+/** gpo_key_then_member: why the row failed the GPO key (member_review_item.key_reason). */
+const KEY_REASONS: Record<string, string> = {
+  account_not_in_key: 'account not in the key',
+  missing_account_number: 'no account number',
+  name_mismatch: "name doesn't match the key",
+  address_mismatch: "address doesn't match the key",
+  name_and_address_mismatch: "name and address don't match the key",
+};
+
+const FIELD_LABELS: Record<ReviewCandidate['matched'][number], string> = {
+  name: 'Name',
+  street: 'Street',
+  zip: 'ZIP',
+  jde: 'JDE #',
+  gpo_id: 'GPO ID',
+};
 
 const SCOPES: { value: AliasScope; label: string; description: string }[] = [
   { value: 'supplier', label: 'This supplier', description: 'Future files from this supplier' },
@@ -52,6 +80,59 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
 
 const place = (...parts: (string | null)[]) => parts.filter(Boolean).join(', ') || '—';
 
+function CandidateRow({
+  candidate,
+  selected,
+  onUse,
+}: {
+  candidate: ReviewCandidate;
+  selected: boolean;
+  onUse: () => void;
+}) {
+  return (
+    <Paper
+      withBorder
+      p="xs"
+      component="li"
+      aria-label={candidate.name}
+      style={selected ? { borderColor: 'var(--mantine-color-green-6)' } : undefined}
+    >
+      <Group justify="space-between" align="flex-start" wrap="nowrap" gap="xs">
+        <Stack gap={2}>
+          <Text size="sm" fw={600}>
+            {candidate.name}
+          </Text>
+          <Text size="xs" c="dimmed">
+            <span className="mono">{formatText(candidate.entity_code)}</span> ·{' '}
+            {place(candidate.street, candidate.city, candidate.state, candidate.zip)}
+          </Text>
+          <Group gap={4}>
+            <Badge size="sm" color={scoreColor(candidate.score)}>
+              Name {candidate.score}
+            </Badge>
+            {candidate.matched
+              .filter((f) => f !== 'name')
+              .map((f) => (
+                <Badge key={f} size="sm" variant="light" color="green">
+                  {FIELD_LABELS[f]} matches
+                </Badge>
+              ))}
+          </Group>
+        </Stack>
+        <Button
+          size="compact-sm"
+          variant={selected ? 'filled' : 'default'}
+          onClick={onUse}
+          aria-pressed={selected}
+          aria-label={`Use ${candidate.name}`}
+        >
+          {selected ? 'Selected' : 'Use this'}
+        </Button>
+      </Group>
+    </Paper>
+  );
+}
+
 export function ReviewCard({ item }: { item: ReviewItem }) {
   const draft = useReviewDraft(item.id);
   const pickReviewMember = useAppStore((s) => s.pickReviewMember);
@@ -62,6 +143,7 @@ export function ReviewCard({ item }: { item: ReviewItem }) {
   const decide = useReviewDecision(item);
 
   const memberId = resolveReviewMemberId(draft, item.suggestion);
+  const candidates = item.candidates ?? [];
   const selection = draft.selection;
   const name = item.customer_name_sample ?? 'Unnamed customer';
   const headingId = `review-item-${item.id}`;
@@ -74,6 +156,12 @@ export function ReviewCard({ item }: { item: ReviewItem }) {
             {name}
           </Title>
           <Group gap="xs">
+            {item.review_reason && (
+              <Badge color="orange">
+                {REASONS[item.review_reason] ?? item.review_reason}
+                {item.key_reason && `: ${KEY_REASONS[item.key_reason] ?? item.key_reason}`}
+              </Badge>
+            )}
             <Badge variant="outline" color="slate" className="mono">
               JDE {formatText(item.jde_number)}
             </Badge>
@@ -99,21 +187,22 @@ export function ReviewCard({ item }: { item: ReviewItem }) {
           </Stack>
           <Stack gap={4}>
             <Text fw={600} size="sm">
-              Best suggestion
+              Candidates
             </Text>
-            {item.suggestion ? (
-              <>
-                <Detail label="Name">{item.suggestion.name}</Detail>
-                <Detail label="Entity code">
-                  <span className="mono">{formatText(item.suggestion.entity_code)}</span>
-                </Detail>
-                <Detail label="Location">
-                  {place(item.suggestion.city, item.suggestion.state)}
-                </Detail>
-                <Detail label="Match score">
-                  <Badge color={scoreColor(item.suggestion.score)}>{item.suggestion.score}</Badge>
-                </Detail>
-              </>
+            {candidates.length > 0 ? (
+              <Stack gap={6} component="ul" p={0} m={0} style={{ listStyle: 'none' }}>
+                {candidates.map((c) => (
+                  <CandidateRow
+                    key={c.member_id}
+                    candidate={c}
+                    selected={memberId === c.member_id}
+                    onUse={() => {
+                      if (c.member_id === item.suggestion?.member_id) resetReviewSelection(item.id);
+                      else pickReviewMember(item.id, { id: c.member_id, label: c.name });
+                    }}
+                  />
+                ))}
+              </Stack>
             ) : (
               <Text size="sm" c="dimmed" fs="italic">
                 No suggestion available
@@ -224,6 +313,19 @@ export function ReviewCard({ item }: { item: ReviewItem }) {
             aria-label={`Dismiss ${name} (no match)`}
           >
             Dismiss (no match)
+          </Button>
+          <Button
+            variant="default"
+            color="red"
+            leftSection={<IconBan size={16} />}
+            loading={decide.isPending && decide.variables.kind === 'not_member'}
+            disabled={decide.isPending}
+            onClick={() => {
+              decide.mutate({ kind: 'not_member' });
+            }}
+            aria-label={`Mark ${name} as not a member`}
+          >
+            Not a member
           </Button>
         </Group>
       </Stack>

@@ -190,11 +190,19 @@ def init_db(db_path: Optional[str] = None):
     _safe_add_column(conn, "supplier_profile", "job_type", "TEXT NOT NULL DEFAULT 'row_level'")
     _safe_add_column(conn, "supplier_profile", "requires_manual_confirmation", "INTEGER NOT NULL DEFAULT 0")
     _safe_add_column(conn, "supplier_profile", "fee_rate", "REAL")
+    _safe_add_column(conn, "supplier_profile", "gpo_id_min_name_score", "INTEGER NOT NULL DEFAULT 50")
+    _safe_add_column(conn, "supplier_profile", "auto_match_min_confidence", "INTEGER NOT NULL DEFAULT 80")
+    _safe_add_column(conn, "supplier_profile", "fuzzy_strong_name_threshold", "INTEGER NOT NULL DEFAULT 95")
+    _safe_add_column(conn, "supplier_profile", "fuzzy_street_name_threshold", "INTEGER NOT NULL DEFAULT 60")
     _safe_add_column(conn, "revenue_job", "manual_totals_json", "NVARCHAR(MAX)" if is_mssql() else "TEXT")
     text, long_text = ("NVARCHAR(500)", "NVARCHAR(MAX)") if is_mssql() else ("TEXT", "TEXT")
     _safe_add_column(conn, "supplier_profile", "identity_mode", f"{text} NOT NULL DEFAULT 'member_match'")
     _safe_add_column(conn, "supplier_profile", "volume_mode", f"{text} NOT NULL DEFAULT 'sum'")
     _safe_add_column(conn, "revenue_job", "timeframe", text)
+    _safe_add_column(conn, "member_review_item", "review_reason", text)
+    _safe_add_column(conn, "member_review_item", "key_reason", text)
+    _safe_add_column(conn, "member_alias", "source", text)
+    _safe_add_column(conn, "member_review_item", "candidates_json", long_text)
     _safe_add_column(conn, "revenue_job", "reconciliation_json", long_text)
     _safe_add_column(conn, "revenue_job", "error_detail", long_text)
     _safe_add_column(conn, "revenue_job", "archived_at", "DATETIME2" if is_mssql() else "TIMESTAMP")
@@ -205,6 +213,8 @@ def init_db(db_path: Optional[str] = None):
     _safe_add_column(conn, "revenue_row", "duplicate_group", "INTEGER" if not is_mssql() else "INT")
     _safe_add_column(conn, "gpo_key_entry", "zip", text)
     _safe_add_column(conn, "gpo_key_entry", "zip_norm", text)
+    _safe_add_column(conn, "member", "billing_street", text)
+    _safe_add_column(conn, "member", "is_primary_site", "INTEGER" if not is_mssql() else "INT")
 
     return conn
 

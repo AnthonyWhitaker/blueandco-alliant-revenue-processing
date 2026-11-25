@@ -11,7 +11,7 @@ from core import jobs, reviews
 from core.errors import InvalidInputError
 from models.enums import JobStatus
 from models.jobs import FileNameInference, Job, JobException, JobFile, JobOutput, JobPatch, JobPreview
-from models.reviews import ReviewApproval, ReviewDecisionResult, ReviewItem
+from models.reviews import ReviewApproval, ReviewDecisionResult, ReviewItem, ReviewNotMember
 
 from ..deps import Conn, Runner, read_upload
 from ..errors import PROBLEM_RESPONSES, problems
@@ -179,3 +179,9 @@ def approve(conn: Conn, item_id: int, body: ReviewApproval) -> ReviewDecisionRes
              summary="Leave a customer unmatched (it stays on the Unmatched tab)")
 def dismiss(conn: Conn, item_id: int) -> ReviewDecisionResult:
     return reviews.dismiss(conn, item_id)
+
+
+@router.post("/review-items/{item_id}/not-member", responses=problems(404, 409), response_model=ReviewDecisionResult,
+             summary="Mark the customer as not a member: its rows leave the review queue now and in later files")
+def not_member(conn: Conn, item_id: int, body: ReviewNotMember) -> ReviewDecisionResult:
+    return reviews.mark_not_member(conn, item_id, body)
