@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 
 from .file_reader import SOURCE_ROW_COL, ReadResult, read_supplier_file_detailed
+from .normalizer import parse_amount
 
 SOURCE_FILE_COL = "__source_file"
 DUPLICATE_GROUP_COL = "__duplicate_group"
@@ -129,8 +130,8 @@ def amount_totals(df: pd.DataFrame, column: str) -> tuple[float, int]:
     """(sum of the parseable amounts, count of non-blank values that aren't numbers) for one canonical column."""
     if df.empty or column not in df.columns:
         return 0.0, 0
-    text = df[column].astype("string").str.replace(",", "", regex=False).str.strip()
-    numbers = pd.to_numeric(text, errors="coerce")
+    text = df[column].astype("string").str.strip()
+    numbers = text.map(parse_amount, na_action="ignore").astype("Float64")
     unparseable = int((numbers.isna() & text.notna() & (text != "")).sum())
     return float(numbers.sum()), unparseable
 

@@ -83,7 +83,8 @@ def test_account_list_street_and_primary_flag_are_loaded(conn, sites):
     ("EC902", "somewhere else", "11111", "SF-E", MATCH_ENTITY_CODE),
 ])
 def test_site_is_picked_by_address_then_primary(matcher, code, street, zip_code, account_id, method):
-    r = matcher.match("Lakeside", entity_code_hint=code, address=street, zip_code=zip_code, city="Austin", state="TX")
+    name = {"EC902": "Solo Hospital"}.get(code.upper(), "Lakeside Medical Center")   # a name that fits the code
+    r = matcher.match(name, entity_code_hint=code, address=street, zip_code=zip_code, city="Austin", state="TX")
     assert (r.matched, r.account_id, r.match_method, r.match_score) == (True, account_id, method, 100)
 
 
@@ -118,3 +119,74 @@ def test_pipeline_records_the_rule_and_reviews_the_unpicked_code(conn, sites, tm
     review = conn.execute("SELECT customer_name_sample FROM member_review_item WHERE job_id = ?",
                           (job.id,)).fetchall()
     assert [r[0] for r in review] == ["HILLTOP CLINIC"]
+
+
+# --- sites sharing an entity code are never merged (member_loader._identity) --------------------------
+
+def write_sites_without_account_id(path, rows):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Account List"
+    ws.append(["Account Name", "Premier Entity Code", "Billing Street", "Billing City", "Billing State/Province",
+               "Billing Zip/Postal Code", "Is Primary"])
+    for r in rows:
+        ws.append(list(r))
+    wb.save(path)
+    return str(path)
+
+
+SAME_NAME_SITES = [   # no Account IDs; same name, code and state, different street
+    ("Lakeside Medical Center", "EC950", "100 Main Street", "Austin", "TX", "78701", "Y"),
+    ("Lakeside Medical Center", "EC950", "200 Oak Avenue", "Austin", "TX", "78701", "N"),
+]
+
+
+def ec950(conn):
+    return sorted(r[0] for r in conn.execute(
+        "SELECT billing_street FROM member WHERE entity_code = 'EC950' AND is_active = 1").fetchall())
+
+
+def test_sites_sharing_code_name_and_state_stay_separate_members_across_reloads(conn, tmp_path):
+    path = write_sites_without_account_id(tmp_path / "a.xlsx", SAME_NAME_SITES)
+    load_account_list(conn, path)
+    load_account_list(conn, path)          # a reload updates, never adds or merges
+    assert ec950(conn) == ["100 Main Street", "200 Oak Avenue"]
+    # Abbreviations are the same street: still two members, not three.
+    load_account_list(conn, write_sites_without_account_id(tmp_path / "b.xlsx", [
+        ("Lakeside Medical Center", "EC950", "100 MAIN ST", "Austin", "TX", "78701", "Y"),
+        ("Lakeside Medical Center", "EC950", "200 OAK AVE", "Austin", "TX", "78701", "N")]))
+    assert ec950(conn) == ["100 MAIN ST", "200 OAK AVE"]
+
+
+def test_member_stored_without_a_street_is_claimed_by_one_site_only(conn, tmp_path):
+    # Loaded before the street column was read: one member, no street.
+    load_account_list(conn, write_sites_without_account_id(tmp_path / "old.xlsx", [
+        ("Lakeside Medical Center", "EC950", None, "Austin", "TX", "78701", None)]))
+    assert ec950(conn) == [None]
+    load_account_list(conn, write_sites_without_account_id(tmp_path / "new.xlsx", SAME_NAME_SITES))
+    assert ec950(conn) == ["100 Main Street", "200 Oak Avenue"]
+    assert conn.execute("SELECT COUNT(*) FROM member WHERE entity_code = 'EC950'").fetchone()[0] == 2
+
+
+# --- before the Account List is reloaded with primary flags ---------------------------------------------
+
+def test_until_any_primary_flag_is_loaded_shared_codes_keep_the_previous_site(conn):
+    from engine.constants import MATCH_ENTITY_CODE_UNFLAGGED
+    from engine.member_loader import create_member
+    first = create_member(conn, "Harbor Clinic", premier_entity_code="EC970", state="TX", zip_code="78701")
+    last = create_member(conn, "Harbor Clinic Dock", premier_entity_code="EC970", state="TX", zip_code="78701")
+    conn.commit()
+    sid = apply_preset(conn, MEDLINE)
+
+    def match():
+        m = MemberMatcher(conn, supplier_profile_id=sid)
+        m.load()
+        return m.match("Harbor Clinic", entity_code_hint="EC970", state="TX")
+
+    r = match()           # no member has a primary flag: the last site loaded, as before this change
+    assert (r.matched, r.member_id, r.match_method) == (True, last, MATCH_ENTITY_CODE_UNFLAGGED)
+
+    conn.execute("UPDATE member SET is_primary_site = 0 WHERE id = ?", (first,))    # flags arrive (reload)
+    conn.commit()
+    r = match()
+    assert (r.matched, r.match_method) == (False, MATCH_ENTITY_CODE_NO_PRIMARY)

@@ -9,10 +9,13 @@ key's GPO ID. The address is the street plus the ZIP code (first five digits)
 when the key has a ZIP column. Anything else is an exception with a reason. Nothing is guessed:
 there is no fallback to the GPO ID in the file or to fuzzy member matching.
 
-Comparison is on normalized text (upper case, '&' -> 'AND', punctuation and
-repeated whitespace collapsed; account numbers lose a trailing '.0' and
-leading zeros). Similarity tolerance for name/address is configurable via
-VerifyOptions but defaults to exact (100).
+Comparison is on values normalized by the same functions member_match uses
+(engine/normalizer.py): names by normalize_name (upper case, '&' -> 'AND',
+punctuation and legal suffixes like INC/LLC removed), streets by
+normalize_address (USPS abbreviations: STREET = ST, SUITE = STE, EAST = E),
+ZIPs by normalize_zip (five digits, leading zeros restored). Account numbers
+lose a trailing '.0' and leading zeros. Similarity tolerance for name/address
+is configurable via VerifyOptions but defaults to exact (100).
 
 Public API:
     KeyColumns            — which columns of the key file hold which field
@@ -31,10 +34,11 @@ from typing import Optional
 import pandas as pd
 
 from .constants import (
-    IDENTITY_GPO_KEY, KEY_ACCOUNT_NOT_FOUND, KEY_ADDRESS_MISMATCH, KEY_AMBIGUOUS, KEY_MISSING_ACCOUNT,
+    KEY_IDENTITY_MODES, KEY_ACCOUNT_NOT_FOUND, KEY_ADDRESS_MISMATCH, KEY_AMBIGUOUS, KEY_MISSING_ACCOUNT,
     KEY_NAME_AND_ADDRESS_MISMATCH, KEY_NAME_MISMATCH, KEY_NO_GPO_ID,
 )
 from .file_reader import _normalize_col
+from .normalizer import normalize_address, normalize_name, normalize_zip
 
 
 class KeyFileError(ValueError):
@@ -98,29 +102,6 @@ def normalize_account(value) -> str:
     if s.isdigit():
         s = s.lstrip("0") or "0"
     return s
-
-
-def normalize_text(value) -> str:
-    """Upper case, '&' -> 'AND', anything not a letter or digit becomes a space, spaces collapsed."""
-    if value is None or (isinstance(value, float) and pd.isna(value)):
-        return ""
-    s = str(value).upper().replace("&", " AND ")
-    s = re.sub(r"[^A-Z0-9]+", " ", s)
-    return " ".join(s.split())
-
-
-def normalize_zip(value) -> str:
-    """'78701-1234' / 78701.0 / '78701' -> '78701'; '2134' -> '02134' (Excel drops leading zeros)."""
-    if value is None or (isinstance(value, float) and pd.isna(value)):
-        return ""
-    s = str(value).strip()
-    if re.fullmatch(r"\d+\.0+", s):
-        s = s.split(".")[0]
-    digits = re.match(r"\d+", s)
-    if not digits:
-        return ""
-    d = digits.group()
-    return d.zfill(5)[:5] if len(d) <= 5 else d[:5]
 
 
 def _clean(value) -> Optional[str]:
@@ -210,8 +191,8 @@ def read_gpo_key(path: str, columns: KeyColumns = KeyColumns()) -> pd.DataFrame:
     if "zip" not in df:
         df["zip"] = pd.Series([None] * len(df), dtype=object)
     df["account_number_norm"] = df["account_number"].map(normalize_account)
-    df["account_name_norm"] = df["account_name"].map(normalize_text)
-    df["address_norm"] = df["address"].map(normalize_text)
+    df["account_name_norm"] = df["account_name"].map(normalize_name)
+    df["address_norm"] = df["address"].map(normalize_address)
     df["zip_norm"] = df["zip"].map(normalize_zip)
     df.attrs["skipped_blank_account"] = int((df["account_number_norm"] == "").sum())
     return df[df["account_number_norm"] != ""].reset_index(drop=True)
@@ -257,11 +238,11 @@ def suppliers_without_key(conn: object) -> list[str]:
     rows = conn.execute(
         """
         SELECT s.name FROM supplier_profile s
-        WHERE s.identity_mode = ?
+        WHERE s.identity_mode IN (?, ?)
           AND NOT EXISTS (SELECT 1 FROM gpo_key_entry e WHERE e.supplier_profile_id = s.id)
         ORDER BY s.name
         """,
-        (IDENTITY_GPO_KEY,),
+        KEY_IDENTITY_MODES,
     ).fetchall()
     return [r["name"] for r in rows]
 
@@ -311,9 +292,11 @@ class GpoKey:
             "FROM gpo_key_entry WHERE supplier_profile_id = ?",
             (supplier_profile_id,),
         ).fetchall()
+        # Normalized again from the stored raw values: the *_norm columns may predate a normalizer change.
         return cls([
             _Entry(r["account_number"], r["account_name"], r["address"], _clean(r["gpo_id"]),
-                   r["account_name_norm"] or "", r["address_norm"] or "", r["zip"], r["zip_norm"] or "")
+                   normalize_name(r["account_name"]), normalize_address(r["address"]), r["zip"],
+                   normalize_zip(r["zip"]))
             for r in rows
         ], options)
 
@@ -338,7 +321,7 @@ class GpoKey:
         if not entries:
             return Verification(None, KEY_ACCOUNT_NOT_FOUND, f"Account {acct} is not in the key.")
 
-        name, addr, zip_norm = normalize_text(account_name), normalize_text(address), normalize_zip(zip_code)
+        name, addr, zip_norm = normalize_name(account_name), normalize_address(address), normalize_zip(zip_code)
         name_ok = [self._agrees(name, e.name_norm, self.options.name_min_score) for e in entries]
         addr_ok = [self._address_agrees(addr, zip_norm, e) for e in entries]
         hits = [e for e, n, a in zip(entries, name_ok, addr_ok) if n and a]

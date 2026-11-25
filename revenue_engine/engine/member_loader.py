@@ -8,7 +8,7 @@ from typing import Optional
 
 import pandas as pd
 
-from .normalizer import normalize_name, normalize_key, normalize_zip, normalize_state, normalize_city
+from .normalizer import normalize_address, normalize_name, normalize_key, normalize_zip, normalize_state, normalize_city
 
 # NOTE: member.canonical_key stores the SPACED normalized name (normalize_name output)
 # so fuzzy matching (token_sort_ratio) works correctly.
@@ -60,9 +60,14 @@ def _cell(row, col: Optional[str]) -> str:
     return str(value).strip()
 
 
-def _identity(canonical: str, entity_code: str, norm_state: str) -> tuple[str, str, str]:
-    """How a row without a Salesforce Account ID is recognised on a later load: name, entity code and state."""
-    return canonical, entity_code.upper(), norm_state
+def _identity(canonical: str, entity_code: str, norm_state: str, street: Optional[str],
+              norm_zip: str) -> tuple[str, str, str, str, str]:
+    """
+    How a row without a Salesforce Account ID is recognised on a later load: name, entity code, state,
+    street and ZIP. Street + ZIP keep apart ship-to sites that share an entity code (and often the name):
+    they are separate members and must never be merged into one.
+    """
+    return canonical, entity_code.upper(), norm_state, normalize_address(street), norm_zip
 
 
 def _account_list_member_ids(conn: object, active: bool) -> set[int]:
@@ -91,10 +96,13 @@ def load_account_list(
                      rules, aliases and JDE history refer to them (FINDINGS F23).
 
     Rows are matched to existing members by Salesforce Account ID. A row
-    without one is matched by name + entity code + state instead (see
-    _identity), so loading the same list again updates it rather than adding
-    it again. A member first loaded without an ID takes the ID when a later
-    list has one.
+    without one is matched by name + entity code + state + street + ZIP
+    instead (see _identity), so loading the same list again updates it rather
+    than adding it again, and ship-to sites sharing an entity code stay
+    separate members. A member first loaded without an ID takes the ID when a
+    later list has one. A member stored without a street (loaded before the
+    street was read) can be claimed by one row per load, so two sites can't
+    both collapse into it.
 
     Returns:
         (inserted_count, skipped_count, deactivated_count)
@@ -139,17 +147,33 @@ def load_account_list(
 
     # Existing members by Account ID, and by identity for matching rows without one.
     by_account_id: dict[str, Optional[int]] = {}       # None: added by this load (id not looked up)
-    by_identity: dict[tuple[str, str, str], int] = {}
-    by_identity_without_id: dict[tuple[str, str, str], int] = {}
+    by_identity: dict[tuple, int] = {}
+    by_identity_without_id: dict[tuple, int] = {}
+    no_street: set[int] = set()          # members stored without a street: each claimable once per load
     for m in conn.execute(
-        "SELECT id, account_id, canonical_key, entity_code, norm_state FROM member ORDER BY id"
+        "SELECT id, account_id, name, entity_code, norm_state, billing_street, billing_zip, norm_zip "
+        "FROM member ORDER BY id"
     ).fetchall():
-        key = _identity(m["canonical_key"] or "", m["entity_code"] or "", m["norm_state"] or "")
+        # Name and ZIP normalized again from the raw values: stored keys may predate a normalizer change.
+        key = _identity(normalize_name(m["name"]), m["entity_code"] or "", m["norm_state"] or "",
+                        m["billing_street"], normalize_zip(m["billing_zip"]) or normalize_zip(m["norm_zip"]))
         if m["account_id"]:
             by_account_id[m["account_id"]] = m["id"]
         else:
             by_identity_without_id.setdefault(key, m["id"])
         by_identity.setdefault(key, m["id"])
+        if not key[3]:
+            no_street.add(m["id"])
+
+    def find(index: dict, key: tuple, claim: bool) -> Optional[int]:
+        """The member for key; else, for a row with a street, a member stored without one (once)."""
+        found = index.pop(key, None) if claim else index.get(key)
+        if found is None and key[3]:
+            legacy = index.get(key[:3] + ("", key[4]))
+            if legacy in no_street:
+                no_street.discard(legacy)
+                found = legacy
+        return found
 
     from .db import execute_upsert, get_last_insert_id
     inserted = 0
@@ -170,14 +194,15 @@ def load_account_list(
         street  = _cell(row, col_street)
         primary = _primary_flag(_cell(row, col_primary))
 
-        # Determine effective entity code
+        # Effective entity code: the Premier code, else the Alliant code. Several members (ship-to sites
+        # of one facility) can share it; see member_matcher._pick_site. They stay separate members (_identity).
         entity_code = pec if pec else alliant
 
         canonical = normalize_name(name)  # spaced version for fuzzy matching
         norm_city  = normalize_city(city)
         norm_state = normalize_state(state)
         norm_zip   = normalize_zip(zip_raw)
-        key = _identity(canonical, entity_code, norm_state or "")
+        key = _identity(canonical, entity_code, norm_state or "", street, norm_zip or "")
 
         fields = (
             pec or None,
@@ -197,9 +222,11 @@ def load_account_list(
         # The member this row updates without an Account ID upsert: a row without an ID that matches by
         # identity, or a row with a new ID whose facility was loaded earlier without one (it takes the ID).
         if acct_id:
-            existing = None if acct_id in by_account_id else by_identity_without_id.pop(key, None)
+            existing = None if acct_id in by_account_id else find(by_identity_without_id, key, claim=True)
         else:
-            existing = by_identity.get(key)
+            existing = find(by_identity, key, claim=False)
+            if existing is not None:
+                by_identity[key] = existing
 
         try:
             if existing is not None:

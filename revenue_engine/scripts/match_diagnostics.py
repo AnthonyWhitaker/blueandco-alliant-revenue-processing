@@ -109,7 +109,7 @@ class RowResult:
     """One file row. Held in memory only; the CLI prints aggregates of these, never the fields."""
     source_file: str
     source_row: Optional[int]
-    cache_key: str
+    cache_key: tuple
     name: str
     jde_number: str
     address: str
@@ -123,19 +123,6 @@ class RowResult:
     closest_score: int = 0
     matched_name_score: Optional[int] = None      # matched rows: row name vs matched member name
     extra: dict = field(default_factory=dict)
-
-
-def _cache_key(row: dict, jde_col: Optional[str]) -> str:
-    # Same as get_cache_key in processor._run_pipeline; keep the two in step.
-    if jde_col and pd.notna(row.get(jde_col)):
-        return f"jde:{row[jde_col]}"
-    aid = row.get(CANONICAL_ACCOUNT_ID_HINT)
-    if pd.notna(aid) and str(aid).strip():
-        return f"aid:{aid}"
-    ec = row.get(CANONICAL_ENTITY_CODE_HINT)
-    if pd.notna(ec) and str(ec).strip():
-        return f"ec:{ec}|{row.get(CANONICAL_CUSTOMER_NAME, '')}|{row.get(CANONICAL_STATE, '')}"
-    return f"name:{row.get(CANONICAL_CUSTOMER_NAME, '')}"
 
 
 def _best(norm_name: str, candidates: list[dict]) -> tuple[Optional[dict], int]:
@@ -178,14 +165,7 @@ def classify_unmatched(matcher: MemberMatcher, name: str, city: str, state: str,
 
 
 def match_files(conn, supplier: dict, paths: list[str]) -> tuple[MemberMatcher, list[RowResult]]:
-    matcher = MemberMatcher(
-        conn=conn,
-        supplier_profile_id=supplier["id"],
-        zip_state_threshold=supplier.get("fuzzy_zip_state_threshold", 75),
-        city_state_threshold=supplier.get("fuzzy_city_state_threshold", 75),
-        state_threshold=supplier.get("fuzzy_state_threshold", 80),
-        nationwide_threshold=supplier.get("fuzzy_nationwide_threshold", 85),
-    )
+    matcher = MemberMatcher.from_supplier(conn, supplier)
     matcher.load()
     members_by_id = {m["id"]: m for m in matcher._members}
 
@@ -204,7 +184,8 @@ def match_files(conn, supplier: dict, paths: list[str]) -> tuple[MemberMatcher, 
             city, state = _text(row.get(CANONICAL_CITY)), _text(row.get(CANONICAL_STATE))
             zip_code, address = _text(row.get(CANONICAL_ZIP)), _text(row.get(CANONICAL_ADDRESS))
 
-            key = _cache_key(row, jde_col)
+            # Every matcher input, as processor._run_pipeline caches on.
+            key = (jde or None, name, city, state, zip_code, ec_hint or None, aid_hint or None, address)
             match = cache.get(key)
             if match is None:
                 match = matcher.match(
@@ -414,13 +395,14 @@ def summarize(supplier: dict, matcher: MemberMatcher, results: list[RowResult],
         "MEMBER MATCH DIAGNOSTICS (aggregate only)",
         f"supplier identity_mode in DB: {supplier.get('identity_mode')} (member matcher run regardless)",
         f"thresholds zip+state/city+state/state/nationwide: {matcher.zip_state_threshold}/"
-        f"{matcher.city_state_threshold}/{matcher.state_threshold}/{matcher.nationwide_threshold}",
+        f"{matcher.city_state_threshold}/{matcher.state_threshold}/{matcher.nationwide_threshold}   "
+        f"GPO ID min name score: {matcher.gpo_id_min_name_score}",
         f"active members: {len(matcher._members)}   aliases: {len(matcher._aliases)}   "
         f"JDE numbers known: {len(matcher._jde_map)}",
         "",
         f"rows:        total {total}   matched {len(matched)} {_pct(len(matched), total)}   "
         f"unmatched {len(unmatched)} {_pct(len(unmatched), total)}",
-        f"identities:  total {len(identities)}   matched {id_matched} {_pct(id_matched, len(identities))}   "
+        f"identities (distinct match inputs):  total {len(identities)}   matched {id_matched} {_pct(id_matched, len(identities))}   "
         f"unmatched {len(identities) - id_matched} {_pct(len(identities) - id_matched, len(identities))}",
         "  (an identity is what the processor caches on: account number, else ID/code hint, else name)",
         "",

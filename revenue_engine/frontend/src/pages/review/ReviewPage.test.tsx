@@ -32,6 +32,33 @@ const item = (overrides: Partial<ReviewItem> = {}): ReviewItem => ({
     state: 'NE',
     score: 86,
   },
+  review_reason: null,
+  candidates: [
+    {
+      member_id: 10,
+      name: 'Mercy General',
+      entity_code: 'PEC-10',
+      street: '1 Main St',
+      city: 'Omaha',
+      state: 'NE',
+      zip: '68102',
+      score: 86,
+      matched: ['name', 'zip'],
+      via: 'name',
+    },
+    {
+      member_id: 12,
+      name: 'Mercy General - Dock',
+      entity_code: 'PEC-10',
+      street: '9 Dock Rd',
+      city: 'Omaha',
+      state: 'NE',
+      zip: '68102',
+      score: 72,
+      matched: ['zip', 'jde'],
+      via: 'jde',
+    },
+  ],
   ...overrides,
 });
 
@@ -78,7 +105,7 @@ describe('Review page', () => {
     });
     expect(await screen.findByText('1 unmatched customer, highest fee first')).toBeInTheDocument();
     const mercy = card('MERCY GEN HOSP');
-    expect(within(mercy).getByText('86')).toBeInTheDocument();
+    expect(within(mercy).getByText('Name 86')).toBeInTheDocument();
 
     await user.click(within(mercy).getByRole('button', { name: /Approve match/ }));
     expect(await screen.findByText(/Nothing left to review for job #42/)).toBeInTheDocument();
@@ -103,7 +130,7 @@ describe('Review page', () => {
 
   it('creates a new facility when nothing matches and approves it', async () => {
     let created: unknown = null;
-    const { approvals } = reviewApi([item({ suggestion: null })], {
+    const { approvals } = reviewApi([item({ suggestion: null, candidates: [] })], {
       'POST /api/members': async (request) => {
         created = await request.json();
         return json(member({ id: 99, name: 'Mercy Gen Hosp', entity_code: null }), 201);
@@ -141,6 +168,56 @@ describe('Review page', () => {
       expect(approvals).toEqual([{ member_id: 99, create_alias: true, alias_scope: 'supplier' }]);
     });
     expect(useAppStore.getState().reviewDrafts).toEqual({});
+  });
+
+  it('shows up to three candidates with the matching fields and approves the one picked', async () => {
+    const { approvals } = reviewApi([item({ review_reason: 'jde_gpo_conflict' })]);
+    const user = userEvent.setup();
+    await renderRoute('/review?job=42');
+
+    const mercy = await screen.findByRole('article', { name: 'MERCY GEN HOSP' });
+    expect(within(mercy).getByText('JDE # and GPO ID disagree')).toBeInTheDocument();
+    const dock = within(mercy).getByRole('listitem', { name: 'Mercy General - Dock' });
+    expect(within(dock).getByText('Name 72')).toBeInTheDocument();
+    expect(within(dock).getByText('JDE # matches')).toBeInTheDocument();
+    expect(within(dock).getByText('ZIP matches')).toBeInTheDocument();
+    const general = within(mercy).getByRole('listitem', { name: 'Mercy General' });
+    expect(within(general).getByRole('button', { name: /Use Mercy General/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await user.click(within(dock).getByRole('button', { name: /Use Mercy General - Dock/ }));
+    await user.click(within(mercy).getByRole('button', { name: /Approve match/ }));
+    await waitFor(() => {
+      expect(approvals).toEqual([{ member_id: 12, create_alias: true, alias_scope: 'supplier' }]);
+    });
+  });
+
+  it("says why a row the GPO key didn't verify is here", async () => {
+    reviewApi([item({ review_reason: 'gpo_key_fallback', key_reason: 'account_not_in_key' })]);
+    await renderRoute('/review?job=42');
+    const mercy = await screen.findByRole('article', { name: 'MERCY GEN HOSP' });
+    expect(
+      within(mercy).getByText('Not verified by the GPO key: account not in the key'),
+    ).toBeInTheDocument();
+  });
+
+  it('marks a customer as not a member', async () => {
+    let marked = 0;
+    reviewApi([item()], {
+      'POST /api/review-items/1/not-member': () => {
+        marked += 1;
+        return json({ updated_rows: 3, job: job({ pending_review_count: 0 }) });
+      },
+    });
+    const user = userEvent.setup();
+    await renderRoute('/review?job=42');
+
+    const mercy = await screen.findByRole('article', { name: 'MERCY GEN HOSP' });
+    await user.click(within(mercy).getByRole('button', { name: /as not a member/ }));
+    expect(await screen.findByText(/won't send it to review/)).toBeInTheDocument();
+    expect(marked).toBe(1);
   });
 
   it('can go back to the suggestion after choosing "none of these"', async () => {

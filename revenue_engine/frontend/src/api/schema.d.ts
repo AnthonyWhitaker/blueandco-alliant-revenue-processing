@@ -305,6 +305,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/review-items/{item_id}/not-member': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Mark the customer as not a member: its rows leave the review queue now and in later files */
+    post: operations['not_member_api_review_items__item_id__not_member_post'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/suppliers': {
     parameters: {
       query?: never;
@@ -1430,7 +1447,7 @@ export interface components {
       /** Job Types */
       job_types: ('row_level' | 'pivot_allocation')[];
       /** Identity Modes */
-      identity_modes: ('member_match' | 'gpo_key')[];
+      identity_modes: ('member_match' | 'gpo_key' | 'gpo_key_then_member')[];
       /** Volume Modes */
       volume_modes: ('sum' | 'blank')[];
       /** Extraction Methods */
@@ -1585,6 +1602,41 @@ export interface components {
        */
       notes?: string;
     };
+    /**
+     * ReviewCandidate
+     * @description A member the reviewer can pick, with the evidence for it.
+     */
+    ReviewCandidate: {
+      /** Member Id */
+      member_id: number;
+      /** Name */
+      name: string;
+      /** Entity Code */
+      entity_code: string | null;
+      /** Street */
+      street: string | null;
+      /** City */
+      city: string | null;
+      /** State */
+      state: string | null;
+      /** Zip */
+      zip: string | null;
+      /**
+       * Score
+       * @description Name score (0-100) against the file's name.
+       */
+      score: number;
+      /**
+       * Matched
+       * @description Fields that agree with the file's row.
+       */
+      matched: ('name' | 'street' | 'zip' | 'jde' | 'gpo_id')[];
+      /**
+       * Via
+       * @description How the candidate was found: jde, gpo_id, name, or the match step.
+       */
+      via: string;
+    };
     /** ReviewDecisionResult */
     ReviewDecisionResult: {
       /** Updated Rows */
@@ -1617,8 +1669,31 @@ export interface components {
        * Status
        * @enum {string}
        */
-      status: 'pending' | 'approved' | 'dismissed' | 'skipped';
+      status: 'pending' | 'approved' | 'dismissed' | 'skipped' | 'not_member';
       suggestion: components['schemas']['ReviewSuggestion'] | null;
+      /**
+       * Review Reason
+       * @description Why the row needs review beyond 'no match': gpo_id_conflict, jde_gpo_conflict, entity_code_no_primary, fuzzy_suggestion, low_confidence or gpo_key_fallback.
+       */
+      review_reason?: string | null;
+      /**
+       * Key Reason
+       * @description gpo_key_then_member: why the row failed the GPO key (account_not_in_key, name_mismatch, ...).
+       */
+      key_reason?: string | null;
+      /**
+       * Candidates
+       * @description Up to 3, best first.
+       */
+      candidates?: components['schemas']['ReviewCandidate'][];
+    };
+    /** ReviewNotMember */
+    ReviewNotMember: {
+      /**
+       * Notes
+       * @default
+       */
+      notes?: string;
     };
     /** ReviewSuggestion */
     ReviewSuggestion: {
@@ -1677,7 +1752,7 @@ export interface components {
        * Identity Mode
        * @enum {string}
        */
-      identity_mode: 'member_match' | 'gpo_key';
+      identity_mode: 'member_match' | 'gpo_key' | 'gpo_key_then_member';
       /**
        * Volume Mode
        * @enum {string}
@@ -1691,6 +1766,14 @@ export interface components {
       fuzzy_state_threshold: number;
       /** Fuzzy Nationwide Threshold */
       fuzzy_nationwide_threshold: number;
+      /** Fuzzy Strong Name Threshold */
+      fuzzy_strong_name_threshold: number;
+      /** Fuzzy Street Name Threshold */
+      fuzzy_street_name_threshold: number;
+      /** Auto Match Min Confidence */
+      auto_match_min_confidence: number;
+      /** Gpo Id Min Name Score */
+      gpo_id_min_name_score: number;
       /**
        * Created At
        * Format: date-time
@@ -1752,11 +1835,11 @@ export interface components {
       requires_manual_confirmation?: boolean;
       /**
        * Identity Mode
-       * @description Row-level only. 'member_match': fuzzy/exact member matching with a Review queue. 'gpo_key': GPO ID verified against the supplier's key file; unverified rows go to the exceptions report.
+       * @description Row-level only. 'member_match': fuzzy/exact member matching with a Review queue. 'gpo_key': GPO ID verified against the supplier's key file; unverified rows go to the exceptions report. 'gpo_key_then_member': gpo_key first; rows whose account, name or address doesn't agree with the key go through member matching to the Review queue (never auto-matched).
        * @default member_match
        * @enum {string}
        */
-      identity_mode?: 'member_match' | 'gpo_key';
+      identity_mode?: 'member_match' | 'gpo_key' | 'gpo_key_then_member';
       /**
        * Volume Mode
        * @description 'sum': Volume = sum of sales amounts. 'blank': Volume is left empty.
@@ -1786,6 +1869,30 @@ export interface components {
        * @default 85
        */
       fuzzy_nationwide_threshold?: number;
+      /**
+       * Fuzzy Strong Name Threshold
+       * @description ZIP/city steps: a name score that auto-matches even though the row's street differs from the member's.
+       * @default 95
+       */
+      fuzzy_strong_name_threshold?: number;
+      /**
+       * Fuzzy Street Name Threshold
+       * @description ZIP/city steps: the name score that is enough when street + ZIP are equal (names contained in a longer one count).
+       * @default 60
+       */
+      fuzzy_street_name_threshold?: number;
+      /**
+       * Auto Match Min Confidence
+       * @description member_match: a match whose confidence (match score) is below this goes to review instead.
+       * @default 80
+       */
+      auto_match_min_confidence?: number;
+      /**
+       * Gpo Id Min Name Score
+       * @description member_match: a GPO ID match is used only if the file's name scores at least this against the member it points to, or the street + ZIP match.
+       * @default 50
+       */
+      gpo_id_min_name_score?: number;
     };
     /** Task */
     Task: {
@@ -2697,6 +2804,59 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ReviewDecisionResult'];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['Problem'];
+        };
+      };
+    };
+  };
+  not_member_api_review_items__item_id__not_member_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        item_id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ReviewNotMember'];
+      };
+    };
     responses: {
       /** @description Successful Response */
       200: {

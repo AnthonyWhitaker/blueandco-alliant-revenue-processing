@@ -26,6 +26,10 @@ CREATE TABLE IF NOT EXISTS supplier_profile (
     fuzzy_city_state_threshold  INTEGER NOT NULL DEFAULT 75,
     fuzzy_state_threshold       INTEGER NOT NULL DEFAULT 80,
     fuzzy_nationwide_threshold  INTEGER NOT NULL DEFAULT 85,
+    fuzzy_strong_name_threshold INTEGER NOT NULL DEFAULT 95,   -- ZIP/city steps: name that matches although the streets differ
+    fuzzy_street_name_threshold INTEGER NOT NULL DEFAULT 60,   -- ZIP/city steps: name enough when street + ZIP are equal
+    auto_match_min_confidence   INTEGER NOT NULL DEFAULT 80,   -- member_match: a match below this confidence goes to review
+    gpo_id_min_name_score       INTEGER NOT NULL DEFAULT 50,   -- member_match: GPO ID used only if the name scores this (or street + ZIP match)
     -- File reading hints
     header_row              INTEGER NOT NULL DEFAULT 0,    -- 0-based row index for header
     sheet_name              TEXT,                          -- NULL = first sheet
@@ -187,12 +191,32 @@ CREATE TABLE IF NOT EXISTS member_alias (
     jde_number              TEXT,              -- If alias is tied to a JDE Customer Number
     approved_by             TEXT,
     approved_at             TIMESTAMP,
+    source                  TEXT,              -- where it came from, e.g. the supplier whose review created it ("Medline")
     created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(supplier_profile_id, canonical_key)
 );
 
 CREATE INDEX IF NOT EXISTS ix_member_alias_key ON member_alias(canonical_key);
 CREATE INDEX IF NOT EXISTS ix_member_alias_jde ON member_alias(jde_number);
+
+-- ---------------------------------------------------------------------------
+-- NON-MEMBERS
+-- Supplier accounts a reviewer marked "not a member": member_match sets their
+-- rows aside (not_a_member) instead of sending them to review every month.
+-- Keyed by JDE number when the row had one, else by the name.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS non_member (
+    id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+    supplier_profile_id     INTEGER NOT NULL REFERENCES supplier_profile(id) ON DELETE CASCADE,
+    jde_number              TEXT,
+    raw_name                TEXT,
+    source                  TEXT,              -- the supplier's name at the time
+    decided_by              TEXT,
+    job_id                  INTEGER REFERENCES revenue_job(id) ON DELETE SET NULL,
+    created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS ix_non_member_supplier ON non_member(supplier_profile_id);
 
 -- ---------------------------------------------------------------------------
 -- PAYMENT LEDGER
@@ -359,6 +383,9 @@ CREATE TABLE IF NOT EXISTS member_review_item (
     -- Best suggestion from fuzzy engine
     suggested_member_id         INTEGER REFERENCES member(id),
     suggested_match_score       INTEGER,
+    review_reason               TEXT,   -- why it's here when not just unmatched: gpo_id_conflict | jde_gpo_conflict | entity_code_no_primary | fuzzy_suggestion | low_confidence | gpo_key_fallback
+    key_reason                  TEXT,   -- gpo_key_then_member: why the row failed the GPO key (KEY_* reason)
+    candidates_json             TEXT,   -- [{member_id, score, via}] members to show the reviewer
     -- Impact metrics
     total_fee                   REAL,
     total_sales                 REAL,

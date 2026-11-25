@@ -12,7 +12,7 @@ Profile keys not given fall back to the supplier_profile column defaults.
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .constants import IDENTITY_GPO_KEY, IDENTITY_MEMBER_MATCH
+from .constants import IDENTITY_MEMBER_MATCH, KEY_IDENTITY_MODES
 from .db import execute_insert_ignore, execute_upsert
 from .gpo_key import KeyFileError, load_gpo_key, without_missing_zip
 
@@ -143,8 +143,9 @@ def seed_presets(conn: object, presets: list[dict], gpo_key_path: Optional[str] 
     deferred: list[str] = []
     for preset in presets:
         name = preset["profile"]["name"]
-        if {**_DEFAULTS, **preset["profile"]}["identity_mode"] == IDENTITY_GPO_KEY:
-            deferred.append(name)
+        mode = {**_DEFAULTS, **preset["profile"]}["identity_mode"]
+        if mode in KEY_IDENTITY_MODES:
+            deferred.append((name, mode))
             hold = previous.get(name) or IDENTITY_MEMBER_MATCH
             preset = {**preset, "profile": {**preset["profile"], "identity_mode": hold}}
         result.supplier_ids[name] = apply_preset(conn, preset)
@@ -158,12 +159,12 @@ def seed_presets(conn: object, presets: list[dict], gpo_key_path: Optional[str] 
             conn.rollback()
             result.key_error = str(e)
 
-    for name in deferred:
+    for name, mode in deferred:
         sid = result.supplier_ids[name]
         entries = conn.execute(
             "SELECT COUNT(*) AS n FROM gpo_key_entry WHERE supplier_profile_id = ?", (sid,)).fetchone()["n"]
         if entries and not (result.key_error and name == key_supplier):
-            conn.execute("UPDATE supplier_profile SET identity_mode = ? WHERE id = ?", (IDENTITY_GPO_KEY, sid))
+            conn.execute("UPDATE supplier_profile SET identity_mode = ? WHERE id = ?", (mode, sid))
         else:
             result.held_back.append(name)
     conn.commit()

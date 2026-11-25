@@ -4,8 +4,7 @@ import openpyxl
 import pytest
 
 from engine.gpo_key import (
-    GpoKey, KeyColumns, KeyFileError, VerifyOptions, load_gpo_key, normalize_account, normalize_text, normalize_zip,
-    read_gpo_key,
+    GpoKey, KeyColumns, KeyFileError, VerifyOptions, load_gpo_key, normalize_account, read_gpo_key,
 )
 
 from .conftest import make_supplier
@@ -21,8 +20,6 @@ def test_normalization():
     assert normalize_account("0001001") == normalize_account("1001.0") == normalize_account(1001) == "1001"
     assert normalize_account(" ab-12 ") == "AB-12"
     assert normalize_account(None) == normalize_account(float("nan")) == ""
-    assert normalize_text("St. Mary's Hospital & Clinic") == "ST MARY S HOSPITAL AND CLINIC"
-    assert normalize_text("  1 Main   St. ") == "1 MAIN ST"
 
 
 def test_read_key_with_configured_column_names_csv_and_xlsx(tmp_path):
@@ -90,10 +87,22 @@ def test_verified_row_takes_the_keys_gpo_id(key):
     assert key.verify("1001", "GENERAL HOSPITAL", "1 MAIN ST", 78701.0).verified
 
 
-def test_zip_normalization():
-    assert normalize_zip("78701-1234") == normalize_zip(78701.0) == normalize_zip(" 78701 ") == "78701"
-    assert normalize_zip(2134) == normalize_zip("02134") == "02134"     # Excel drops the leading zero
-    assert normalize_zip(None) == normalize_zip("") == normalize_zip("N/A") == ""
+def test_verification_uses_the_shared_normalizers(key):
+    # Street abbreviations, legal suffixes, '&' and a ZIP that lost its leading zero all compare equal;
+    # comparison is still exact (VerifyOptions default 100) on the normalized values.
+    assert key.verify("1001", "General Hospital, Inc.", "1 Main Street", "78701").verified
+    assert key.verify("2001", "MERCY MEDICAL CENTER LLC", "200 Elm Street", "78701-0000").verified
+    assert key.verify("2001", "Mercy Med Ctr", "200 ELM ST", "78701").verified             # name abbreviations
+    assert not key.verify("2001", "MERCY MEDICAL", "200 ELM ST", "78701").verified          # name still exact
+
+
+def test_key_from_db_renormalizes_stored_values(conn, tmp_path):
+    sid = make_supplier(conn)
+    load_gpo_key(conn, sid, str(write_key_csv(tmp_path / "k.csv", rows=[("9001", "A & B CLINIC", "5 OAK AVENUE",
+                                                                             "EC009", "02134")])))
+    conn.execute("UPDATE gpo_key_entry SET account_name_norm = 'STALE', address_norm = 'STALE', zip_norm = '2134'")
+    key = GpoKey.from_db(conn, sid)
+    assert key.verify("9001", "A and B Clinic", "5 Oak Ave", 2134).gpo_id == "EC009"
 
 
 def test_street_only_when_the_key_has_no_zip_column(tmp_path):
@@ -107,8 +116,8 @@ def test_street_only_when_the_key_has_no_zip_column(tmp_path):
     (None, "GENERAL HOSPITAL", "1 MAIN ST", "missing_account_number"),
     ("  ", "GENERAL HOSPITAL", "1 MAIN ST", "missing_account_number"),
     ("9999", "GENERAL HOSPITAL", "1 MAIN ST", "account_not_in_key"),
-    ("1001", "GENERAL HOSP", "1 MAIN ST", "name_mismatch"),
-    ("1001", "GENERAL HOSPITAL", "1 MAIN STREET", "address_mismatch"),
+    ("1001", "GENERAL CLINIC", "1 MAIN ST", "name_mismatch"),
+    ("1001", "GENERAL HOSPITAL", "11 MAIN ST", "address_mismatch"),
     ("1001", "OTHER PLACE", "2 OTHER ST", "name_and_address_mismatch"),
     ("1001", "", "1 MAIN ST", "name_mismatch"),          # a blank name never verifies
     ("1001", "GENERAL HOSPITAL", None, "address_mismatch"),

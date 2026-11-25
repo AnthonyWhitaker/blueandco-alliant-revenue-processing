@@ -37,9 +37,12 @@ from .constants import (
     EXC_EXTRACTION_NOT_FOUND, EXC_ALLOCATION_INCOMPLETE,
     EXC_MISSING_ENTITY_CODE, EXC_MANUAL_TOTAL,
     REVIEW_PENDING, JOB_TYPE_PIVOT_ALLOCATION,
-    IDENTITY_GPO_KEY, VOLUME_BLANK, ROW_KEY_EXCEPTION, MATCH_GPO_KEY,
+    KEY_IDENTITY_MODES, IDENTITY_GPO_KEY_THEN_MEMBER, KEY_FALLBACK_REASONS, MATCH_KEY_FALLBACK,
+    VOLUME_BLANK, ROW_KEY_EXCEPTION, MATCH_GPO_KEY,
     EXC_KEY_VERIFICATION, EXC_GPO_ID_CORRECTED, EXC_DUPLICATE_ROWS, EXC_DUPLICATE_FILE,
-    EXC_RECONCILIATION, EXC_DROPPED_ROWS, EXC_TIMEFRAME_MISSING,
+    EXC_RECONCILIATION, EXC_DROPPED_ROWS, EXC_TIMEFRAME_MISSING, EXC_DATE_PARSE,
+    MATCH_GPO_ID_CONFLICT, MATCH_JDE_GPO_CONFLICT, MATCH_ENTITY_CODE_NO_PRIMARY, MATCH_FUZZY_SUGGESTION,
+    MATCH_LOW_CONFIDENCE, MATCH_NOT_A_MEMBER, ROW_NOT_MEMBER, REVIEW_NOT_MEMBER, MATCH_ENTITY_CODE_UNFLAGGED,
 )
 from .combine import (
     SOURCE_FILE_COL, DuplicateFinder, SourceFile,
@@ -48,14 +51,22 @@ from .combine import (
 from .db import execute_upsert, execute_insert_ignore, get_last_insert_id
 from .file_reader import SOURCE_ROW_COL
 from .gpo_key import GpoKey
-from .member_matcher import MemberMatcher
-from .normalizer import parse_date, first_of_month, get_quarter_label, parse_deposit_amount_from_filename, parse_date_from_filename
+from .member_matcher import MatchResult, MemberMatcher
+from .normalizer import (
+    parse_amount, parse_date, first_of_month, get_quarter_label, parse_deposit_amount_from_filename,
+    parse_date_from_filename, quarter_start,
+)
 from .payment_resolver import resolve_payment_id
 from .pivot_extractor import extract_totals, ExtractionError
 from .allocation_engine import allocate, AllocationError
 from .reconciliation import (
     InputTotals, Reconciliation, input_totals_from_json, input_totals_from_rows, reconcile,
 )
+
+
+# Unmatched match methods that carry their own review reason (shown on the review item).
+_REVIEW_REASONS = {MATCH_GPO_ID_CONFLICT, MATCH_JDE_GPO_CONFLICT, MATCH_ENTITY_CODE_NO_PRIMARY, MATCH_FUZZY_SUGGESTION,
+                   MATCH_LOW_CONFIDENCE, MATCH_KEY_FALLBACK}
 
 
 def _is_blank(val) -> bool:
@@ -75,13 +86,7 @@ def _text(val) -> str:
 
 
 def _safe_float(val) -> Optional[float]:
-    if _is_blank(val):
-        return None
-    try:
-        f = float(str(val).replace(",", "").strip())
-    except (ValueError, TypeError):
-        return None
-    return None if f != f else f   # NaN
+    return None if _is_blank(val) else parse_amount(val)
 
 
 def _safe_int(val) -> Optional[int]:
@@ -253,7 +258,9 @@ def _run_pipeline(
 ) -> dict:
     job_id = job["id"]
     supplier_id = supplier["id"]
-    gpo_key_mode = supplier.get("identity_mode") == IDENTITY_GPO_KEY
+    gpo_key_mode = supplier.get("identity_mode") in KEY_IDENTITY_MODES
+    # gpo_key_then_member: rows the key rejects for KEY_FALLBACK_REASONS go through member matching, to review.
+    key_fallback = supplier.get("identity_mode") == IDENTITY_GPO_KEY_THEN_MEMBER
 
     _log_duplicate_files(conn, job_id)
     if not (job.get("timeframe") or "").strip():
@@ -304,38 +311,17 @@ def _run_pipeline(
             "SELECT id, entity_code, account_id, name FROM member WHERE is_active = 1 AND entity_code IS NOT NULL"
         ).fetchall():
             members_by_code.setdefault(str(m["entity_code"]).strip().upper(), dict(m))
-    else:
-        matcher = MemberMatcher(
-            conn=conn,
-            supplier_profile_id=supplier_id,
-            zip_state_threshold=supplier.get("fuzzy_zip_state_threshold", 75),
-            city_state_threshold=supplier.get("fuzzy_city_state_threshold", 75),
-            state_threshold=supplier.get("fuzzy_state_threshold", 80),
-            nationwide_threshold=supplier.get("fuzzy_nationwide_threshold", 85),
-        )
+    if not gpo_key_mode or key_fallback:
+        matcher = MemberMatcher.from_supplier(conn, supplier)
         matcher.load()
 
-    # Cache: jde_or_name → MatchResult / (account, name, address, zip) → Verification
+    # Cache: every matcher input → MatchResult (the GPO ID, name and address all affect the result,
+    # not just the JDE number) / (account, name, address, zip) → Verification
     match_cache: dict[object, object] = {}
+    # Review group (JDE number, else name) → its first unmatched MatchResult: the review item's reason and the
+    # candidates the match found (seeding MemberMatcher.review_candidates).
+    review_hints: dict[str, MatchResult] = {}
     jde_col: Optional[str] = None      # set per file
-
-    def get_cache_key(row) -> str:
-        if jde_col and pd.notna(row.get(jde_col)):
-            return f"jde:{row[jde_col]}"
-        aid = row.get(CANONICAL_ACCOUNT_ID_HINT)
-        if pd.notna(aid) and str(aid).strip():
-            return f"aid:{aid}"
-        ec = row.get(CANONICAL_ENTITY_CODE_HINT)
-        if pd.notna(ec) and str(ec).strip():
-            # Some supplier files (e.g. Bon Secours) reuse the same entity
-            # code across multiple distinct facility names, so the hint
-            # alone is not a safe cache key on its own — fold in name/state
-            # too, otherwise the first row's (possibly unmatched) fuzzy
-            # result gets wrongly reused for every other name sharing the code.
-            name = row.get(CANONICAL_CUSTOMER_NAME, "")
-            state = row.get(CANONICAL_STATE, "")
-            return f"ec:{ec}|{name}|{state}"
-        return f"name:{row.get(CANONICAL_CUSTOMER_NAME, '')}"
 
     # ------------------------------------------------------------------
     # Step 3: Read the files one at a time; process each row (inserted in
@@ -344,6 +330,8 @@ def _run_pipeline(
     # ------------------------------------------------------------------
     matched_count = 0
     unmatched_count = 0
+    not_member_count = 0
+    unflagged_site_count = 0
     key_exception_count = 0
     corrected_gpo_ids: dict[tuple[str, str], int] = {}
     date_start: Optional[str] = None
@@ -352,17 +340,28 @@ def _run_pipeline(
     counter = _InputCounter()
     duplicates = DuplicateFinder()
     col_mapping: dict[str, str] = {}
-    filename_date = parse_date_from_filename(files[0].name)
+    # A row with no usable date (blank, or no date column at all) is earned in the run's timeframe:
+    # its first month (3Q26 -> Jul 2026). Only without a timeframe, the date in the file name.
+    fallback_date = quarter_start(job.get("timeframe"))
+    fallback_source = f"the first month of {job.get('timeframe')} (the run's timeframe)"
+    if fallback_date is None:
+        fallback_date = parse_date_from_filename(files[0].name)
+        fallback_source = "the date in the file name" if fallback_date else None
+    undated = {"blank": 0, "unreadable": 0}
     # parse_date is slow per call (pandas) and a month has few distinct dates.
     date_cache: dict[str, Optional[str]] = {}
 
     def row_date(value) -> Optional[str]:
         if _is_blank(value):
-            return filename_date
+            undated["blank"] += 1
+            return fallback_date
         key = str(value)
         if key not in date_cache:
             date_cache[key] = parse_date(value)
-        return date_cache[key] or filename_date
+        if date_cache[key] is None:
+            undated["unreadable"] += 1
+            return fallback_date
+        return date_cache[key]
 
     def flush() -> None:
         if batch:
@@ -408,30 +407,31 @@ def _run_pipeline(
                     date_end = proc_date
 
             exception_reason = None
+            verification = None
             if gpo_key_mode:
                 vkey = (jde_num, cust_name, address, zip_code)
                 verification = match_cache.get(vkey)
                 if verification is None:
                     verification = gpo_key.verify(jde_num, cust_name, address, zip_code)
                     match_cache[vkey] = verification
-                if verification.verified:
-                    gpo_id = verification.gpo_id
-                    member = members_by_code.get(gpo_id.strip().upper(), {})
-                    ident = (member.get("id"), MATCH_GPO_KEY, 100, None, gpo_id, member.get("account_id"),
-                             member.get("name"))
-                    row_status, validation = ROW_MATCHED, "valid"
-                    matched_count += 1
-                    if entity_code_hint and entity_code_hint.strip().upper() != gpo_id.strip().upper():
-                        pair = (entity_code_hint, gpo_id)
-                        corrected_gpo_ids[pair] = corrected_gpo_ids.get(pair, 0) + 1
-                else:
-                    ident = (None, MATCH_UNMATCHED, None, None, None, None, None)
-                    row_status, validation = ROW_KEY_EXCEPTION, "invalid"
-                    exception_reason = verification.reason
-                    key_exception_count += 1
+            if verification is not None and verification.verified:
+                gpo_id = verification.gpo_id
+                member = members_by_code.get(gpo_id.strip().upper(), {})
+                ident = (member.get("id"), MATCH_GPO_KEY, 100, None, gpo_id, member.get("account_id"),
+                         member.get("name"))
+                row_status, validation = ROW_MATCHED, "valid"
+                matched_count += 1
+                if entity_code_hint and entity_code_hint.strip().upper() != gpo_id.strip().upper():
+                    pair = (entity_code_hint, gpo_id)
+                    corrected_gpo_ids[pair] = corrected_gpo_ids.get(pair, 0) + 1
+            elif verification is not None and not (key_fallback and verification.reason in KEY_FALLBACK_REASONS):
+                ident = (None, MATCH_UNMATCHED, None, None, None, None, None)
+                row_status, validation = ROW_KEY_EXCEPTION, "invalid"
+                exception_reason = verification.reason
+                key_exception_count += 1
             else:
                 # Run match (from cache if same JDE/name already matched)
-                cache_key = get_cache_key(row)
+                cache_key = (jde_num, cust_name, city, state, zip_code, entity_code_hint, account_id_hint, address)
                 match = match_cache.get(cache_key)
                 if match is None:
                     match = matcher.match(
@@ -444,16 +444,30 @@ def _run_pipeline(
                         account_id_hint=account_id_hint,
                         address=address,
                     )
+                    if verification is not None and match.match_method != MATCH_NOT_A_MEMBER:
+                        # Failed the GPO key: whatever member matching finds is a review candidate, never a match.
+                        found = ([{"member": matcher._by_id[match.member_id], "score": match.match_score,
+                                   "via": match.match_method}] if match.matched else match.candidates)
+                        match = MatchResult(match_method=MATCH_KEY_FALLBACK, candidates=found)
                     match_cache[cache_key] = match
                     # Persist JDE history for successful matches
                     if match.matched and jde_num:
                         matcher.record_jde_match(jde_num, match.member_id, job_id)
+                if verification is not None:
+                    exception_reason = verification.reason      # the key's reason stays on the row and review item
+                if not match.matched:
+                    review_hints.setdefault(jde_num or cust_name, match)
                 ident = (match.member_id, match.match_method, match.match_score, match.geo_filter,
                          match.entity_code, match.account_id, match.account_name)
+                if match.match_method == MATCH_ENTITY_CODE_UNFLAGGED:
+                    unflagged_site_count += 1
                 if match.matched:
                     row_status = ROW_ALIAS_MATCHED if match.match_method == MATCH_ALIAS else ROW_MATCHED
                     validation = "valid"
                     matched_count += 1
+                elif match.match_method == MATCH_NOT_A_MEMBER:
+                    row_status, validation = ROW_NOT_MEMBER, "valid"
+                    not_member_count += 1
                 else:
                     row_status, validation = ROW_UNMATCHED, "pending"
                     unmatched_count += 1
@@ -503,6 +517,24 @@ def _run_pipeline(
             f"revenue {input_totals.dropped_revenue:,.2f}. Listed on the exceptions report.",
             "info",
         )
+    if unflagged_site_count:
+        _job_log(conn, job_id, "unflagged_sites",
+                 f"{unflagged_site_count} row(s) carry a GPO ID shared by several sites and no site is flagged "
+                 "primary yet (the Account List hasn't been reloaded with its primary-site column). They went to "
+                 "the last site loaded, as before; after the reload they go to the primary site, or to review.",
+                 "info")
+    if not_member_count:
+        _job_log(conn, job_id, "not_a_member",
+                 f"{not_member_count} row(s) are from accounts a reviewer marked 'not a member'. They are left out "
+                 "of the output and listed on the exceptions report.", "info")
+    n_undated = undated["blank"] + undated["unreadable"]
+    if n_undated:
+        what = " and ".join(f"{n} {k}" for k, n in undated.items() if n)
+        _job_log(conn, job_id, EXC_DATE_PARSE,
+                 f"{n_undated} row(s) have no usable date ({what}); Earned Period set to {fallback_source}."
+                 if fallback_source else
+                 f"{n_undated} row(s) have no usable date ({what}) and the run has no timeframe; "
+                 "Earned Period is blank.", "warning")
     for label, n in (("volume", input_totals.unparseable_volume), ("revenue", input_totals.unparseable_revenue)):
         if n:
             _job_log(conn, job_id, "file_warning",
@@ -523,7 +555,7 @@ def _run_pipeline(
     # Step 6: Build review items for unmatched customers
     # ------------------------------------------------------------------
     if matcher is not None:
-        _build_review_items(conn, job_id, supplier_id, matcher)
+        _build_review_items(conn, job_id, supplier_id, matcher, review_hints)
 
     # ------------------------------------------------------------------
     # Step 7: Aggregate matched rows → revenue_output_row
@@ -826,9 +858,12 @@ def _build_review_items(
     job_id: int,
     supplier_id: int,
     matcher: MemberMatcher,
+    review_hints: Optional[dict] = None,
 ) -> None:
     """
     For each unique unmatched customer in the job, create a member_review_item.
+    review_hints (group key → MatchResult) carries the reason (a conflict, a low-confidence match, ...) and
+    the members the match found; MemberMatcher.review_candidates adds the rest (top 3, with matched fields).
     Groups by JDE number (or customer name) and computes total fee impact.
     """
     # Non-grouped columns must be aggregated: SQL Server rejects bare columns
@@ -838,6 +873,8 @@ def _build_review_items(
         """
         SELECT MAX(jde_number) AS jde_number, MIN(customer_name) AS customer_name,
                MIN(city) AS city, MIN(state) AS state, MIN(zip) AS zip,
+               MIN(address) AS address, MAX(file_entity_code) AS entity_code_hint,
+               MAX(exception_reason) AS key_reason,
                COUNT(*) AS affected_rows,
                SUM(fee_amount) AS total_fee,
                SUM(sales_amount) AS total_sales
@@ -850,18 +887,26 @@ def _build_review_items(
     ).fetchall()
 
     for r in rows:
-        suggestion, score = matcher.suggest_for_review(
-            customer_name=r["customer_name"],
-            state=r["state"],
-        )
+        hint = (review_hints or {}).get(r["jde_number"] or r["customer_name"])
+        reason = hint.match_method if hint and hint.match_method in _REVIEW_REASONS else None
+        candidates = [
+            {"member_id": c["member"]["id"], "score": c["score"], "via": c["via"], "matched": c["matched"]}
+            for c in matcher.review_candidates(
+                r["customer_name"], jde_number=r["jde_number"], address=r["address"], city=r["city"],
+                state=r["state"], zip_code=r["zip"], entity_code_hint=r["entity_code_hint"],
+                seeded=hint.candidates if hint else None,
+            )
+        ]
+        suggestion = {"id": candidates[0]["member_id"]} if candidates else None
+        score = candidates[0]["score"] if candidates else 0
         conn.execute(
             """
             INSERT INTO member_review_item (
                 job_id, jde_number, customer_name_sample, canonical_key,
                 city, state, zip,
-                suggested_member_id, suggested_match_score,
+                suggested_member_id, suggested_match_score, review_reason, key_reason, candidates_json,
                 total_fee, total_sales, affected_row_count, status
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 job_id,
@@ -873,6 +918,9 @@ def _build_review_items(
                 r["zip"],
                 suggestion["id"] if suggestion else None,
                 score,
+                reason,
+                r["key_reason"],
+                json.dumps(candidates) if candidates else None,
                 r["total_fee"],
                 r["total_sales"],
                 r["affected_rows"],
@@ -1020,13 +1068,18 @@ def apply_review_decision(
     notes: str = "",
     create_alias: bool = False,
     supplier_profile_id: Optional[int] = None,
+    not_member: bool = False,
 ) -> int:
     """
     Apply a reviewer's decision for an unmatched customer:
       - Updates the member_review_item record
       - Updates all unmatched revenue_row records in the job
       - Re-aggregates output rows for the affected job
-      - Optionally creates a member_alias for future auto-matching
+      - Optionally creates a member_alias for future auto-matching (source: the supplier's name), and saves
+        the JDE number to jde_member_history (MemberMatcher.record_jde_match), so the next file matches the
+        account at the JDE step
+      - not_member: the account isn't a member. Its rows are set aside (ROW_NOT_MEMBER) and the account
+        is remembered in non_member, so later files don't send it to review again
 
     Returns the number of rows updated.
     """
@@ -1037,6 +1090,9 @@ def apply_review_decision(
         raise ValueError(f"Review item {review_item_id} not found")
     item = dict(item)
     job_id = item["job_id"]
+
+    if not_member:
+        return _mark_not_member(conn, item, resolved_by, supplier_profile_id, notes)
 
     if resolved_member_id is None:
         # Dismissed — mark rows as intentionally unmatched (not an error)
@@ -1123,12 +1179,12 @@ def apply_review_decision(
                 """
                 INSERT OR IGNORE INTO member_alias
                     (member_id, supplier_profile_id, raw_name, canonical_key,
-                     jde_number, approved_by, approved_at)
-                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                     jde_number, approved_by, approved_at, source)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
                 """,
                 (
                     resolved_member_id, sp_id, raw_name, canon_key,
-                    item.get("jde_number"), resolved_by,
+                    item.get("jde_number"), resolved_by, _supplier_name(conn, supplier_profile_id),
                 ),
             )
         except Exception:
@@ -1136,24 +1192,51 @@ def apply_review_decision(
 
     # Also update JDE history if we have a JDE number
     if remember and item.get("jde_number") and supplier_profile_id:
-        execute_upsert(
-            conn,
-            """
-            INSERT INTO jde_member_history
-                (supplier_profile_id, jde_number, member_id, first_seen_job_id, last_seen_job_id)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(supplier_profile_id, jde_number)
-            DO UPDATE SET
-                member_id = excluded.member_id,
-                last_seen_job_id = excluded.last_seen_job_id,
-                occurrence_count = occurrence_count + 1,
-                updated_at = CURRENT_TIMESTAMP
-            """,
-            (supplier_profile_id, item["jde_number"], resolved_member_id, job_id, job_id),
-        )
+        MemberMatcher(conn, supplier_profile_id).record_jde_match(item["jde_number"], resolved_member_id, job_id)
 
     conn.commit()
+    return _refresh_after_review(conn, job_id, updated_rows)
 
+
+def _supplier_name(conn: object, supplier_profile_id: Optional[int]) -> Optional[str]:
+    if not supplier_profile_id:
+        return None
+    row = conn.execute("SELECT name FROM supplier_profile WHERE id = ?", (supplier_profile_id,)).fetchone()
+    return row["name"] if row else None
+
+
+def _mark_not_member(conn: object, item: dict, resolved_by: str, supplier_profile_id: Optional[int],
+                     notes: str) -> int:
+    """The reviewer says this account isn't a member: set its rows aside and remember it for the supplier."""
+    job_id = item["job_id"]
+    if item.get("jde_number"):
+        where, key = "jde_number = ?", item["jde_number"]
+    else:
+        where, key = "customer_name = ?", item.get("customer_name_sample")
+    cursor = conn.execute(
+        f"UPDATE revenue_row SET match_status = ?, match_method = ? "
+        f"WHERE job_id = ? AND {where} AND match_status = 'unmatched'",
+        (ROW_NOT_MEMBER, MATCH_NOT_A_MEMBER, job_id, key),
+    )
+    updated_rows = cursor.rowcount
+    conn.execute(
+        "UPDATE member_review_item SET status = ?, resolved_by = ?, resolved_at = CURRENT_TIMESTAMP, notes = ? "
+        "WHERE id = ?",
+        (REVIEW_NOT_MEMBER, resolved_by, notes, item["id"]),
+    )
+    if supplier_profile_id:
+        conn.execute(
+            "INSERT INTO non_member (supplier_profile_id, jde_number, raw_name, source, decided_by, job_id) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (supplier_profile_id, item.get("jde_number"), item.get("customer_name_sample"),
+             _supplier_name(conn, supplier_profile_id), resolved_by, job_id),
+        )
+    conn.commit()
+    return _refresh_after_review(conn, job_id, updated_rows)
+
+
+def _refresh_after_review(conn: object, job_id: int, updated_rows: int) -> int:
+    """Re-aggregate the job's output and status after a review decision. Returns updated_rows."""
     # Re-aggregate output for this job
     conn.execute("DELETE FROM revenue_output_row WHERE job_id = ?", (job_id,))
     conn.commit()

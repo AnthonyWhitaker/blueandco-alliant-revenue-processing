@@ -211,6 +211,10 @@ describe('Admin › Suppliers', () => {
       max_read_columns: 12,
       fee_rate: 0.03,
       fuzzy_nationwide_threshold: 90,
+      fuzzy_strong_name_threshold: 95,
+      fuzzy_street_name_threshold: 60,
+      auto_match_min_confidence: 80,
+      gpo_id_min_name_score: 50,
     });
   });
 

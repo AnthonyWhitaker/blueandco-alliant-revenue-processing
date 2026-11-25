@@ -1,8 +1,10 @@
 """Review queue: unmatched customers (member_review_item) and reviewer decisions."""
 
+import json
+
 from engine.constants import REVIEW_PENDING
 from engine.processor import apply_review_decision
-from models.reviews import ReviewApproval, ReviewDecisionResult, ReviewItem
+from models.reviews import ReviewApproval, ReviewDecisionResult, ReviewItem, ReviewNotMember
 
 from .errors import ConflictError, NotFoundError
 from .jobs import get_job
@@ -25,10 +27,26 @@ def list_pending_items(conn, job_id: int) -> list[ReviewItem]:
         """,
         (job_id, REVIEW_PENDING),
     ).fetchall())
-    return [_to_item(r) for r in rows]
+    candidates = {r["id"]: json.loads(r["candidates_json"]) if r.get("candidates_json") else [] for r in rows}
+    member_ids = sorted({c["member_id"] for cs in candidates.values() for c in cs})
+    members = {}
+    if member_ids:
+        marks = ", ".join("?" for _ in member_ids)
+        members = {m["id"]: m for m in rows_dicts(conn.execute(
+            f"SELECT id, name, entity_code, billing_street, billing_city, billing_state, billing_zip "
+            f"FROM member WHERE id IN ({marks})", member_ids).fetchall())}
+    return [_to_item(r, [_candidate(c, members[c["member_id"]]) for c in candidates[r["id"]]
+                         if c["member_id"] in members])
+            for r in rows]
 
 
-def _to_item(r: dict) -> ReviewItem:
+def _candidate(c: dict, m: dict) -> dict:
+    return {"member_id": m["id"], "name": m["name"], "entity_code": m["entity_code"], "street": m["billing_street"],
+            "city": m["billing_city"], "state": m["billing_state"], "zip": m["billing_zip"],
+            "score": c.get("score") or 0, "matched": c.get("matched") or [], "via": c.get("via") or ""}
+
+
+def _to_item(r: dict, candidates: list[dict]) -> ReviewItem:
     suggestion = None
     if r.get("suggested_member_id") and r.get("suggested_name"):
         suggestion = {
@@ -39,7 +57,7 @@ def _to_item(r: dict) -> ReviewItem:
             "state": r["suggested_state"],
             "score": r.get("suggested_match_score") or 0,
         }
-    return ReviewItem.model_validate({**r, "suggestion": suggestion})
+    return ReviewItem.model_validate({**r, "suggestion": suggestion, "candidates": candidates})
 
 
 def _pending_item(conn, item_id: int) -> dict:
@@ -78,3 +96,20 @@ def dismiss(conn, item_id: int, resolved_by: str = "user") -> ReviewDecisionResu
         resolved_by=resolved_by,
     )
     return ReviewDecisionResult(updated_rows=0, job=get_job(conn, item["job_id"]))
+
+
+def mark_not_member(conn, item_id: int, decision: ReviewNotMember, resolved_by: str = "user") -> ReviewDecisionResult:
+    """The account isn't a member: its rows are set aside, and later files don't send it to review again."""
+    item = _pending_item(conn, item_id)
+    job = get_job(conn, item["job_id"])
+    updated = apply_review_decision(
+        conn=conn,
+        review_item_id=item_id,
+        resolved_member_id=None,
+        resolution_scope="supplier",
+        resolved_by=resolved_by,
+        notes=decision.notes,
+        supplier_profile_id=job.supplier_profile_id,
+        not_member=True,
+    )
+    return ReviewDecisionResult(updated_rows=updated, job=get_job(conn, job.id))

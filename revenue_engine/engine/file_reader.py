@@ -21,6 +21,8 @@ from typing import Optional, Union
 import openpyxl
 import pandas as pd
 
+from .normalizer import parse_amount
+
 # Column added to every frame read by read_supplier_file_detailed(): the row's
 # 1-based row number in the source spreadsheet (as Excel shows it).
 SOURCE_ROW_COL = "__source_row"
@@ -327,7 +329,7 @@ def read_supplier_file_detailed(
     fee_rate = supplier_profile.get("fee_rate")
     if fee_rate and CANONICAL_FEE_AMOUNT not in found_canonical and CANONICAL_SALES_AMOUNT in found_canonical:
         df_out[CANONICAL_FEE_AMOUNT] = pd.to_numeric(
-            df_out[CANONICAL_SALES_AMOUNT], errors="coerce"
+            df_out[CANONICAL_SALES_AMOUNT].map(parse_amount, na_action="ignore"), errors="coerce"
         ) * float(fee_rate)
         found_canonical.add(CANONICAL_FEE_AMOUNT)
         warnings.append(
