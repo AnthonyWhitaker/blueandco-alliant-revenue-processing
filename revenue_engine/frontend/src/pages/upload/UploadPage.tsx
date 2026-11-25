@@ -465,9 +465,7 @@ function useJobArchive() {
   });
   const restore = useMutation({
     mutationFn: (jobId: number) =>
-      unwrap(
-        api.POST('/api/jobs/{job_id}/restoration', { params: { path: { job_id: jobId } } }),
-      ),
+      unwrap(api.POST('/api/jobs/{job_id}/restoration', { params: { path: { job_id: jobId } } })),
     onSuccess: async (job) => {
       notifications.show({
         color: 'green',

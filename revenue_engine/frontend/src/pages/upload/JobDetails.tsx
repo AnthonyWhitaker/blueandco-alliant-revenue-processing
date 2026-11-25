@@ -18,7 +18,13 @@ import { useQuery } from '@tanstack/react-query';
 
 import { DataTable } from '@/components/DataTable';
 import { QueryError } from '@/components/QueryError';
-import { formatCurrency, formatDate, formatDateTime, formatInteger, formatText } from '@/lib/format';
+import {
+  formatCurrency,
+  formatDate,
+  formatDateTime,
+  formatInteger,
+  formatText,
+} from '@/lib/format';
 import { statusColor, statusLabel } from '@/lib/jobs';
 import { jobExceptionsQuery, jobFilesQuery, jobQuery, type Job } from '@/queries/jobs';
 
@@ -110,7 +116,9 @@ function ProcessingLog({ jobId }: { jobId: number }) {
             render: (e) => (
               <Badge
                 variant="light"
-                color={e.severity === 'error' ? 'red' : e.severity === 'warning' ? 'orange' : 'slate'}
+                color={
+                  e.severity === 'error' ? 'red' : e.severity === 'warning' ? 'orange' : 'slate'
+                }
                 style={{ overflow: 'visible' }}
               >
                 {e.severity}

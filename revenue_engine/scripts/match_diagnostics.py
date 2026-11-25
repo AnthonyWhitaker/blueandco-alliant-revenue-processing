@@ -404,7 +404,7 @@ def summarize(supplier: dict, matcher: MemberMatcher, results: list[RowResult],
         f"unmatched {len(unmatched)} {_pct(len(unmatched), total)}",
         f"identities (distinct match inputs):  total {len(identities)}   matched {id_matched} {_pct(id_matched, len(identities))}   "
         f"unmatched {len(identities) - id_matched} {_pct(len(identities) - id_matched, len(identities))}",
-        "  (an identity is what the processor caches on: account number, else ID/code hint, else name)",
+        "  (an identity is what the processor caches on: every match input, i.e. account, name, address, codes)",
         "",
     ]
     out += _table("Rows by match method:", Counter(r.match.match_method for r in results), total)
