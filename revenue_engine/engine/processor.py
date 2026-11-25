@@ -442,6 +442,7 @@ def _run_pipeline(
                         zip_code=zip_code,
                         entity_code_hint=entity_code_hint,
                         account_id_hint=account_id_hint,
+                        address=address,
                     )
                     match_cache[cache_key] = match
                     # Persist JDE history for successful matches

@@ -7,7 +7,7 @@ import re
 import unicodedata
 from typing import Optional
 
-from .constants import LEGAL_SUFFIXES, STATE_ABBREV, STATE_FULL_TO_ABBREV
+from .constants import LEGAL_SUFFIXES, STATE_ABBREV, STATE_FULL_TO_ABBREV, STREET_ABBREV
 
 
 def normalize_name(name: Optional[str]) -> str:
@@ -32,6 +32,21 @@ def normalize_name(name: Optional[str]) -> str:
     # Collapse whitespace
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def normalize_street(street: Optional[object]) -> str:
+    """
+    Normalize a street address for equality comparison.
+    - Upper case, '&' -> 'AND', punctuation and '#' become spaces
+    - Suffixes and directionals spelled the USPS way (PARKWAY -> PKWY, EAST -> E)
+    - Unit designators dropped, number kept ('Suite 219', 'STE. 219', '#219' -> '219')
+    """
+    if street is None or (isinstance(street, float) and street != street):   # None / NaN
+        return ""
+    text = unicodedata.normalize("NFKD", str(street)).encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^A-Z0-9]+", " ", text.upper().replace("&", " AND "))
+    words = (STREET_ABBREV.get(w, w) for w in text.split())
+    return " ".join(w for w in words if w)
 
 
 def normalize_zip(z: Optional[object]) -> str:

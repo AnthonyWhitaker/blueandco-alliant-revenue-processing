@@ -78,6 +78,8 @@ BEGIN
         billing_city            NVARCHAR(500),
         billing_state           NVARCHAR(500),
         billing_zip             NVARCHAR(500),
+        billing_street          NVARCHAR(500),
+        is_primary_site         INT,
         norm_city               NVARCHAR(500),
         norm_state              NVARCHAR(500),
         norm_zip                NVARCHAR(500),

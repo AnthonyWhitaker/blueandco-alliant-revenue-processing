@@ -17,19 +17,21 @@ VerifyOptions but defaults to exact (100).
 Public API:
     KeyColumns            — which columns of the key file hold which field
     read_gpo_key()        — read a CSV/XLSX key file into a normalized DataFrame
+    without_missing_zip() — drop the ZIP column from KeyColumns when the key file has none
     load_gpo_key()        — replace a supplier's key in gpo_key_entry
+    suppliers_without_key() — suppliers in gpo_key mode with an empty key
     GpoKey                — in-memory key with verify()
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
 
 import pandas as pd
 
 from .constants import (
-    KEY_ACCOUNT_NOT_FOUND, KEY_ADDRESS_MISMATCH, KEY_AMBIGUOUS, KEY_MISSING_ACCOUNT,
+    IDENTITY_GPO_KEY, KEY_ACCOUNT_NOT_FOUND, KEY_ADDRESS_MISMATCH, KEY_AMBIGUOUS, KEY_MISSING_ACCOUNT,
     KEY_NAME_AND_ADDRESS_MISMATCH, KEY_NAME_MISMATCH, KEY_NO_GPO_ID,
 )
 from .file_reader import _normalize_col
@@ -154,13 +156,8 @@ def _first_sheet_with_columns(sheets: dict[str, pd.DataFrame], columns: KeyColum
     return next(iter(sheets.values()))   # none fits: the missing-column error names the first sheet's columns
 
 
-def read_gpo_key(path: str, columns: KeyColumns = KeyColumns()) -> pd.DataFrame:
-    """
-    Read a key file (.csv, .xlsx, .xls, .xlsm) and return a DataFrame with
-    columns account_number, account_name, address, gpo_id, zip (None when no
-    ZIP column is configured) and their *_norm versions. Rows without an account number are dropped (see load_gpo_key
-    for the count).
-    """
+def _read_raw(path: str, columns: KeyColumns) -> pd.DataFrame:
+    """The key file's sheet with the configured columns, as text, headers unchanged."""
     suffix = Path(path).suffix.lower()
     try:
         if suffix == ".csv":
@@ -177,7 +174,25 @@ def read_gpo_key(path: str, columns: KeyColumns = KeyColumns()) -> pd.DataFrame:
         raise
     except Exception as e:
         raise KeyFileError(f"Cannot read key file: {e}") from e
+    return raw
 
+
+def without_missing_zip(path: str, columns: KeyColumns = KeyColumns()) -> KeyColumns:
+    """*columns*, with zip=None when the key file has no such ZIP column (the street alone is then compared)."""
+    if not columns.zip:
+        return columns
+    headers = {_normalize_col(str(c)) for c in _read_raw(path, replace(columns, zip=None)).columns}
+    return columns if _normalize_col(columns.zip) in headers else replace(columns, zip=None)
+
+
+def read_gpo_key(path: str, columns: KeyColumns = KeyColumns()) -> pd.DataFrame:
+    """
+    Read a key file (.csv, .xlsx, .xls, .xlsm) and return a DataFrame with
+    columns account_number, account_name, address, gpo_id, zip (None when no
+    ZIP column is configured) and their *_norm versions. Rows without an account number are dropped (see load_gpo_key
+    for the count).
+    """
+    raw = _read_raw(path, columns)
     by_norm = {_normalize_col(str(c)): c for c in raw.columns}
     wanted = _wanted(columns)
     missing = [f"{field} ('{name}')" for field, name in wanted.items() if _normalize_col(name) not in by_norm]
@@ -235,6 +250,20 @@ def load_gpo_key(
         skipped_blank_account=df.attrs.get("skipped_blank_account", 0),
         accounts_with_several_entries=int((counts > 1).sum()),
     )
+
+
+def suppliers_without_key(conn: object) -> list[str]:
+    """Names of suppliers in gpo_key mode with no key loaded: every row of theirs would be an exception."""
+    rows = conn.execute(
+        """
+        SELECT s.name FROM supplier_profile s
+        WHERE s.identity_mode = ?
+          AND NOT EXISTS (SELECT 1 FROM gpo_key_entry e WHERE e.supplier_profile_id = s.id)
+        ORDER BY s.name
+        """,
+        (IDENTITY_GPO_KEY,),
+    ).fetchall()
+    return [r["name"] for r in rows]
 
 
 # ---------------------------------------------------------------------------

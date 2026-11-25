@@ -6,6 +6,10 @@ now operating against the persistent member + member_alias + jde_member_history
 database tables instead of an in-memory account list.
 
 Matching priority:
+  0. Exact Salesforce Account ID, then exact entity code. When several members
+     (ship-to sites) share the code: the site whose street + ZIP equal the
+     row's (street abbreviations normalized), else the site flagged primary,
+     else unmatched for review.
   1. JDE history  — look up JDE Customer Number in jde_member_history
   2. Alias lookup — exact canonical_key match in member_alias
   3. ZIP + State  — fuzzy name within ZIP/State filtered candidates
@@ -33,9 +37,13 @@ from .constants import (
     MATCH_NATIONWIDE,
     MATCH_UNMATCHED,
     MATCH_ENTITY_CODE,
+    MATCH_ENTITY_CODE_NO_PRIMARY,
+    MATCH_ENTITY_CODE_PRIMARY,
+    MATCH_ENTITY_CODE_SITE_ADDRESS,
     MATCH_ACCOUNT_ID,
 )
-from .normalizer import normalize_name, normalize_zip, normalize_state, normalize_city
+from .gpo_key import normalize_zip as normalize_zip5
+from .normalizer import normalize_name, normalize_street, normalize_zip, normalize_state, normalize_city
 
 
 @dataclass
@@ -84,6 +92,28 @@ def _member_row_to_result(row: dict, method: str, score: int, geo: Optional[str]
     )
 
 
+def _pick_site(sites: list[dict], address: Optional[str], zip_code: Optional[str]) -> tuple[Optional[dict], str]:
+    """
+    The member for an entity code. One member: that one. Several (ship-to sites): the one site whose
+    street + ZIP equal the row's after normalizing (normalizer.normalize_street: USPS abbreviations,
+    unit designators dropped), else the one site flagged primary, else none
+    (MATCH_ENTITY_CODE_NO_PRIMARY: the row goes to review rather than to a guessed site).
+    """
+    if len(sites) == 1:
+        return sites[0], MATCH_ENTITY_CODE
+    street, zip5 = normalize_street(address), normalize_zip5(zip_code)
+    if street and zip5:
+        at_address = [s for s in sites
+                      if normalize_street(s.get("billing_street")) == street
+                      and normalize_zip5(s.get("billing_zip")) == zip5]
+        if len(at_address) == 1:
+            return at_address[0], MATCH_ENTITY_CODE_SITE_ADDRESS
+    primary = [s for s in sites if s.get("is_primary_site") == 1]
+    if len(primary) == 1:
+        return primary[0], MATCH_ENTITY_CODE_PRIMARY
+    return None, MATCH_ENTITY_CODE_NO_PRIMARY
+
+
 class MemberMatcher:
     """
     Stateful matcher that caches the full member list in memory for the
@@ -119,7 +149,7 @@ class MemberMatcher:
         self._by_state: dict[str, list[dict]] = {}
         self._aliases: dict[str, dict] = {}        # canonical_key → member dict
         self._jde_map: dict[str, dict] = {}        # jde_number → member dict
-        self._by_entity_code: dict[str, dict] = {}  # entity_code → member dict
+        self._by_entity_code: dict[str, list[dict]] = {}  # entity_code → members (several: ship-to sites)
         self._by_account_id: dict[str, dict] = {}   # account_id → member dict
 
     # ------------------------------------------------------------------
@@ -150,7 +180,7 @@ class MemberMatcher:
                 self._by_state.setdefault(s, []).append(m)
             ec = (m.get("entity_code") or "").strip().upper()
             if ec:
-                self._by_entity_code[ec] = m
+                self._by_entity_code.setdefault(ec, []).append(m)
             aid = (m.get("account_id") or "").strip()
             if aid:
                 self._by_account_id[aid] = m
@@ -203,6 +233,7 @@ class MemberMatcher:
         zip_code: Optional[str] = None,
         entity_code_hint: Optional[str] = None,
         account_id_hint: Optional[str] = None,
+        address: Optional[str] = None,
     ) -> MatchResult:
         """
         Run the matching strategy and return a MatchResult.
@@ -226,8 +257,12 @@ class MemberMatcher:
         # Tier 0b: Premier/Alliant Entity Code exact match
         if entity_code_hint:
             ec = str(entity_code_hint).strip().upper()
-            if ec in self._by_entity_code:
-                return _member_row_to_result(self._by_entity_code[ec], MATCH_ENTITY_CODE, 100)
+            sites = self._by_entity_code.get(ec)
+            if sites:
+                site, method = _pick_site(sites, address, zip_code)
+                if site is None:
+                    return MatchResult(match_method=method)
+                return _member_row_to_result(site, method, 100)
 
         # Tier 1: JDE history / alias by JDE number
         if jde_number:

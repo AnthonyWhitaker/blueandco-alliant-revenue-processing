@@ -1,0 +1,501 @@
+source_row,invoice_number,medline_account,scenario,messiness,gpo_id_state,prior_jde_history,expected_account_id,expected_entity_code,expected_site_role,expected_is_primary,expected_name,expected_city,expected_state,expected_zip
+2,81000000,4576622,location_variant,city_variant;street_suffix_variant,blank,N,001SYN000000380,OK487744,single site,Y,Fair Creek Surgery Center,Oklahoma City,OK,73137
+3,81000000,3234302,mock_key_account,mock_key_account,correct,Y,001MOCK00000025,CO2130,single site,Y,Mountain View Regional Medical Center,Fort Collins,CO,80521
+4,81000000,4747273,clean,street_suffix_variant,correct,N,001SYN000000351,PA825294,single site,Y,Charles Ashford Memorial Hospital,Pittsburgh,PA,15206
+5,81000001,4996825,ship_to_on_file,ship_to_on_file;name_abbreviation,correct,N,001SYN000000687,FL434816,Home Health - Location 1,N,Margaret Calloway Memorial Home Health - Location 1,Orlando,FL,32840
+6,81000001,4801470,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,blank,N,001SYN000000843,CT284960,primary,Y,Bright Point Children's Hospital,Hartford,CT,06113
+7,81000001,4312911,clean,street_suffix_variant,correct,N,001SYN000000704,AZ902365,primary,Y,Valley Ridge Health System,Phoenix,AZ,85014
+8,81000002,4669831,name_abbreviation,name_abbreviation;street_suffix_variant,correct,N,001SYN000000322,AZ206729,single site,Y,Prairie Vale Hospital,Tucson,AZ,85733
+9,81000002,4381255,name_abbreviation,name_abbreviation;zip_9digit_nodash,blank,N,001SYN000000517,MA843427,single site,Y,Ingram Hospital,Springfield,MA,01102
+10,81000002,4552715,name_short_informal,name_short_informal;street_suffix_variant,correct,N,001SYN000000515,OH356680,single site,Y,William Ashford Memorial Hospital,Cleveland,OH,44135
+11,81000003,4046888,name_short_informal,name_short_informal;street_suffix_variant;zip_9digit_nodash,correct,N,001SYN000000558,CO384712,single site,Y,Hazel Vale Community Hospital,Fort Collins,CO,80517
+12,81000003,4370447,ship_to_on_file,ship_to_on_file,blank,N,001SYN000000881,CO405271,Receiving Dock,N,Garrison Health Center - Receiving Dock,Denver,CO,80211
+13,81000003,4892196,name_punct_spacing,name_punct_spacing,unknown_code,N,001SYN000000505,OK130917,single site,Y,Silverwood University Medical Center,Oklahoma City,OK,73137
+14,81000004,4027963,name_abbreviation,name_abbreviation;street_suffix_variant,wrong_member_code,N,001SYN000000059,FL974331,single site,Y,Blue Wood Cancer Institute,Saint Petersburg,FL,33701
+15,81000004,4834386,clean,street_suffix_variant,correct,N,001SYN000000198,CT356689,single site,Y,Sun View Health System,New Haven,CT,06537
+16,81000004,4271775,name_mixed,name_abbreviation;name_punct_spacing;street_suffix_variant,wrong_member_code,N,001SYN000000661,OH175610,primary,Y,Copperpark Children's Hospital,Columbus,OH,43240
+17,81000005,4069415,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant;zip_plus4,blank,N,,,,,,,,
+18,81000005,4214589,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,correct,N,001SYN000000866,OK170734,primary,Y,Clear Hollow Clinic,Oklahoma City,OK,73122
+19,81000005,5037655,mock_key_account,mock_key_account;name_punct_spacing,wrong_member_code,Y,001MOCK00000014,CO2120,single site,Y,Juniper Valley Health,Grand Junction,CO,81501
+20,81000006,4787238,clean,street_suffix_variant,wrong_member_code,N,001SYN000000475,CO120423,single site,Y,Stonepoint Regional Medical Center,Pueblo,CO,81027
+21,81000006,4773292,name_short_informal,name_short_informal,blank,N,001SYN000000794,FL210050,primary,Y,Mount Hermon Rehabilitation Hospital,Tampa,FL,33606
+22,81000006,4210359,name_punct_spacing,name_punct_spacing;street_suffix_variant,unknown_code,N,001SYN000000067,AL589922,single site,Y,High Bend Health Center,Pueblo,CO,81014
+23,81000007,4859982,name_punct_spacing,name_punct_spacing;street_suffix_variant,correct,N,001SYN000000430,NM831404,single site,Y,Ashford Cancer Institute,Las Cruces,NM,88020
+24,81000007,4837727,name_abbreviation,name_abbreviation;street_suffix_variant,wrong_member_code,N,001SYN000000372,NJ544039,single site,Y,Clear Bend Medical Center,Camden,NJ,08140
+25,81000007,4143575,name_punct_spacing,name_punct_spacing;street_suffix_variant,correct,N,001SYN000000509,AZ915963,single site,Y,River Hollow Community Hospital,Mesa,AZ,85202
+26,81000008,4149902,name_punct_spacing,name_punct_spacing;street_suffix_variant,blank,N,001SYN000000596,GA813391,single site,Y,Thomas Brannock Memorial Hospital,Savannah,GA,31412
+27,81000008,4978108,name_mixed,name_abbreviation;name_punct_spacing;street_suffix_variant;zip_plus4,wrong_member_code,N,001SYN000000041,OH702840,single site,Y,Glen Falls Health Center,Columbus,OH,43208
+28,81000008,4039783,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant;zip_9digit_nodash,unknown_code,N,001SYN000000604,OH398017,primary,Y,Silver View Community Hospital,Columbus,OH,43214
+29,81000009,4897160,no_valid_match_decoy,no_valid_match_decoy;street_suffix_variant;zip_plus4,blank,N,,,,,,,,
+30,81000009,4544950,name_punct_spacing,name_punct_spacing,blank,N,001SYN000000344,CO891672,single site,Y,Saint Francis Nursing and Rehabilitation Center,Fort Collins,CO,80502
+31,81000009,4831067,name_abbreviation,name_abbreviation;zip_plus4,correct,N,001SYN000000004,CO637798,single site,Y,Willow Vale Rehabilitation Hospital,Fort Collins,CO,80521
+32,81000010,4528280,name_short_informal,name_short_informal,correct,N,001SYN000000535,FL918673,single site,Y,Mount Olive Community Hospital,Tampa,FL,33633
+33,81000010,4892196,name_punct_spacing,name_punct_spacing,unknown_code,N,001SYN000000505,OK130917,single site,Y,Silverwood University Medical Center,Oklahoma City,OK,73137
+34,81000010,4551741,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,wrong_member_code,N,001SYN000000876,OK759573,primary,Y,Saint Francis Hospital,Oklahoma City,OK,73125
+35,81000011,4822958,name_punct_spacing,name_punct_spacing;street_suffix_variant,blank,N,001SYN000000291,GA428973,single site,Y,Pine Wood Behavioral Health,Savannah,GA,31427
+36,81000011,4271775,name_mixed,name_abbreviation;name_punct_spacing;street_suffix_variant,wrong_member_code,N,001SYN000000661,OH175610,primary,Y,Copperpark Children's Hospital,Columbus,OH,43240
+37,81000011,4436780,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,blank,N,001SYN000000735,NM545890,primary,Y,Oak Grove Rehabilitation Hospital,Albuquerque,NM,87112
+38,81000012,4894807,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,blank,N,001SYN000000938,CO709666,primary,Y,Glen Vale Children's Hospital,Colorado Springs,CO,80926
+39,81000012,4590860,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,blank,N,,,,,,,,
+40,81000012,4136588,location_variant,city_variant;name_abbreviation;street_suffix_variant,unknown_code,N,001SYN000000170,CO330070,single site,Y,Saint Elias Regional Medical Center,Colorado Springs,CO,80920
+41,81000013,4036391,clean,clean,blank,N,001SYN000000052,GA882347,single site,Y,Mount Olive Rehabilitation Hospital,Savannah,GA,31419
+42,81000013,4962436,name_mixed,name_abbreviation;name_punct_spacing;zip_plus4,blank,N,001SYN000000708,OH927755,primary,Y,Fair Point Medical Center,Cleveland,OH,44130
+43,81000013,4046055,clean,clean,blank,N,001SYN000000464,NJ725423,single site,Y,Fair Wood Surgery Center,Camden,NJ,08125
+44,81000014,4286985,name_punct_spacing,name_punct_spacing;street_suffix_variant,correct,N,001SYN000000263,OK656603,single site,Y,Lake Hollow Children's Hospital,Tulsa,OK,74120
+45,81000014,4322394,ship_to_on_file,ship_to_on_file;zip_plus4,correct,N,001SYN000000662,OH175610,Outpatient Imaging,N,Copperpark Children's Outpatient Imaging,Columbus,OH,43240
+46,81000014,4159653,location_variant,zip_blank,blank,N,001SYN000000163,VA271026,single site,Y,Saint Francis Surgery Center,Roanoke,VA,24040
+47,81000015,4835453,name_abbreviation,name_abbreviation;street_suffix_variant;zip_plus4,correct,N,001SYN000000006,MA223723,single site,Y,Prairiefalls Behavioral Health,Boston,MA,02127
+48,81000015,4231243,location_variant,zip_blank,blank,N,001SYN000000237,OH977108,single site,Y,Stone Creek Hospital,Cleveland,OH,44136
+49,81000015,4109953,ship_to_on_file,ship_to_on_file;street_suffix_variant,blank,N,001SYN000000718,CT678164,Hospice,N,Harborbluff Hospice,New Haven,CT,06535
+50,81000016,4666327,name_short_informal,name_short_informal,blank,N,001SYN000000260,AZ689927,single site,Y,Maplewood Rehabilitation Hospital,Phoenix,AZ,85003
+51,81000016,4886359,name_abbreviation,name_abbreviation;zip_plus4,correct,N,001SYN000000292,OH263619,single site,Y,Helen Tolliver Memorial Hospital,Dayton,OH,45413
+52,81000016,4271775,name_mixed,name_abbreviation;name_punct_spacing;street_suffix_variant,wrong_member_code,N,001SYN000000661,OH175610,primary,Y,Copperpark Children's Hospital,Columbus,OH,43240
+53,81000017,4171718,clean,clean,blank,N,001SYN000000916,NJ880070,primary,Y,Danforth Behavioral Health,Trenton,NJ,08627
+54,81000017,4903166,location_variant,zip_blank;name_abbreviation;street_suffix_variant,unknown_code,N,001SYN000000404,AL491644,single site,Y,James Brannock Memorial Hospital,Austin,TX,78724
+55,81000017,4322394,ship_to_on_file,ship_to_on_file;zip_plus4,correct,N,001SYN000000662,OH175610,Outpatient Imaging,N,Copperpark Children's Outpatient Imaging,Columbus,OH,43240
+56,81000018,4364459,name_abbreviation,name_abbreviation,wrong_member_code,N,001SYN000000193,TX749458,single site,Y,Blue Creek Health Center,Houston,TX,77035
+57,81000018,4136588,location_variant,city_variant;name_abbreviation;street_suffix_variant,unknown_code,N,001SYN000000170,CO330070,single site,Y,Saint Elias Regional Medical Center,Colorado Springs,CO,80920
+58,81000018,2579240,mock_key_account,mock_key_account,correct,Y,001MOCK00000004,TX5022,single site,Y,North Fork Health System,Plano,TX,75024
+59,81000019,4576622,location_variant,city_variant;street_suffix_variant,blank,N,001SYN000000380,OK487744,single site,Y,Fair Creek Surgery Center,Oklahoma City,OK,73137
+60,81000019,4248550,name_short_informal,name_short_informal;street_suffix_variant;zip_plus4,correct,N,001SYN000000392,TX283631,single site,Y,Canyon Hollow Children's Hospital,San Antonio,TX,78240
+61,81000019,4903166,location_variant,zip_blank;name_abbreviation;street_suffix_variant,unknown_code,N,001SYN000000404,AL491644,single site,Y,James Brannock Memorial Hospital,Austin,TX,78724
+62,81000020,4039783,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant;zip_9digit_nodash,unknown_code,N,001SYN000000604,OH398017,primary,Y,Silver View Community Hospital,Columbus,OH,43214
+63,81000020,4473078,ship_to_on_file,ship_to_on_file;street_suffix_variant;zip_plus4,correct,N,001SYN000000695,CT985242,Physical Therapy,N,Sun Bluff Clinic Physical Therapy,New Haven,CT,06532
+64,81000020,3420198,mock_key_account,mock_key_account;street_suffix_variant,blank,Y,001MOCK00000028,NM4420,single site,Y,Rio Grande Community Hospital,Las Cruces,NM,88001
+65,81000021,4079331,location_variant,zip_typo;name_abbreviation;street_suffix_variant,blank,N,001SYN000000949,AZ441709,primary,Y,Mount Pleasant Surgery Center,Mesa,AZ,85221
+66,81000021,5858837,mock_key_account,mock_key_account;name_short_informal,correct,Y,001MOCK00000026,AZ3320,single site,Y,Sonoran Valley Health Center,Chandler,AZ,85225
+67,81000021,4114649,name_abbreviation,name_abbreviation;street_suffix_variant,correct,N,001SYN000000420,GA661177,single site,Y,Canyon Crossing Health System,Atlanta,GA,30330
+68,81000022,4049551,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,unknown_code,N,,,,,,,,
+69,81000022,1973060,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000006,TX5031,single site,Y,Bluebonnet Rehabilitation Hospital,Waco,TX,76701
+70,81000022,4994679,name_short_informal,name_short_informal;street_suffix_variant,wrong_member_code,N,001SYN000000126,MA879298,single site,Y,Silver Point Medical Center,Boston,MA,02112
+71,81000023,4747273,clean,street_suffix_variant,correct,N,001SYN000000351,PA825294,single site,Y,Charles Ashford Memorial Hospital,Pittsburgh,PA,15206
+72,81000023,4566314,name_punct_spacing,name_punct_spacing;street_suffix_variant,blank,N,001SYN000000180,GA196611,single site,Y,Oakridge Health Center,Savannah,GA,31434
+73,81000023,4143575,name_punct_spacing,name_punct_spacing;street_suffix_variant,correct,N,001SYN000000509,AZ915963,single site,Y,River Hollow Community Hospital,Mesa,AZ,85202
+74,81000024,2521911,mock_key_account,mock_key_account;street_suffix_variant,wrong_member_code,Y,001MOCK00000015,AZ3301,single site,Y,Desert Bloom Medical Center,Phoenix,AZ,85004
+75,81000024,4878976,name_short_informal,name_short_informal;street_suffix_variant,unknown_code,N,001SYN000000663,VA415031,primary,Y,Blue Wood Clinic,Roanoke,VA,24009
+76,81000024,4724963,ship_to_on_file,ship_to_on_file;name_abbreviation;street_suffix_variant,blank,N,001SYN000000783,MA586898,Home Health - Location 1,N,Quill Surgery Center Home Health - Location 1,Worcester,MA,01617
+77,81000025,4115999,name_punct_spacing,name_punct_spacing;street_suffix_variant,correct,N,001SYN000000047,OH770662,single site,Y,Stratton Surgery Center,Cleveland,OH,44130
+78,81000025,4552715,name_short_informal,name_short_informal;street_suffix_variant,correct,N,001SYN000000515,OH356680,single site,Y,William Ashford Memorial Hospital,Cleveland,OH,44135
+79,81000025,4730504,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,unknown_code,N,,,,,,,,
+80,81000026,4318388,name_abbreviation,name_abbreviation;street_suffix_variant,correct,N,001SYN000000501,CT487318,single site,Y,Anne Rowntree Memorial Hospital,Hartford,CT,06108
+81,81000026,4651787,clean,clean,blank,N,001SYN000000398,PA210360,single site,Y,Riversprings Children's Hospital,Harrisburg,PA,17104
+82,81000026,1991709,mock_key_account,mock_key_account;name_punct_spacing,blank,Y,001MOCK00000017,AZ3310,single site,Y,Copper Canyon Surgical Hospital,Mesa,AZ,85201
+83,81000027,7655194,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000021,NM4410,single site,Y,High Plains Regional Medical Center,Roswell,NM,88201
+84,81000027,4526086,name_mixed,name_abbreviation;name_punct_spacing,wrong_member_code,N,001SYN000000525,CO370647,single site,Y,Saint Bridget Health System,Fort Collins,CO,80538
+85,81000027,4059690,no_valid_match_unrelated,no_valid_match_unrelated,blank,N,,,,,,,,
+86,81000028,4407566,location_variant,zip_blank;name_abbreviation,correct,N,001SYN000000543,NJ239769,single site,Y,James Wexford Memorial Hospital,Trenton,NJ,08637
+87,81000028,4297490,name_short_informal,name_short_informal;street_suffix_variant;zip_9digit_nodash,blank,N,001SYN000000120,OH184938,single site,Y,Margaret Brannock Memorial Hospital,Cleveland,OH,44118
+88,81000028,4318777,name_punct_spacing,name_punct_spacing;street_suffix_variant,blank,N,001SYN000000269,PA659300,single site,Y,Amber Heights University Medical Center,Pittsburgh,PA,15220
+89,81000029,4242920,no_valid_match_decoy,no_valid_match_decoy;street_suffix_variant,unknown_code,N,,,,,,,,
+90,81000029,4416874,name_mixed,name_abbreviation;name_punct_spacing;zip_plus4,wrong_member_code,N,001SYN000000533,AZ710510,single site,Y,Canyon Ridge Medical Center,Phoenix,AZ,85031
+91,81000029,7624039,mock_key_account,mock_key_account,correct,Y,001MOCK00000001,TX5013,single site,Y,Cedar Ridge Community Hospital,Round Rock,TX,78664
+92,81000030,1991709,mock_key_account,mock_key_account;name_punct_spacing,blank,Y,001MOCK00000017,AZ3310,single site,Y,Copper Canyon Surgical Hospital,Mesa,AZ,85201
+93,81000030,4978108,name_mixed,name_abbreviation;name_punct_spacing;street_suffix_variant;zip_plus4,wrong_member_code,N,001SYN000000041,OH702840,single site,Y,Glen Falls Health Center,Columbus,OH,43208
+94,81000030,8015764,mock_key_account,mock_key_account,correct,Y,001MOCK00000012,CO2110,single site,Y,Silver Creek Regional Hospital,Colorado Springs,CO,80903
+95,81000031,4149902,name_punct_spacing,name_punct_spacing;street_suffix_variant,blank,N,001SYN000000596,GA813391,single site,Y,Thomas Brannock Memorial Hospital,Savannah,GA,31412
+96,81000031,4438743,clean,clean,correct,N,001SYN000000066,TX186430,single site,Y,Glenheights Behavioral Health,Dallas,TX,75210
+97,81000031,4316459,name_abbreviation,name_abbreviation,correct,N,001SYN000000024,OH782961,single site,Y,Stone Falls Health System,Dayton,OH,45422
+98,81000032,4348782,name_short_informal,name_short_informal;street_suffix_variant;zip_plus4,unknown_code,N,001SYN000000238,MA964214,single site,Y,Ivy Falls University Medical Center,Boston,MA,02106
+99,81000032,4604591,ship_to_on_file,ship_to_on_file;name_abbreviation;street_suffix_variant,correct,N,001SYN000000681,NJ377814,Outpatient Imaging,N,Thomas Garrison Memorial Outpatient Imaging,Camden,NJ,08132
+100,81000032,4605998,ship_to_on_file,ship_to_on_file;street_suffix_variant,blank,N,001SYN000001008,GA491046,Physical Therapy,N,Mary Prescott Memorial Physical Therapy,Atlanta,GA,30311
+101,81000033,4302305,ship_to_on_file,ship_to_on_file;name_abbreviation;street_suffix_variant,blank,N,001SYN000000728,OH345174,Home Health - Location 1,N,Elm Brook Home Health - Location 1,Columbus,OH,43232
+102,81000033,4059690,no_valid_match_unrelated,no_valid_match_unrelated,blank,N,,,,,,,,
+103,81000033,4406165,location_variant,city_variant,unknown_code,N,001SYN000000589,FL216621,single site,Y,Willow Creek Rehabilitation Hospital,Saint Petersburg,FL,33725
+104,81000034,4159653,location_variant,zip_blank,blank,N,001SYN000000163,VA271026,single site,Y,Saint Francis Surgery Center,Roanoke,VA,24040
+105,81000034,7624039,mock_key_account,mock_key_account,correct,Y,001MOCK00000001,TX5013,single site,Y,Cedar Ridge Community Hospital,Round Rock,TX,78664
+106,81000034,4570859,name_punct_spacing,name_punct_spacing;street_suffix_variant,unknown_code,N,001SYN000000473,MA740991,single site,Y,Elmpark Health System,Boston,MA,02129
+107,81000035,4468844,name_abbreviation,name_abbreviation,blank,N,001SYN000000293,AL789942,single site,Y,Hazel Brook Children's Hospital,Tucson,AZ,85703
+108,81000035,4681692,name_abbreviation,name_abbreviation;zip_plus4,blank,N,001SYN000000018,MA551826,single site,Y,Mount Pleasant Community Hospital,Worcester,MA,01617
+109,81000035,5037655,mock_key_account,mock_key_account;name_punct_spacing,wrong_member_code,Y,001MOCK00000014,CO2120,single site,Y,Juniper Valley Health,Grand Junction,CO,81501
+110,81000036,4658395,name_short_informal,name_short_informal,correct,N,001SYN000000115,OK997611,single site,Y,Saint Elias Rehabilitation Hospital,Oklahoma City,OK,73121
+111,81000036,4953227,name_mixed,name_abbreviation;name_punct_spacing;zip_plus4,correct,N,001SYN000000158,OH823062,single site,Y,Mount Hope Medical Center,Dayton,OH,45432
+112,81000036,4436780,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,blank,N,001SYN000000735,NM545890,primary,Y,Oak Grove Rehabilitation Hospital,Albuquerque,NM,87112
+113,81000037,4110846,name_short_informal,name_short_informal;street_suffix_variant,blank,N,001SYN000000496,AZ581340,single site,Y,Mount Olive Nursing and Rehabilitation Center,Phoenix,AZ,85017
+114,81000037,4602037,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000008,TX5041,single site,Y,Sandstone Orthopedic Institute,Lubbock,TX,79401
+115,81000037,4134157,name_abbreviation,name_abbreviation,blank,N,001SYN000000994,CT769896,primary,Y,Maple Point Health System,Hartford,CT,06101
+116,81000038,4046782,name_short_informal,name_short_informal;street_suffix_variant,blank,N,001SYN000000394,NJ374809,single site,Y,William Prescott Memorial Hospital,Trenton,NJ,08634
+117,81000038,4801470,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,blank,N,001SYN000000843,CT284960,primary,Y,Bright Point Children's Hospital,Hartford,CT,06113
+118,81000038,4171014,name_abbreviation,name_abbreviation;street_suffix_variant,correct,N,001SYN000000832,VA754080,primary,Y,Elizabeth Corwin Memorial Hospital,Richmond,VA,23213
+119,81000039,8031986,mock_key_account,mock_key_account,wrong_member_code,Y,001MOCK00000027,OK5510,single site,Y,Great Plains Cancer Institute,Norman,OK,73069
+120,81000039,4087310,no_valid_match_decoy,no_valid_match_decoy;street_suffix_variant,unknown_code,N,,,,,,,,
+121,81000039,4135164,name_mixed,name_abbreviation;name_punct_spacing;street_suffix_variant,unknown_code,N,001SYN000000147,CO650466,single site,Y,Glen Crossing Nursing and Rehabilitation Center,Colorado Springs,CO,80910
+122,81000040,4188227,clean,street_suffix_variant,blank,N,001SYN000000556,OK942261,single site,Y,Brightvale University Medical Center,Oklahoma City,OK,73124
+123,81000040,4535128,ship_to_not_on_file,ship_to_not_on_file;zip_plus4,unknown_code,N,001SYN000000914,NJ420702,primary,Y,Valley Meadow Hospital,Trenton,NJ,08614
+124,81000040,4511913,ship_to_not_on_file,ship_to_not_on_file,blank,N,001SYN000000927,OK168695,primary,Y,Ashford Surgery Center,Tulsa,OK,74133
+125,81000041,4318777,name_punct_spacing,name_punct_spacing;street_suffix_variant,blank,N,001SYN000000269,PA659300,single site,Y,Amber Heights University Medical Center,Pittsburgh,PA,15220
+126,81000041,4110846,name_short_informal,name_short_informal;street_suffix_variant,blank,N,001SYN000000496,AZ581340,single site,Y,Mount Olive Nursing and Rehabilitation Center,Phoenix,AZ,85017
+127,81000041,4763028,ship_to_on_file,ship_to_on_file;street_suffix_variant,blank,N,001SYN000000922,AZ762693,Surgery Center,N,Blue Field Surgery Center,Tucson,AZ,85704
+128,81000042,4242920,no_valid_match_decoy,no_valid_match_decoy;street_suffix_variant,unknown_code,N,,,,,,,,
+129,81000042,2171979,mock_key_account,mock_key_account,correct,Y,001MOCK00000013,CO2111,single site,Y,Red Mesa Community Hospital,Pueblo,CO,81003
+130,81000042,4009861,no_valid_match_decoy,no_valid_match_decoy,wrong_member_code,N,,,,,,,,
+131,81000043,4416874,name_mixed,name_abbreviation;name_punct_spacing;zip_plus4,wrong_member_code,N,001SYN000000533,AZ710510,single site,Y,Canyon Ridge Medical Center,Phoenix,AZ,85031
+132,81000043,4730504,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,unknown_code,N,,,,,,,,
+133,81000043,4459182,name_short_informal,name_short_informal;street_suffix_variant;zip_9digit_nodash,correct,N,001SYN000000095,GA589522,single site,Y,Pinecreek Health System,Savannah,GA,31404
+134,81000044,4027963,name_abbreviation,name_abbreviation;street_suffix_variant,wrong_member_code,N,001SYN000000059,FL974331,single site,Y,Blue Wood Cancer Institute,Saint Petersburg,FL,33701
+135,81000044,4669831,name_abbreviation,name_abbreviation;street_suffix_variant,correct,N,001SYN000000322,AZ206729,single site,Y,Prairie Vale Hospital,Tucson,AZ,85733
+136,81000044,1781527,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000024,TX5060,single site,Y,Saint Brigid's Hospital,San Antonio,TX,78205
+137,81000045,4238441,location_variant,zip_lost_leading_zero;name_abbreviation,blank,N,001SYN000000128,NJ173347,single site,Y,Saint Lucia Surgery Center,Trenton,NJ,08612
+138,81000045,4850270,name_abbreviation,name_abbreviation;zip_plus4,correct,N,001SYN000000130,CT729843,single site,Y,John Yardley Memorial Hospital,New Haven,CT,06533
+139,81000045,4556685,name_abbreviation,name_abbreviation;street_suffix_variant;zip_plus4,wrong_member_code,N,001SYN000000817,AZ797885,primary,Y,Glen Crossing Health System,Tucson,AZ,85718
+140,81000046,4114649,name_abbreviation,name_abbreviation;street_suffix_variant,correct,N,001SYN000000420,GA661177,single site,Y,Canyon Crossing Health System,Atlanta,GA,30330
+141,81000046,4456903,no_valid_match_decoy,no_valid_match_decoy;street_suffix_variant,blank,N,,,,,,,,
+142,81000046,4810421,ship_to_on_file,ship_to_on_file;street_suffix_variant,blank,N,001SYN000000603,TX814144,Hospice,N,Holloway Community Hospice,Austin,TX,78736
+143,81000047,4238441,location_variant,zip_lost_leading_zero;name_abbreviation,blank,N,001SYN000000128,NJ173347,single site,Y,Saint Lucia Surgery Center,Trenton,NJ,08612
+144,81000047,3530829,mock_key_account,mock_key_account;name_short_informal,wrong_member_code,Y,001MOCK00000000,TX5012,single site,Y,Lakeview Regional Medical Center,Austin,TX,78701
+145,81000047,4551741,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,wrong_member_code,N,001SYN000000876,OK759573,primary,Y,Saint Francis Hospital,Oklahoma City,OK,73125
+146,81000048,4835453,name_abbreviation,name_abbreviation;street_suffix_variant;zip_plus4,correct,N,001SYN000000006,MA223723,single site,Y,Prairiefalls Behavioral Health,Boston,MA,02127
+147,81000048,4717286,name_abbreviation,name_abbreviation,correct,N,001SYN000000104,GA125716,single site,Y,Saint Clare Nursing and Rehabilitation Center,Atlanta,GA,30309
+148,81000048,4810421,ship_to_on_file,ship_to_on_file;street_suffix_variant,blank,N,001SYN000000603,TX814144,Hospice,N,Holloway Community Hospice,Austin,TX,78736
+149,81000049,4669831,name_abbreviation,name_abbreviation;street_suffix_variant,correct,N,001SYN000000322,AZ206729,single site,Y,Prairie Vale Hospital,Tucson,AZ,85733
+150,81000049,4210359,name_punct_spacing,name_punct_spacing;street_suffix_variant,unknown_code,N,001SYN000000067,AL589922,single site,Y,High Bend Health Center,Pueblo,CO,81014
+151,81000049,4894708,clean,street_suffix_variant;zip_plus4,blank,N,001SYN000000470,OH766400,single site,Y,Summit Wood Health System,Columbus,OH,43240
+152,81000050,4046055,clean,clean,blank,N,001SYN000000464,NJ725423,single site,Y,Fair Wood Surgery Center,Camden,NJ,08125
+153,81000050,4142816,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant;zip_plus4,correct,N,001SYN000000862,TX611759,primary,Y,Bright Park Nursing and Rehabilitation Center,Fort Worth,TX,76137
+154,81000050,4494227,name_mixed,name_abbreviation;name_punct_spacing;street_suffix_variant;zip_plus4,correct,N,001SYN000000144,FL780471,single site,Y,Saint Ignatius Nursing and Rehabilitation Center,Tampa,FL,33601
+155,81000051,4607480,name_short_informal,name_short_informal;street_suffix_variant,correct,N,001SYN000000830,TX456829,primary,Y,Green Field Rehabilitation Hospital,Dallas,TX,75202
+156,81000051,2441955,mock_key_account,mock_key_account;street_suffix_variant,blank,Y,001MOCK00000010,CO2101,single site,Y,Granite Peak Hospital,Denver,CO,80202
+157,81000051,4155729,name_mixed,name_abbreviation;name_punct_spacing,correct,N,001SYN000000491,MA507979,single site,Y,Pinemeadow Nursing and Rehabilitation Center,Springfield,MA,01110
+158,81000052,1991709,mock_key_account,mock_key_account;name_punct_spacing,blank,Y,001MOCK00000017,AZ3310,single site,Y,Copper Canyon Surgical Hospital,Mesa,AZ,85201
+159,81000052,4962436,name_mixed,name_abbreviation;name_punct_spacing;zip_plus4,blank,N,001SYN000000708,OH927755,primary,Y,Fair Point Medical Center,Cleveland,OH,44130
+160,81000052,4501525,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,correct,N,001SYN000000611,OH235210,primary,Y,Mount Laurel Behavioral Health,Columbus,OH,43216
+161,81000053,1831970,mock_key_account,mock_key_account,correct,Y,001MOCK00000022,OK5501,single site,Y,Oak Hollow Memorial Hospital,Tulsa,OK,74103
+162,81000053,4745266,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,blank,N,,,,,,,,
+163,81000053,4599451,name_short_informal,name_short_informal,correct,N,001SYN000000432,GA323325,single site,Y,Danforth Rehabilitation Hospital,Atlanta,GA,30308
+164,81000054,4370447,ship_to_on_file,ship_to_on_file,blank,N,001SYN000000881,CO405271,Receiving Dock,N,Garrison Health Center - Receiving Dock,Denver,CO,80211
+165,81000054,4745328,mock_key_account,mock_key_account;name_punct_spacing,wrong_member_code,Y,001MOCK00000019,NM4401,single site,Y,Willow Bend Medical Center,Albuquerque,NM,87102
+166,81000054,4850270,name_abbreviation,name_abbreviation;zip_plus4,correct,N,001SYN000000130,CT729843,single site,Y,John Yardley Memorial Hospital,New Haven,CT,06533
+167,81000055,4488236,no_valid_match_decoy,no_valid_match_decoy;street_suffix_variant,blank,N,,,,,,,,
+168,81000055,4781255,ship_to_not_on_file,ship_to_not_on_file;zip_plus4,unknown_code,N,001SYN000000801,OK332550,primary,Y,Wexford Nursing and Rehabilitation Center,Tulsa,OK,74128
+169,81000055,4709137,mock_key_account,mock_key_account,correct,Y,001MOCK00000023,OK5502,single site,Y,Redbud Valley Medical Center,Oklahoma City,OK,73102
+170,81000056,2171979,mock_key_account,mock_key_account,correct,Y,001MOCK00000013,CO2111,single site,Y,Red Mesa Community Hospital,Pueblo,CO,81003
+171,81000056,4188227,clean,street_suffix_variant,blank,N,001SYN000000556,OK942261,single site,Y,Brightvale University Medical Center,Oklahoma City,OK,73124
+172,81000056,4526086,name_mixed,name_abbreviation;name_punct_spacing,wrong_member_code,N,001SYN000000525,CO370647,single site,Y,Saint Bridget Health System,Fort Collins,CO,80538
+173,81000057,4511913,ship_to_not_on_file,ship_to_not_on_file,blank,N,001SYN000000927,OK168695,primary,Y,Ashford Surgery Center,Tulsa,OK,74133
+174,81000057,2976225,mock_key_account,mock_key_account,correct,Y,001MOCK00000029,TX5070,single site,Y,Clearwater Springs Hospital,Abilene,TX,79601
+175,81000057,9990608,mock_key_account,mock_key_account,correct,Y,001MOCK00000003,TX5021,single site,Y,Riverbend Children's Hospital,Dallas,TX,75201
+176,81000058,4599451,name_short_informal,name_short_informal,correct,N,001SYN000000432,GA323325,single site,Y,Danforth Rehabilitation Hospital,Atlanta,GA,30308
+177,81000058,4005591,name_mixed,name_abbreviation;name_punct_spacing,unknown_code,N,001SYN000000240,PA630299,single site,Y,Elm Haven Clinic,Harrisburg,PA,17105
+178,81000058,4248550,name_short_informal,name_short_informal;street_suffix_variant;zip_plus4,correct,N,001SYN000000392,TX283631,single site,Y,Canyon Hollow Children's Hospital,San Antonio,TX,78240
+179,81000059,4046782,name_short_informal,name_short_informal;street_suffix_variant,blank,N,001SYN000000394,NJ374809,single site,Y,William Prescott Memorial Hospital,Trenton,NJ,08634
+180,81000059,4497785,name_short_informal,name_short_informal,correct,N,001SYN000000157,OH321406,single site,Y,Goldenwood Medical Center,Dayton,OH,45408
+181,81000059,4509876,no_valid_match_decoy,no_valid_match_decoy,blank,N,,,,,,,,
+182,81000060,4551741,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,wrong_member_code,N,001SYN000000876,OK759573,primary,Y,Saint Francis Hospital,Oklahoma City,OK,73125
+183,81000060,4049551,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,unknown_code,N,,,,,,,,
+184,81000060,4109953,ship_to_on_file,ship_to_on_file;street_suffix_variant,blank,N,001SYN000000718,CT678164,Hospice,N,Harborbluff Hospice,New Haven,CT,06535
+185,81000061,7655194,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000021,NM4410,single site,Y,High Plains Regional Medical Center,Roswell,NM,88201
+186,81000061,5037655,mock_key_account,mock_key_account;name_punct_spacing,wrong_member_code,Y,001MOCK00000014,CO2120,single site,Y,Juniper Valley Health,Grand Junction,CO,81501
+187,81000061,4396579,name_punct_spacing,name_punct_spacing;street_suffix_variant,correct,N,001SYN000000181,MA300059,single site,Y,High Ridge Health System,Springfield,MA,01132
+188,81000062,1629072,mock_key_account,mock_key_account,correct,Y,001MOCK00000009,TX5050,single site,Y,Prairie Wind Medical Center,Amarillo,TX,79101
+189,81000062,4109953,ship_to_on_file,ship_to_on_file;street_suffix_variant,blank,N,001SYN000000718,CT678164,Hospice,N,Harborbluff Hospice,New Haven,CT,06535
+190,81000062,4318777,name_punct_spacing,name_punct_spacing;street_suffix_variant,blank,N,001SYN000000269,PA659300,single site,Y,Amber Heights University Medical Center,Pittsburgh,PA,15220
+191,81000063,4025145,name_punct_spacing,name_punct_spacing;street_suffix_variant;zip_plus4,correct,N,001SYN000000171,OH431582,single site,Y,Willow Heights Children's Hospital,Dayton,OH,45440
+192,81000063,4134157,name_abbreviation,name_abbreviation,blank,N,001SYN000000994,CT769896,primary,Y,Maple Point Health System,Hartford,CT,06101
+193,81000063,4605998,ship_to_on_file,ship_to_on_file;street_suffix_variant,blank,N,001SYN000001008,GA491046,Physical Therapy,N,Mary Prescott Memorial Physical Therapy,Atlanta,GA,30311
+194,81000064,4312911,clean,street_suffix_variant,correct,N,001SYN000000704,AZ902365,primary,Y,Valley Ridge Health System,Phoenix,AZ,85014
+195,81000064,4318388,name_abbreviation,name_abbreviation;street_suffix_variant,correct,N,001SYN000000501,CT487318,single site,Y,Anne Rowntree Memorial Hospital,Hartford,CT,06108
+196,81000064,4810421,ship_to_on_file,ship_to_on_file;street_suffix_variant,blank,N,001SYN000000603,TX814144,Hospice,N,Holloway Community Hospice,Austin,TX,78736
+197,81000065,5858837,mock_key_account,mock_key_account;name_short_informal,correct,Y,001MOCK00000026,AZ3320,single site,Y,Sonoran Valley Health Center,Chandler,AZ,85225
+198,81000065,4948313,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant;zip_plus4,blank,N,,,,,,,,
+199,81000065,4730504,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,unknown_code,N,,,,,,,,
+200,81000066,4337625,ship_to_on_file,ship_to_on_file;street_suffix_variant;zip_9digit_nodash,wrong_member_code,N,001SYN000000839,CO132916,Surgery Center,N,Willow Park Surgery Center Surgery Center,Pueblo,CO,81036
+201,81000066,4416874,name_mixed,name_abbreviation;name_punct_spacing;zip_plus4,wrong_member_code,N,001SYN000000533,AZ710510,single site,Y,Canyon Ridge Medical Center,Phoenix,AZ,85031
+202,81000066,4377562,name_mixed,name_abbreviation;name_punct_spacing,correct,N,001SYN000000450,NJ567247,single site,Y,Fairbanks Medical Center,Newark,NJ,07129
+203,81000067,4049551,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,unknown_code,N,,,,,,,,
+204,81000067,4115999,name_punct_spacing,name_punct_spacing;street_suffix_variant,correct,N,001SYN000000047,OH770662,single site,Y,Stratton Surgery Center,Cleveland,OH,44130
+205,81000067,4570859,name_punct_spacing,name_punct_spacing;street_suffix_variant,unknown_code,N,001SYN000000473,MA740991,single site,Y,Elmpark Health System,Boston,MA,02129
+206,81000068,4470101,name_punct_spacing,name_punct_spacing;zip_plus4,correct,N,001SYN000000497,CO192261,single site,Y,Bluefalls Nursing and Rehabilitation Center,Colorado Springs,CO,80905
+207,81000068,4989256,ship_to_on_file,ship_to_on_file;street_suffix_variant,correct,N,001SYN000000756,TX312459,Hospice,N,Stone Bluff Hospice,Austin,TX,78708
+208,81000068,1973060,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000006,TX5031,single site,Y,Bluebonnet Rehabilitation Hospital,Waco,TX,76701
+209,81000069,4662120,name_abbreviation,name_abbreviation,blank,N,001SYN000000261,CO819910,single site,Y,Mount Vernon Surgery Center,Fort Collins,CO,80509
+210,81000069,4858147,location_variant,zip_lost_leading_zero;street_suffix_variant,blank,N,001SYN000000488,NJ109714,single site,Y,Mount Laurel Nursing and Rehabilitation Center,Camden,NJ,08109
+211,81000069,4781255,ship_to_not_on_file,ship_to_not_on_file;zip_plus4,unknown_code,N,001SYN000000801,OK332550,primary,Y,Wexford Nursing and Rehabilitation Center,Tulsa,OK,74128
+212,81000070,4128950,name_mixed,name_abbreviation;name_punct_spacing;street_suffix_variant,correct,N,001SYN000000355,CT906224,single site,Y,Mount Vernon Behavioral Health,Hartford,CT,06115
+213,81000070,4781255,ship_to_not_on_file,ship_to_not_on_file;zip_plus4,unknown_code,N,001SYN000000801,OK332550,primary,Y,Wexford Nursing and Rehabilitation Center,Tulsa,OK,74128
+214,81000070,1810111,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000002,TX5014,single site,Y,Pine Hollow Surgical Center,San Marcos,TX,78666
+215,81000071,4248550,name_short_informal,name_short_informal;street_suffix_variant;zip_plus4,correct,N,001SYN000000392,TX283631,single site,Y,Canyon Hollow Children's Hospital,San Antonio,TX,78240
+216,81000071,7135241,mock_key_account,mock_key_account;name_punct_spacing,blank,Y,001MOCK00000005,TX5030,single site,Y,Mesa Verde Medical Center,El Paso,TX,79901
+217,81000071,4903166,location_variant,zip_blank;name_abbreviation;street_suffix_variant,unknown_code,N,001SYN000000404,AL491644,single site,Y,James Brannock Memorial Hospital,Austin,TX,78724
+218,81000072,4760309,name_punct_spacing,name_punct_spacing;zip_plus4,blank,N,001SYN000000003,TX983348,single site,Y,Oak Field Clinic,San Antonio,TX,78221
+219,81000072,4437894,name_abbreviation,name_abbreviation;street_suffix_variant;zip_plus4,wrong_member_code,N,001SYN000000504,FL626011,single site,Y,Quill Community Hospital,Orlando,FL,32833
+220,81000072,3420198,mock_key_account,mock_key_account;street_suffix_variant,blank,Y,001MOCK00000028,NM4420,single site,Y,Rio Grande Community Hospital,Las Cruces,NM,88001
+221,81000073,5858837,mock_key_account,mock_key_account;name_short_informal,correct,Y,001MOCK00000026,AZ3320,single site,Y,Sonoran Valley Health Center,Chandler,AZ,85225
+222,81000073,4470101,name_punct_spacing,name_punct_spacing;zip_plus4,correct,N,001SYN000000497,CO192261,single site,Y,Bluefalls Nursing and Rehabilitation Center,Colorado Springs,CO,80905
+223,81000073,4994679,name_short_informal,name_short_informal;street_suffix_variant,wrong_member_code,N,001SYN000000126,MA879298,single site,Y,Silver Point Medical Center,Boston,MA,02112
+224,81000074,4047122,name_abbreviation,name_abbreviation;street_suffix_variant,unknown_code,N,001SYN000000390,AZ472410,single site,Y,Bright View Rehabilitation Hospital,Mesa,AZ,85221
+225,81000074,3234302,mock_key_account,mock_key_account,correct,Y,001MOCK00000025,CO2130,single site,Y,Mountain View Regional Medical Center,Fort Collins,CO,80521
+226,81000074,4062972,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,blank,N,,,,,,,,
+227,81000075,4526086,name_mixed,name_abbreviation;name_punct_spacing,wrong_member_code,N,001SYN000000525,CO370647,single site,Y,Saint Bridget Health System,Fort Collins,CO,80538
+228,81000075,3077052,mock_key_account,mock_key_account,correct,Y,001MOCK00000018,AZ3311,single site,Y,Painted Sky Behavioral Health,Flagstaff,AZ,86001
+229,81000075,4155729,name_mixed,name_abbreviation;name_punct_spacing,correct,N,001SYN000000491,MA507979,single site,Y,Pinemeadow Nursing and Rehabilitation Center,Springfield,MA,01110
+230,81000076,4894708,clean,street_suffix_variant;zip_plus4,blank,N,001SYN000000470,OH766400,single site,Y,Summit Wood Health System,Columbus,OH,43240
+231,81000076,4842670,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,blank,N,001SYN000000792,CO723069,primary,Y,Elmvale Surgery Center,Pueblo,CO,81002
+232,81000076,4219069,ship_to_on_file,ship_to_on_file,blank,N,001SYN000000730,OH345174,Receiving Dock,N,Elm Brook Health System - Receiving Dock,Columbus,OH,43236
+233,81000077,4009861,no_valid_match_decoy,no_valid_match_decoy,wrong_member_code,N,,,,,,,,
+234,81000077,4763028,ship_to_on_file,ship_to_on_file;street_suffix_variant,blank,N,001SYN000000922,AZ762693,Surgery Center,N,Blue Field Surgery Center,Tucson,AZ,85704
+235,81000077,4602037,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000008,TX5041,single site,Y,Sandstone Orthopedic Institute,Lubbock,TX,79401
+236,81000078,4590860,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,blank,N,,,,,,,,
+237,81000078,4501525,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,correct,N,001SYN000000611,OH235210,primary,Y,Mount Laurel Behavioral Health,Columbus,OH,43216
+238,81000078,4878976,name_short_informal,name_short_informal;street_suffix_variant,unknown_code,N,001SYN000000663,VA415031,primary,Y,Blue Wood Clinic,Roanoke,VA,24009
+239,81000079,4046782,name_short_informal,name_short_informal;street_suffix_variant,blank,N,001SYN000000394,NJ374809,single site,Y,William Prescott Memorial Hospital,Trenton,NJ,08634
+240,81000079,4318777,name_punct_spacing,name_punct_spacing;street_suffix_variant,blank,N,001SYN000000269,PA659300,single site,Y,Amber Heights University Medical Center,Pittsburgh,PA,15220
+241,81000079,4018030,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,blank,N,,,,,,,,
+242,81000080,4322394,ship_to_on_file,ship_to_on_file;zip_plus4,correct,N,001SYN000000662,OH175610,Outpatient Imaging,N,Copperpark Children's Outpatient Imaging,Columbus,OH,43240
+243,81000080,4210359,name_punct_spacing,name_punct_spacing;street_suffix_variant,unknown_code,N,001SYN000000067,AL589922,single site,Y,High Bend Health Center,Pueblo,CO,81014
+244,81000080,4982463,name_abbreviation,name_abbreviation;street_suffix_variant,blank,N,001SYN000000495,TX962843,single site,Y,Copper Point Hospital,Dallas,TX,75224
+245,81000081,4602037,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000008,TX5041,single site,Y,Sandstone Orthopedic Institute,Lubbock,TX,79401
+246,81000081,4822958,name_punct_spacing,name_punct_spacing;street_suffix_variant,blank,N,001SYN000000291,GA428973,single site,Y,Pine Wood Behavioral Health,Savannah,GA,31427
+247,81000081,4459182,name_short_informal,name_short_informal;street_suffix_variant;zip_9digit_nodash,correct,N,001SYN000000095,GA589522,single site,Y,Pinecreek Health System,Savannah,GA,31404
+248,81000082,4171014,name_abbreviation,name_abbreviation;street_suffix_variant,correct,N,001SYN000000832,VA754080,primary,Y,Elizabeth Corwin Memorial Hospital,Richmond,VA,23213
+249,81000082,7655194,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000021,NM4410,single site,Y,High Plains Regional Medical Center,Roswell,NM,88201
+250,81000082,4809113,name_punct_spacing,name_punct_spacing,correct,N,001SYN000000055,PA483321,single site,Y,Harbor Haven Community Hospital,Pittsburgh,PA,15206
+251,81000083,8275367,mock_key_account,mock_key_account,blank,Y,001MOCK00000011,CO2102,single site,Y,Aspen Grove Medical Center,Boulder,CO,80302
+252,81000083,4681692,name_abbreviation,name_abbreviation;zip_plus4,blank,N,001SYN000000018,MA551826,single site,Y,Mount Pleasant Community Hospital,Worcester,MA,01617
+253,81000083,2215279,mock_key_account,mock_key_account,blank,Y,001MOCK00000003,TX5021,single site,Y,Riverbend Children's Hospital,Dallas,TX,75201
+254,81000084,4430233,ship_to_on_file,ship_to_on_file;street_suffix_variant,correct,N,001SYN000000854,OK512096,Outpatient Imaging,N,Brightcrest Clinic Outpatient Imaging,Oklahoma City,OK,73103
+255,81000084,1831970,mock_key_account,mock_key_account,correct,Y,001MOCK00000022,OK5501,single site,Y,Oak Hollow Memorial Hospital,Tulsa,OK,74103
+256,81000084,2521911,mock_key_account,mock_key_account;street_suffix_variant,wrong_member_code,Y,001MOCK00000015,AZ3301,single site,Y,Desert Bloom Medical Center,Phoenix,AZ,85004
+257,81000085,4271775,name_mixed,name_abbreviation;name_punct_spacing;street_suffix_variant,wrong_member_code,N,001SYN000000661,OH175610,primary,Y,Copperpark Children's Hospital,Columbus,OH,43240
+258,81000085,4286985,name_punct_spacing,name_punct_spacing;street_suffix_variant,correct,N,001SYN000000263,OK656603,single site,Y,Lake Hollow Children's Hospital,Tulsa,OK,74120
+259,81000085,4494227,name_mixed,name_abbreviation;name_punct_spacing;street_suffix_variant;zip_plus4,correct,N,001SYN000000144,FL780471,single site,Y,Saint Ignatius Nursing and Rehabilitation Center,Tampa,FL,33601
+260,81000086,4524517,location_variant,state_full_name;name_abbreviation;street_suffix_variant;zip_plus4,unknown_code,N,001SYN000000113,PA479816,single site,Y,Lake Heights Medical Center,Harrisburg,PA,17116
+261,81000086,4047122,name_abbreviation,name_abbreviation;street_suffix_variant,unknown_code,N,001SYN000000390,AZ472410,single site,Y,Bright View Rehabilitation Hospital,Mesa,AZ,85221
+262,81000086,4894807,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,blank,N,001SYN000000938,CO709666,primary,Y,Glen Vale Children's Hospital,Colorado Springs,CO,80926
+263,81000087,4025145,name_punct_spacing,name_punct_spacing;street_suffix_variant;zip_plus4,correct,N,001SYN000000171,OH431582,single site,Y,Willow Heights Children's Hospital,Dayton,OH,45440
+264,81000087,4745328,mock_key_account,mock_key_account;name_punct_spacing,wrong_member_code,Y,001MOCK00000019,NM4401,single site,Y,Willow Bend Medical Center,Albuquerque,NM,87102
+265,81000087,4046782,name_short_informal,name_short_informal;street_suffix_variant,blank,N,001SYN000000394,NJ374809,single site,Y,William Prescott Memorial Hospital,Trenton,NJ,08634
+266,81000088,4904175,no_valid_match_unrelated,no_valid_match_unrelated;zip_plus4,blank,N,,,,,,,,
+267,81000088,4773292,name_short_informal,name_short_informal,blank,N,001SYN000000794,FL210050,primary,Y,Mount Hermon Rehabilitation Hospital,Tampa,FL,33606
+268,81000088,4745328,mock_key_account,mock_key_account;name_punct_spacing,wrong_member_code,Y,001MOCK00000019,NM4401,single site,Y,Willow Bend Medical Center,Albuquerque,NM,87102
+269,81000089,4069415,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant;zip_plus4,blank,N,,,,,,,,
+270,81000089,4473078,ship_to_on_file,ship_to_on_file;street_suffix_variant;zip_plus4,correct,N,001SYN000000695,CT985242,Physical Therapy,N,Sun Bluff Clinic Physical Therapy,New Haven,CT,06532
+271,81000089,4556685,name_abbreviation,name_abbreviation;street_suffix_variant;zip_plus4,wrong_member_code,N,001SYN000000817,AZ797885,primary,Y,Glen Crossing Health System,Tucson,AZ,85718
+272,81000090,4301813,ship_to_on_file,ship_to_on_file;name_abbreviation;zip_plus4,blank,N,001SYN000000857,OK617135,Pharmacy,N,Blue Haven Health System - Pharmacy,Oklahoma City,OK,73138
+273,81000090,4650094,ship_to_on_file,ship_to_on_file;name_abbreviation;street_suffix_variant,correct,N,001SYN000000948,AZ146627,Outpatient Imaging,N,John Ellery Memorial Outpatient Imaging,Tucson,AZ,85739
+274,81000090,1831970,mock_key_account,mock_key_account,correct,Y,001MOCK00000022,OK5501,single site,Y,Oak Hollow Memorial Hospital,Tulsa,OK,74103
+275,81000091,4143575,name_punct_spacing,name_punct_spacing;street_suffix_variant,correct,N,001SYN000000509,AZ915963,single site,Y,River Hollow Community Hospital,Mesa,AZ,85202
+276,81000091,4996825,ship_to_on_file,ship_to_on_file;name_abbreviation,correct,N,001SYN000000687,FL434816,Home Health - Location 1,N,Margaret Calloway Memorial Home Health - Location 1,Orlando,FL,32840
+277,81000091,4982463,name_abbreviation,name_abbreviation;street_suffix_variant,blank,N,001SYN000000495,TX962843,single site,Y,Copper Point Hospital,Dallas,TX,75224
+278,81000092,4837727,name_abbreviation,name_abbreviation;street_suffix_variant,wrong_member_code,N,001SYN000000372,NJ544039,single site,Y,Clear Bend Medical Center,Camden,NJ,08140
+279,81000092,4214589,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,correct,N,001SYN000000866,OK170734,primary,Y,Clear Hollow Clinic,Oklahoma City,OK,73122
+280,81000092,4955277,location_variant,zip_lost_leading_zero;name_abbreviation;street_suffix_variant,correct,N,001SYN000000081,CT410426,single site,Y,Saint Rita Health System,Hartford,CT,06121
+281,81000093,4808846,name_short_informal,name_short_informal,correct,N,001SYN000000422,TX681063,single site,Y,Red Wood Hospital,Houston,TX,77036
+282,81000093,4087310,no_valid_match_decoy,no_valid_match_decoy;street_suffix_variant,unknown_code,N,,,,,,,,
+283,81000093,4942961,name_abbreviation,name_abbreviation,correct,N,001SYN000000410,TX677235,single site,Y,Mount Vernon Medical Center,Austin,TX,78719
+284,81000094,4046888,name_short_informal,name_short_informal;street_suffix_variant;zip_9digit_nodash,correct,N,001SYN000000558,CO384712,single site,Y,Hazel Vale Community Hospital,Fort Collins,CO,80517
+285,81000094,4669831,name_abbreviation,name_abbreviation;street_suffix_variant,correct,N,001SYN000000322,AZ206729,single site,Y,Prairie Vale Hospital,Tucson,AZ,85733
+286,81000094,4301813,ship_to_on_file,ship_to_on_file;name_abbreviation;zip_plus4,blank,N,001SYN000000857,OK617135,Pharmacy,N,Blue Haven Health System - Pharmacy,Oklahoma City,OK,73138
+287,81000095,4747273,clean,street_suffix_variant,correct,N,001SYN000000351,PA825294,single site,Y,Charles Ashford Memorial Hospital,Pittsburgh,PA,15206
+288,81000095,4878976,name_short_informal,name_short_informal;street_suffix_variant,unknown_code,N,001SYN000000663,VA415031,primary,Y,Blue Wood Clinic,Roanoke,VA,24009
+289,81000095,4407566,location_variant,zip_blank;name_abbreviation,correct,N,001SYN000000543,NJ239769,single site,Y,James Wexford Memorial Hospital,Trenton,NJ,08637
+290,81000096,4725500,name_short_informal,name_short_informal;street_suffix_variant,blank,N,001SYN000000279,OH421537,single site,Y,Prescott Medical Center,Dayton,OH,45439
+291,81000096,4834386,clean,street_suffix_variant,correct,N,001SYN000000198,CT356689,single site,Y,Sun View Health System,New Haven,CT,06537
+292,81000096,4456924,name_short_informal,name_short_informal;street_suffix_variant,correct,N,001SYN000000169,VA307111,single site,Y,Stonepark University Medical Center,Roanoke,VA,24023
+293,81000097,4009861,no_valid_match_decoy,no_valid_match_decoy,wrong_member_code,N,,,,,,,,
+294,81000097,4781255,ship_to_not_on_file,ship_to_not_on_file;zip_plus4,unknown_code,N,001SYN000000801,OK332550,primary,Y,Wexford Nursing and Rehabilitation Center,Tulsa,OK,74128
+295,81000097,4214589,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,correct,N,001SYN000000866,OK170734,primary,Y,Clear Hollow Clinic,Oklahoma City,OK,73122
+296,81000098,4466157,name_mixed,name_abbreviation;name_punct_spacing,correct,N,001SYN000000244,NJ538201,single site,Y,Sun Brook Regional Medical Center,Trenton,NJ,08620
+297,81000098,4009861,no_valid_match_decoy,no_valid_match_decoy,wrong_member_code,N,,,,,,,,
+298,81000098,4466157,name_mixed,name_abbreviation;name_punct_spacing,correct,N,001SYN000000244,NJ538201,single site,Y,Sun Brook Regional Medical Center,Trenton,NJ,08620
+299,81000099,7135241,mock_key_account,mock_key_account;name_punct_spacing,blank,Y,001MOCK00000005,TX5030,single site,Y,Mesa Verde Medical Center,El Paso,TX,79901
+300,81000099,4834386,clean,street_suffix_variant,correct,N,001SYN000000198,CT356689,single site,Y,Sun View Health System,New Haven,CT,06537
+301,81000099,4407566,location_variant,zip_blank;name_abbreviation,correct,N,001SYN000000543,NJ239769,single site,Y,James Wexford Memorial Hospital,Trenton,NJ,08637
+302,81000100,4801470,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,blank,N,001SYN000000843,CT284960,primary,Y,Bright Point Children's Hospital,Hartford,CT,06113
+303,81000100,4831067,name_abbreviation,name_abbreviation;zip_plus4,correct,N,001SYN000000004,CO637798,single site,Y,Willow Vale Rehabilitation Hospital,Fort Collins,CO,80521
+304,81000100,3420198,mock_key_account,mock_key_account;street_suffix_variant,blank,Y,001MOCK00000028,NM4420,single site,Y,Rio Grande Community Hospital,Las Cruces,NM,88001
+305,81000101,4670992,name_punct_spacing,name_punct_spacing;street_suffix_variant;zip_plus4,blank,N,001SYN000000562,NM468214,single site,Y,Saint Rita Hospital,Santa Fe,NM,87531
+306,81000101,4136588,location_variant,city_variant;name_abbreviation;street_suffix_variant,unknown_code,N,001SYN000000170,CO330070,single site,Y,Saint Elias Regional Medical Center,Colorado Springs,CO,80920
+307,81000101,4407566,location_variant,zip_blank;name_abbreviation,correct,N,001SYN000000543,NJ239769,single site,Y,James Wexford Memorial Hospital,Trenton,NJ,08637
+308,81000102,4928297,ship_to_on_file,ship_to_on_file;name_abbreviation;street_suffix_variant,correct,N,001SYN000000741,TX860729,Hospice,N,Riverhaven Children's Hospice,Dallas,TX,75224
+309,81000102,4954407,name_abbreviation,name_abbreviation;street_suffix_variant,correct,N,001SYN000000068,OH820470,single site,Y,Harbor Haven Nursing and Rehabilitation Center,Dayton,OH,45405
+310,81000102,4666327,name_short_informal,name_short_informal,blank,N,001SYN000000260,AZ689927,single site,Y,Maplewood Rehabilitation Hospital,Phoenix,AZ,85003
+311,81000103,4328533,location_variant,zip_lost_leading_zero;street_suffix_variant,correct,N,001SYN000000895,MA685703,primary,Y,Hazel Creek Nursing and Rehabilitation Center,Worcester,MA,01618
+312,81000103,4210359,name_punct_spacing,name_punct_spacing;street_suffix_variant,unknown_code,N,001SYN000000067,AL589922,single site,Y,High Bend Health Center,Pueblo,CO,81014
+313,81000103,4027963,name_abbreviation,name_abbreviation;street_suffix_variant,wrong_member_code,N,001SYN000000059,FL974331,single site,Y,Blue Wood Cancer Institute,Saint Petersburg,FL,33701
+314,81000104,4962436,name_mixed,name_abbreviation;name_punct_spacing;zip_plus4,blank,N,001SYN000000708,OH927755,primary,Y,Fair Point Medical Center,Cleveland,OH,44130
+315,81000104,4604591,ship_to_on_file,ship_to_on_file;name_abbreviation;street_suffix_variant,correct,N,001SYN000000681,NJ377814,Outpatient Imaging,N,Thomas Garrison Memorial Outpatient Imaging,Camden,NJ,08132
+316,81000104,7624039,mock_key_account,mock_key_account,correct,Y,001MOCK00000001,TX5013,single site,Y,Cedar Ridge Community Hospital,Round Rock,TX,78664
+317,81000105,4139466,name_abbreviation,name_abbreviation;street_suffix_variant,correct,N,001SYN000000336,PA857569,single site,Y,Bright Bend Nursing and Rehabilitation Center,Harrisburg,PA,17131
+318,81000105,4709137,mock_key_account,mock_key_account,correct,Y,001MOCK00000023,OK5502,single site,Y,Redbud Valley Medical Center,Oklahoma City,OK,73102
+319,81000105,4909377,name_abbreviation,name_abbreviation;zip_plus4,blank,N,001SYN000000191,TX923509,single site,Y,Saint Agnes Behavioral Health,San Antonio,TX,78227
+320,81000106,2037872,mock_key_account,mock_key_account;name_punct_spacing,wrong_member_code,Y,001MOCK00000020,NM4402,single site,Y,Turquoise Trail Hospital,Santa Fe,NM,87501
+321,81000106,4709137,mock_key_account,mock_key_account,correct,Y,001MOCK00000023,OK5502,single site,Y,Redbud Valley Medical Center,Oklahoma City,OK,73102
+322,81000106,4894708,clean,street_suffix_variant;zip_plus4,blank,N,001SYN000000470,OH766400,single site,Y,Summit Wood Health System,Columbus,OH,43240
+323,81000107,8122250,mock_key_account,mock_key_account;name_short_informal,correct,Y,001MOCK00000016,AZ3302,single site,Y,Saguaro Heights Hospital,Tucson,AZ,85701
+324,81000107,4415844,name_short_informal,name_short_informal,blank,N,001SYN000000251,TX930633,single site,Y,Saint Bridget's Hospital,Austin,TX,78727
+325,81000107,4763028,ship_to_on_file,ship_to_on_file;street_suffix_variant,blank,N,001SYN000000922,AZ762693,Surgery Center,N,Blue Field Surgery Center,Tucson,AZ,85704
+326,81000108,4840924,name_abbreviation,name_abbreviation,blank,N,001SYN000000283,GA455958,single site,Y,Hartwell Community Hospital,Savannah,GA,31423
+327,81000108,4059690,no_valid_match_unrelated,no_valid_match_unrelated,blank,N,,,,,,,,
+328,81000108,4416874,name_mixed,name_abbreviation;name_punct_spacing;zip_plus4,wrong_member_code,N,001SYN000000533,AZ710510,single site,Y,Canyon Ridge Medical Center,Phoenix,AZ,85031
+329,81000109,4894708,clean,street_suffix_variant;zip_plus4,blank,N,001SYN000000470,OH766400,single site,Y,Summit Wood Health System,Columbus,OH,43240
+330,81000109,4473078,ship_to_on_file,ship_to_on_file;street_suffix_variant;zip_plus4,correct,N,001SYN000000695,CT985242,Physical Therapy,N,Sun Bluff Clinic Physical Therapy,New Haven,CT,06532
+331,81000109,4381255,name_abbreviation,name_abbreviation;zip_9digit_nodash,blank,N,001SYN000000517,MA843427,single site,Y,Ingram Hospital,Springfield,MA,01102
+332,81000110,4650094,ship_to_on_file,ship_to_on_file;name_abbreviation;street_suffix_variant,correct,N,001SYN000000948,AZ146627,Outpatient Imaging,N,John Ellery Memorial Outpatient Imaging,Tucson,AZ,85739
+333,81000110,4286985,name_punct_spacing,name_punct_spacing;street_suffix_variant,correct,N,001SYN000000263,OK656603,single site,Y,Lake Hollow Children's Hospital,Tulsa,OK,74120
+334,81000110,4008664,location_variant,state_full_name;street_suffix_variant,correct,N,001SYN000000139,NJ449482,single site,Y,Blue Crest Nursing and Rehabilitation Center,Camden,NJ,08105
+335,81000111,4109953,ship_to_on_file,ship_to_on_file;street_suffix_variant,blank,N,001SYN000000718,CT678164,Hospice,N,Harborbluff Hospice,New Haven,CT,06535
+336,81000111,4810421,ship_to_on_file,ship_to_on_file;street_suffix_variant,blank,N,001SYN000000603,TX814144,Hospice,N,Holloway Community Hospice,Austin,TX,78736
+337,81000111,4025145,name_punct_spacing,name_punct_spacing;street_suffix_variant;zip_plus4,correct,N,001SYN000000171,OH431582,single site,Y,Willow Heights Children's Hospital,Dayton,OH,45440
+338,81000112,4411147,clean,street_suffix_variant,unknown_code,N,001SYN000000620,GA977341,primary,Y,Sunheights Cancer Institute,Atlanta,GA,30328
+339,81000112,4982463,name_abbreviation,name_abbreviation;street_suffix_variant,blank,N,001SYN000000495,TX962843,single site,Y,Copper Point Hospital,Dallas,TX,75224
+340,81000112,4438743,clean,clean,correct,N,001SYN000000066,TX186430,single site,Y,Glenheights Behavioral Health,Dallas,TX,75210
+341,81000113,4590416,name_abbreviation,name_abbreviation,blank,N,001SYN000000591,VA790439,single site,Y,John Tolliver Memorial Hospital,Roanoke,VA,24019
+342,81000113,4494227,name_mixed,name_abbreviation;name_punct_spacing;street_suffix_variant;zip_plus4,correct,N,001SYN000000144,FL780471,single site,Y,Saint Ignatius Nursing and Rehabilitation Center,Tampa,FL,33601
+343,81000113,4551741,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,wrong_member_code,N,001SYN000000876,OK759573,primary,Y,Saint Francis Hospital,Oklahoma City,OK,73125
+344,81000114,4916661,ship_to_not_on_file,ship_to_not_on_file;zip_plus4,correct,N,001SYN000000886,CO112247,primary,Y,Valley Heights Community Hospital,Pueblo,CO,81022
+345,81000114,4787238,clean,street_suffix_variant,wrong_member_code,N,001SYN000000475,CO120423,single site,Y,Stonepoint Regional Medical Center,Pueblo,CO,81027
+346,81000114,4364459,name_abbreviation,name_abbreviation,wrong_member_code,N,001SYN000000193,TX749458,single site,Y,Blue Creek Health Center,Houston,TX,77035
+347,81000115,4822958,name_punct_spacing,name_punct_spacing;street_suffix_variant,blank,N,001SYN000000291,GA428973,single site,Y,Pine Wood Behavioral Health,Savannah,GA,31427
+348,81000115,4136588,location_variant,city_variant;name_abbreviation;street_suffix_variant,unknown_code,N,001SYN000000170,CO330070,single site,Y,Saint Elias Regional Medical Center,Colorado Springs,CO,80920
+349,81000115,6433012,mock_key_account,mock_key_account;name_short_informal,blank,Y,001MOCK00000000,TX5012,single site,Y,Lakeview Regional Medical Center,Austin,TX,78701
+350,81000116,4570859,name_punct_spacing,name_punct_spacing;street_suffix_variant,unknown_code,N,001SYN000000473,MA740991,single site,Y,Elmpark Health System,Boston,MA,02129
+351,81000116,4840924,name_abbreviation,name_abbreviation,blank,N,001SYN000000283,GA455958,single site,Y,Hartwell Community Hospital,Savannah,GA,31423
+352,81000116,4466157,name_mixed,name_abbreviation;name_punct_spacing,correct,N,001SYN000000244,NJ538201,single site,Y,Sun Brook Regional Medical Center,Trenton,NJ,08620
+353,81000117,4544950,name_punct_spacing,name_punct_spacing,blank,N,001SYN000000344,CO891672,single site,Y,Saint Francis Nursing and Rehabilitation Center,Fort Collins,CO,80502
+354,81000117,4605998,ship_to_on_file,ship_to_on_file;street_suffix_variant,blank,N,001SYN000001008,GA491046,Physical Therapy,N,Mary Prescott Memorial Physical Therapy,Atlanta,GA,30311
+355,81000117,4110846,name_short_informal,name_short_informal;street_suffix_variant,blank,N,001SYN000000496,AZ581340,single site,Y,Mount Olive Nursing and Rehabilitation Center,Phoenix,AZ,85017
+356,81000118,4348782,name_short_informal,name_short_informal;street_suffix_variant;zip_plus4,unknown_code,N,001SYN000000238,MA964214,single site,Y,Ivy Falls University Medical Center,Boston,MA,02106
+357,81000118,2521911,mock_key_account,mock_key_account;street_suffix_variant,wrong_member_code,Y,001MOCK00000015,AZ3301,single site,Y,Desert Bloom Medical Center,Phoenix,AZ,85004
+358,81000118,4000930,name_mixed,name_abbreviation;name_punct_spacing;street_suffix_variant,correct,N,001SYN000000305,VA370688,single site,Y,Saint Gabriel Surgery Center,Norfolk,VA,23517
+359,81000119,4651787,clean,clean,blank,N,001SYN000000398,PA210360,single site,Y,Riversprings Children's Hospital,Harrisburg,PA,17104
+360,81000119,4662120,name_abbreviation,name_abbreviation,blank,N,001SYN000000261,CO819910,single site,Y,Mount Vernon Surgery Center,Fort Collins,CO,80509
+361,81000119,4760309,name_punct_spacing,name_punct_spacing;zip_plus4,blank,N,001SYN000000003,TX983348,single site,Y,Oak Field Clinic,San Antonio,TX,78221
+362,81000120,4494227,name_mixed,name_abbreviation;name_punct_spacing;street_suffix_variant;zip_plus4,correct,N,001SYN000000144,FL780471,single site,Y,Saint Ignatius Nursing and Rehabilitation Center,Tampa,FL,33601
+363,81000120,4834386,clean,street_suffix_variant,correct,N,001SYN000000198,CT356689,single site,Y,Sun View Health System,New Haven,CT,06537
+364,81000120,4248550,name_short_informal,name_short_informal;street_suffix_variant;zip_plus4,correct,N,001SYN000000392,TX283631,single site,Y,Canyon Hollow Children's Hospital,San Antonio,TX,78240
+365,81000121,4155447,ship_to_not_on_file,ship_to_not_on_file,wrong_member_code,N,001SYN000000847,MA722641,primary,Y,Lake Park Rehabilitation Hospital,Springfield,MA,01138
+366,81000121,4801470,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,blank,N,001SYN000000843,CT284960,primary,Y,Bright Point Children's Hospital,Hartford,CT,06113
+367,81000121,4062972,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,blank,N,,,,,,,,
+368,81000122,4877191,name_punct_spacing,name_punct_spacing,blank,N,001SYN000000057,VA872863,single site,Y,Goldenbrook Clinic,Richmond,VA,23222
+369,81000122,4155729,name_mixed,name_abbreviation;name_punct_spacing,correct,N,001SYN000000491,MA507979,single site,Y,Pinemeadow Nursing and Rehabilitation Center,Springfield,MA,01110
+370,81000122,4570780,name_short_informal,name_short_informal;street_suffix_variant,wrong_member_code,N,001SYN000000652,TX613374,primary,Y,Pinefalls University Medical Center,Dallas,TX,75208
+371,81000123,4027963,name_abbreviation,name_abbreviation;street_suffix_variant,wrong_member_code,N,001SYN000000059,FL974331,single site,Y,Blue Wood Cancer Institute,Saint Petersburg,FL,33701
+372,81000123,1991709,mock_key_account,mock_key_account;name_punct_spacing,blank,Y,001MOCK00000017,AZ3310,single site,Y,Copper Canyon Surgical Hospital,Mesa,AZ,85201
+373,81000123,4886359,name_abbreviation,name_abbreviation;zip_plus4,correct,N,001SYN000000292,OH263619,single site,Y,Helen Tolliver Memorial Hospital,Dayton,OH,45413
+374,81000124,4049551,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,unknown_code,N,,,,,,,,
+375,81000124,4155447,ship_to_not_on_file,ship_to_not_on_file,wrong_member_code,N,001SYN000000847,MA722641,primary,Y,Lake Park Rehabilitation Hospital,Springfield,MA,01138
+376,81000124,4159653,location_variant,zip_blank,blank,N,001SYN000000163,VA271026,single site,Y,Saint Francis Surgery Center,Roanoke,VA,24040
+377,81000125,4590860,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,blank,N,,,,,,,,
+378,81000125,5037655,mock_key_account,mock_key_account;name_punct_spacing,wrong_member_code,Y,001MOCK00000014,CO2120,single site,Y,Juniper Valley Health,Grand Junction,CO,81501
+379,81000125,4036391,clean,clean,blank,N,001SYN000000052,GA882347,single site,Y,Mount Olive Rehabilitation Hospital,Savannah,GA,31419
+380,81000126,4528280,name_short_informal,name_short_informal,correct,N,001SYN000000535,FL918673,single site,Y,Mount Olive Community Hospital,Tampa,FL,33633
+381,81000126,9513358,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000007,TX5040,single site,Y,Harbor Point Hospital,Corpus Christi,TX,78401
+382,81000126,4069415,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant;zip_plus4,blank,N,,,,,,,,
+383,81000127,4955277,location_variant,zip_lost_leading_zero;name_abbreviation;street_suffix_variant,correct,N,001SYN000000081,CT410426,single site,Y,Saint Rita Health System,Hartford,CT,06121
+384,81000127,4822958,name_punct_spacing,name_punct_spacing;street_suffix_variant,blank,N,001SYN000000291,GA428973,single site,Y,Pine Wood Behavioral Health,Savannah,GA,31427
+385,81000127,9513358,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000007,TX5040,single site,Y,Harbor Point Hospital,Corpus Christi,TX,78401
+386,81000128,4302305,ship_to_on_file,ship_to_on_file;name_abbreviation;street_suffix_variant,blank,N,001SYN000000728,OH345174,Home Health - Location 1,N,Elm Brook Home Health - Location 1,Columbus,OH,43232
+387,81000128,4651787,clean,clean,blank,N,001SYN000000398,PA210360,single site,Y,Riversprings Children's Hospital,Harrisburg,PA,17104
+388,81000128,4316459,name_abbreviation,name_abbreviation,correct,N,001SYN000000024,OH782961,single site,Y,Stone Falls Health System,Dayton,OH,45422
+389,81000129,4509876,no_valid_match_decoy,no_valid_match_decoy,blank,N,,,,,,,,
+390,81000129,4544950,name_punct_spacing,name_punct_spacing,blank,N,001SYN000000344,CO891672,single site,Y,Saint Francis Nursing and Rehabilitation Center,Fort Collins,CO,80502
+391,81000129,4139466,name_abbreviation,name_abbreviation;street_suffix_variant,correct,N,001SYN000000336,PA857569,single site,Y,Bright Bend Nursing and Rehabilitation Center,Harrisburg,PA,17131
+392,81000130,4154893,location_variant,state_full_name;name_abbreviation,blank,N,001SYN000000549,GA164700,single site,Y,Willow Creek Regional Medical Center,Atlanta,GA,30301
+393,81000130,4154893,location_variant,state_full_name;name_abbreviation,blank,N,001SYN000000549,GA164700,single site,Y,Willow Creek Regional Medical Center,Atlanta,GA,30301
+394,81000130,3234302,mock_key_account,mock_key_account,correct,Y,001MOCK00000025,CO2130,single site,Y,Mountain View Regional Medical Center,Fort Collins,CO,80521
+395,81000131,4709137,mock_key_account,mock_key_account,correct,Y,001MOCK00000023,OK5502,single site,Y,Redbud Valley Medical Center,Oklahoma City,OK,73102
+396,81000131,9513358,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000007,TX5040,single site,Y,Harbor Point Hospital,Corpus Christi,TX,78401
+397,81000131,4524517,location_variant,state_full_name;name_abbreviation;street_suffix_variant;zip_plus4,unknown_code,N,001SYN000000113,PA479816,single site,Y,Lake Heights Medical Center,Harrisburg,PA,17116
+398,81000132,1973060,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000006,TX5031,single site,Y,Bluebonnet Rehabilitation Hospital,Waco,TX,76701
+399,81000132,4456924,name_short_informal,name_short_informal;street_suffix_variant,correct,N,001SYN000000169,VA307111,single site,Y,Stonepark University Medical Center,Roanoke,VA,24023
+400,81000132,4142816,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant;zip_plus4,correct,N,001SYN000000862,TX611759,primary,Y,Bright Park Nursing and Rehabilitation Center,Fort Worth,TX,76137
+401,81000133,4658395,name_short_informal,name_short_informal,correct,N,001SYN000000115,OK997611,single site,Y,Saint Elias Rehabilitation Hospital,Oklahoma City,OK,73121
+402,81000133,4717286,name_abbreviation,name_abbreviation,correct,N,001SYN000000104,GA125716,single site,Y,Saint Clare Nursing and Rehabilitation Center,Atlanta,GA,30309
+403,81000133,4219069,ship_to_on_file,ship_to_on_file,blank,N,001SYN000000730,OH345174,Receiving Dock,N,Elm Brook Health System - Receiving Dock,Columbus,OH,43236
+404,81000134,4739305,clean,zip_plus4,blank,N,001SYN000000183,OK878954,single site,Y,Clear Grove Health System,Oklahoma City,OK,73131
+405,81000134,4488236,no_valid_match_decoy,no_valid_match_decoy;street_suffix_variant,blank,N,,,,,,,,
+406,81000134,4576622,location_variant,city_variant;street_suffix_variant,blank,N,001SYN000000380,OK487744,single site,Y,Fair Creek Surgery Center,Oklahoma City,OK,73137
+407,81000135,4337625,ship_to_on_file,ship_to_on_file;street_suffix_variant;zip_9digit_nodash,wrong_member_code,N,001SYN000000839,CO132916,Surgery Center,N,Willow Park Surgery Center Surgery Center,Pueblo,CO,81036
+408,81000135,4238441,location_variant,zip_lost_leading_zero;name_abbreviation,blank,N,001SYN000000128,NJ173347,single site,Y,Saint Lucia Surgery Center,Trenton,NJ,08612
+409,81000135,4047122,name_abbreviation,name_abbreviation;street_suffix_variant,unknown_code,N,001SYN000000390,AZ472410,single site,Y,Bright View Rehabilitation Hospital,Mesa,AZ,85221
+410,81000136,3530829,mock_key_account,mock_key_account;name_short_informal,wrong_member_code,Y,001MOCK00000000,TX5012,single site,Y,Lakeview Regional Medical Center,Austin,TX,78701
+411,81000136,4982463,name_abbreviation,name_abbreviation;street_suffix_variant,blank,N,001SYN000000495,TX962843,single site,Y,Copper Point Hospital,Dallas,TX,75224
+412,81000136,4904175,no_valid_match_unrelated,no_valid_match_unrelated;zip_plus4,blank,N,,,,,,,,
+413,81000137,4551665,ship_to_on_file,ship_to_on_file;name_abbreviation;street_suffix_variant;zip_9digit_nodash,correct,N,001SYN000000646,CT749117,Receiving Dock,N,Hazel Haven Cancer Institute - Receiving Dock,Hartford,CT,06102
+414,81000137,4069415,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant;zip_plus4,blank,N,,,,,,,,
+415,81000137,4877191,name_punct_spacing,name_punct_spacing,blank,N,001SYN000000057,VA872863,single site,Y,Goldenbrook Clinic,Richmond,VA,23222
+416,81000138,9990608,mock_key_account,mock_key_account,correct,Y,001MOCK00000003,TX5021,single site,Y,Riverbend Children's Hospital,Dallas,TX,75201
+417,81000138,4763028,ship_to_on_file,ship_to_on_file;street_suffix_variant,blank,N,001SYN000000922,AZ762693,Surgery Center,N,Blue Field Surgery Center,Tucson,AZ,85704
+418,81000138,4322394,ship_to_on_file,ship_to_on_file;zip_plus4,correct,N,001SYN000000662,OH175610,Outpatient Imaging,N,Copperpark Children's Outpatient Imaging,Columbus,OH,43240
+419,81000139,4039783,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant;zip_9digit_nodash,unknown_code,N,001SYN000000604,OH398017,primary,Y,Silver View Community Hospital,Columbus,OH,43214
+420,81000139,4626132,name_mixed,name_abbreviation;name_punct_spacing,correct,N,001SYN000000630,OH894177,primary,Y,Red Point Health System,Columbus,OH,43223
+421,81000139,4604591,ship_to_on_file,ship_to_on_file;name_abbreviation;street_suffix_variant,correct,N,001SYN000000681,NJ377814,Outpatient Imaging,N,Thomas Garrison Memorial Outpatient Imaging,Camden,NJ,08132
+422,81000140,4301813,ship_to_on_file,ship_to_on_file;name_abbreviation;zip_plus4,blank,N,001SYN000000857,OK617135,Pharmacy,N,Blue Haven Health System - Pharmacy,Oklahoma City,OK,73138
+423,81000140,4133913,name_short_informal,name_short_informal,correct,N,001SYN000000134,VA287206,single site,Y,Maple Springs Community Hospital,Richmond,VA,23210
+424,81000140,4747273,clean,street_suffix_variant,correct,N,001SYN000000351,PA825294,single site,Y,Charles Ashford Memorial Hospital,Pittsburgh,PA,15206
+425,81000141,4576622,location_variant,city_variant;street_suffix_variant,blank,N,001SYN000000380,OK487744,single site,Y,Fair Creek Surgery Center,Oklahoma City,OK,73137
+426,81000141,4348782,name_short_informal,name_short_informal;street_suffix_variant;zip_plus4,unknown_code,N,001SYN000000238,MA964214,single site,Y,Ivy Falls University Medical Center,Boston,MA,02106
+427,81000141,4426775,no_valid_match_decoy,no_valid_match_decoy,blank,N,,,,,,,,
+428,81000142,2037872,mock_key_account,mock_key_account;name_punct_spacing,wrong_member_code,Y,001MOCK00000020,NM4402,single site,Y,Turquoise Trail Hospital,Santa Fe,NM,87501
+429,81000142,4159653,location_variant,zip_blank,blank,N,001SYN000000163,VA271026,single site,Y,Saint Francis Surgery Center,Roanoke,VA,24040
+430,81000142,4745328,mock_key_account,mock_key_account;name_punct_spacing,wrong_member_code,Y,001MOCK00000019,NM4401,single site,Y,Willow Bend Medical Center,Albuquerque,NM,87102
+431,81000143,4658395,name_short_informal,name_short_informal,correct,N,001SYN000000115,OK997611,single site,Y,Saint Elias Rehabilitation Hospital,Oklahoma City,OK,73121
+432,81000143,1781527,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000024,TX5060,single site,Y,Saint Brigid's Hospital,San Antonio,TX,78205
+433,81000143,4025145,name_punct_spacing,name_punct_spacing;street_suffix_variant;zip_plus4,correct,N,001SYN000000171,OH431582,single site,Y,Willow Heights Children's Hospital,Dayton,OH,45440
+434,81000144,4456924,name_short_informal,name_short_informal;street_suffix_variant,correct,N,001SYN000000169,VA307111,single site,Y,Stonepark University Medical Center,Roanoke,VA,24023
+435,81000144,4219069,ship_to_on_file,ship_to_on_file,blank,N,001SYN000000730,OH345174,Receiving Dock,N,Elm Brook Health System - Receiving Dock,Columbus,OH,43236
+436,81000144,4143575,name_punct_spacing,name_punct_spacing;street_suffix_variant,correct,N,001SYN000000509,AZ915963,single site,Y,River Hollow Community Hospital,Mesa,AZ,85202
+437,81000145,1831970,mock_key_account,mock_key_account,correct,Y,001MOCK00000022,OK5501,single site,Y,Oak Hollow Memorial Hospital,Tulsa,OK,74103
+438,81000145,4783241,ship_to_not_on_file,ship_to_not_on_file,correct,N,001SYN000000668,MA776117,primary,Y,Fair Crossing Hospital,Springfield,MA,01112
+439,81000145,4079331,location_variant,zip_typo;name_abbreviation;street_suffix_variant,blank,N,001SYN000000949,AZ441709,primary,Y,Mount Pleasant Surgery Center,Mesa,AZ,85221
+440,81000146,4359256,name_short_informal,name_short_informal,blank,N,001SYN000000235,NJ689182,single site,Y,Golden Meadow Health System,Camden,NJ,08127
+441,81000146,4840924,name_abbreviation,name_abbreviation,blank,N,001SYN000000283,GA455958,single site,Y,Hartwell Community Hospital,Savannah,GA,31423
+442,81000146,4996825,ship_to_on_file,ship_to_on_file;name_abbreviation,correct,N,001SYN000000687,FL434816,Home Health - Location 1,N,Margaret Calloway Memorial Home Health - Location 1,Orlando,FL,32840
+443,81000147,4651787,clean,clean,blank,N,001SYN000000398,PA210360,single site,Y,Riversprings Children's Hospital,Harrisburg,PA,17104
+444,81000147,4981029,clean,clean,blank,N,001SYN000000141,MA460574,single site,Y,Amber Ridge Health System,Boston,MA,02138
+445,81000147,4046055,clean,clean,blank,N,001SYN000000464,NJ725423,single site,Y,Fair Wood Surgery Center,Camden,NJ,08125
+446,81000148,4552715,name_short_informal,name_short_informal;street_suffix_variant,correct,N,001SYN000000515,OH356680,single site,Y,William Ashford Memorial Hospital,Cleveland,OH,44135
+447,81000148,4316459,name_abbreviation,name_abbreviation,correct,N,001SYN000000024,OH782961,single site,Y,Stone Falls Health System,Dayton,OH,45422
+448,81000148,4570859,name_punct_spacing,name_punct_spacing;street_suffix_variant,unknown_code,N,001SYN000000473,MA740991,single site,Y,Elmpark Health System,Boston,MA,02129
+449,81000149,4110846,name_short_informal,name_short_informal;street_suffix_variant,blank,N,001SYN000000496,AZ581340,single site,Y,Mount Olive Nursing and Rehabilitation Center,Phoenix,AZ,85017
+450,81000149,4470364,name_punct_spacing,name_punct_spacing;street_suffix_variant,blank,N,001SYN000000808,FL687006,primary,Y,Pendry Health Center,Orlando,FL,32838
+451,81000149,4501525,ship_to_not_on_file,ship_to_not_on_file;street_suffix_variant,correct,N,001SYN000000611,OH235210,primary,Y,Mount Laurel Behavioral Health,Columbus,OH,43216
+452,81000150,4444189,name_abbreviation,name_abbreviation,blank,N,001SYN000000232,GA787708,single site,Y,Bright Grove Behavioral Health,Savannah,GA,31415
+453,81000150,1781527,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000024,TX5060,single site,Y,Saint Brigid's Hospital,San Antonio,TX,78205
+454,81000150,4133913,name_short_informal,name_short_informal,correct,N,001SYN000000134,VA287206,single site,Y,Maple Springs Community Hospital,Richmond,VA,23210
+455,81000151,4438743,clean,clean,correct,N,001SYN000000066,TX186430,single site,Y,Glenheights Behavioral Health,Dallas,TX,75210
+456,81000151,4154893,location_variant,state_full_name;name_abbreviation,blank,N,001SYN000000549,GA164700,single site,Y,Willow Creek Regional Medical Center,Atlanta,GA,30301
+457,81000151,4607480,name_short_informal,name_short_informal;street_suffix_variant,correct,N,001SYN000000830,TX456829,primary,Y,Green Field Rehabilitation Hospital,Dallas,TX,75202
+458,81000152,3077052,mock_key_account,mock_key_account,correct,Y,001MOCK00000018,AZ3311,single site,Y,Painted Sky Behavioral Health,Flagstaff,AZ,86001
+459,81000152,4787238,clean,street_suffix_variant,wrong_member_code,N,001SYN000000475,CO120423,single site,Y,Stonepoint Regional Medical Center,Pueblo,CO,81027
+460,81000152,4535128,ship_to_not_on_file,ship_to_not_on_file;zip_plus4,unknown_code,N,001SYN000000914,NJ420702,primary,Y,Valley Meadow Hospital,Trenton,NJ,08614
+461,81000153,4201287,name_abbreviation,name_abbreviation,blank,N,001SYN000000117,CT224141,single site,Y,Pine Field University Medical Center,Hartford,CT,06104
+462,81000153,9990608,mock_key_account,mock_key_account,correct,Y,001MOCK00000003,TX5021,single site,Y,Riverbend Children's Hospital,Dallas,TX,75201
+463,81000153,4904175,no_valid_match_unrelated,no_valid_match_unrelated;zip_plus4,blank,N,,,,,,,,
+464,81000154,4133913,name_short_informal,name_short_informal,correct,N,001SYN000000134,VA287206,single site,Y,Maple Springs Community Hospital,Richmond,VA,23210
+465,81000154,4787238,clean,street_suffix_variant,wrong_member_code,N,001SYN000000475,CO120423,single site,Y,Stonepoint Regional Medical Center,Pueblo,CO,81027
+466,81000154,4449198,name_short_informal,name_short_informal;street_suffix_variant,correct,N,001SYN000000437,VA373900,single site,Y,Green Heights Clinic,Richmond,VA,23235
+467,81000155,2976225,mock_key_account,mock_key_account,correct,Y,001MOCK00000029,TX5070,single site,Y,Clearwater Springs Hospital,Abilene,TX,79601
+468,81000155,4717286,name_abbreviation,name_abbreviation,correct,N,001SYN000000104,GA125716,single site,Y,Saint Clare Nursing and Rehabilitation Center,Atlanta,GA,30309
+469,81000155,4607480,name_short_informal,name_short_informal;street_suffix_variant,correct,N,001SYN000000830,TX456829,primary,Y,Green Field Rehabilitation Hospital,Dallas,TX,75202
+470,81000156,3530829,mock_key_account,mock_key_account;name_short_informal,wrong_member_code,Y,001MOCK00000000,TX5012,single site,Y,Lakeview Regional Medical Center,Austin,TX,78701
+471,81000156,4201287,name_abbreviation,name_abbreviation,blank,N,001SYN000000117,CT224141,single site,Y,Pine Field University Medical Center,Hartford,CT,06104
+472,81000156,4155447,ship_to_not_on_file,ship_to_not_on_file,wrong_member_code,N,001SYN000000847,MA722641,primary,Y,Lake Park Rehabilitation Hospital,Springfield,MA,01138
+473,81000157,2441955,mock_key_account,mock_key_account;street_suffix_variant,blank,Y,001MOCK00000010,CO2101,single site,Y,Granite Peak Hospital,Denver,CO,80202
+474,81000157,2441955,mock_key_account,mock_key_account;street_suffix_variant,blank,Y,001MOCK00000010,CO2101,single site,Y,Granite Peak Hospital,Denver,CO,80202
+475,81000157,4590416,name_abbreviation,name_abbreviation,blank,N,001SYN000000591,VA790439,single site,Y,John Tolliver Memorial Hospital,Roanoke,VA,24019
+476,81000158,8015764,mock_key_account,mock_key_account,correct,Y,001MOCK00000012,CO2110,single site,Y,Silver Creek Regional Hospital,Colorado Springs,CO,80903
+477,81000158,4584829,clean,clean,blank,N,001SYN000000242,MA103407,single site,Y,Highgrove University Medical Center,Worcester,MA,01614
+478,81000158,4301813,ship_to_on_file,ship_to_on_file;name_abbreviation;zip_plus4,blank,N,001SYN000000857,OK617135,Pharmacy,N,Blue Haven Health System - Pharmacy,Oklahoma City,OK,73138
+479,81000159,4954407,name_abbreviation,name_abbreviation;street_suffix_variant,correct,N,001SYN000000068,OH820470,single site,Y,Harbor Haven Nursing and Rehabilitation Center,Dayton,OH,45405
+480,81000159,4047122,name_abbreviation,name_abbreviation;street_suffix_variant,unknown_code,N,001SYN000000390,AZ472410,single site,Y,Bright View Rehabilitation Hospital,Mesa,AZ,85221
+481,81000159,4188227,clean,street_suffix_variant,blank,N,001SYN000000556,OK942261,single site,Y,Brightvale University Medical Center,Oklahoma City,OK,73124
+482,81000160,4355819,no_valid_match_decoy,no_valid_match_decoy,unknown_code,N,,,,,,,,
+483,81000160,4783241,ship_to_not_on_file,ship_to_not_on_file,correct,N,001SYN000000668,MA776117,primary,Y,Fair Crossing Hospital,Springfield,MA,01112
+484,81000160,4850270,name_abbreviation,name_abbreviation;zip_plus4,correct,N,001SYN000000130,CT729843,single site,Y,John Yardley Memorial Hospital,New Haven,CT,06533
+485,81000161,3077052,mock_key_account,mock_key_account,correct,Y,001MOCK00000018,AZ3311,single site,Y,Painted Sky Behavioral Health,Flagstaff,AZ,86001
+486,81000161,4552715,name_short_informal,name_short_informal;street_suffix_variant,correct,N,001SYN000000515,OH356680,single site,Y,William Ashford Memorial Hospital,Cleveland,OH,44135
+487,81000161,4087310,no_valid_match_decoy,no_valid_match_decoy;street_suffix_variant,unknown_code,N,,,,,,,,
+488,81000162,4359256,name_short_informal,name_short_informal,blank,N,001SYN000000235,NJ689182,single site,Y,Golden Meadow Health System,Camden,NJ,08127
+489,81000162,4770572,ship_to_on_file,ship_to_on_file;name_abbreviation;street_suffix_variant,blank,N,001SYN000000781,NJ667174,Surgery Center,N,Helen Danforth Memorial Surgery Center,Trenton,NJ,08612
+490,81000162,7655194,mock_key_account,mock_key_account;street_suffix_variant,correct,Y,001MOCK00000021,NM4410,single site,Y,High Plains Regional Medical Center,Roswell,NM,88201
+491,81000163,4479162,no_valid_match_decoy,no_valid_match_decoy,blank,N,,,,,,,,
+492,81000163,4897160,no_valid_match_decoy,no_valid_match_decoy;street_suffix_variant;zip_plus4,blank,N,,,,,,,,
+493,81000163,4551665,ship_to_on_file,ship_to_on_file;name_abbreviation;street_suffix_variant;zip_9digit_nodash,correct,N,001SYN000000646,CT749117,Receiving Dock,N,Hazel Haven Cancer Institute - Receiving Dock,Hartford,CT,06102
+494,81000164,4955277,location_variant,zip_lost_leading_zero;name_abbreviation;street_suffix_variant,correct,N,001SYN000000081,CT410426,single site,Y,Saint Rita Health System,Hartford,CT,06121
+495,81000164,4831067,name_abbreviation,name_abbreviation;zip_plus4,correct,N,001SYN000000004,CO637798,single site,Y,Willow Vale Rehabilitation Hospital,Fort Collins,CO,80521
+496,81000164,4590860,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,blank,N,,,,,,,,
+497,81000165,4316459,name_abbreviation,name_abbreviation,correct,N,001SYN000000024,OH782961,single site,Y,Stone Falls Health System,Dayton,OH,45422
+498,81000165,4062972,no_valid_match_unrelated,no_valid_match_unrelated;street_suffix_variant,blank,N,,,,,,,,
+499,81000165,4662120,name_abbreviation,name_abbreviation,blank,N,001SYN000000261,CO819910,single site,Y,Mount Vernon Surgery Center,Fort Collins,CO,80509
+500,81000166,4406165,location_variant,city_variant,unknown_code,N,001SYN000000589,FL216621,single site,Y,Willow Creek Rehabilitation Hospital,Saint Petersburg,FL,33725
+501,81000166,4590416,name_abbreviation,name_abbreviation,blank,N,001SYN000000591,VA790439,single site,Y,John Tolliver Memorial Hospital,Roanoke,VA,24019

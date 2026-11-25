@@ -9,6 +9,11 @@ from pathlib import Path
 
 import openpyxl
 
+from engine.supplier_presets import MEDLINE
+
+# The Medline preset runs member_match; the key, rollup and multi-file tests exercise gpo_key verification.
+MEDLINE_GPO_KEY = {**MEDLINE, "profile": {**MEDLINE["profile"], "identity_mode": "gpo_key"}}
+
 HEADERS = [
     "InvoiceNumber", "InvoiceDate", "Medline Account #", "Account Name", "Account Street",
     "Account City", "Account State", "Account Zip", "GPO ID", "Extended Price Amount",

@@ -182,7 +182,7 @@ Key difference from the Guerbet prototype: matched JDE numbers are **persisted t
 
 A supplier is a profile plus a column map. Add a dict like `MEDLINE` to `engine/supplier_presets.py` and run `scripts/seed_admin_fee_suppliers.py` (part of `make seed`). Relevant profile settings:
 
-- `identity_mode`: `member_match` (default) or `gpo_key` (verify the GPO ID against a key file; load it with `--gpo-key`, `scripts/load_gpo_key.py`, or Admin › Suppliers › Edit)
+- `identity_mode`: `member_match` (default) or `gpo_key` (verify the GPO ID against a key file; load it with `--gpo-key`, `scripts/load_gpo_key.py`, or Admin › Suppliers › Edit). The seed switches a preset to `gpo_key` only once its key has loaded; a key without the ZIP column is loaded street-only. At startup the API logs a warning for any supplier in `gpo_key` mode with no key. Medline's preset is `member_match` for now.
 - `volume_mode`: `sum` (default) or `blank` (Volume left empty, for files that carry revenue only)
 - `contract_id`: written to every Upload row's Contract ID (a contract number or a Salesforce ID)
 - `skip_rows_where_col_null`: strips summary/total rows. Pick a column only summary rows leave blank, so a data row with a gap isn't stripped.

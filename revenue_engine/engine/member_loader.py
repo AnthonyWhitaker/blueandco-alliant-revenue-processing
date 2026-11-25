@@ -26,7 +26,19 @@ _COL_NAMES = {
     "billing_city":           ["billing city", "city"],
     "billing_state":          ["billing state/province", "billing state", "state"],
     "billing_zip":            ["billing zip/postal code", "billing zip", "zip", "postal code"],
+    "billing_street":         ["billing street", "billing address", "street"],
+    # TODO(real data): confirm which Account List column marks a facility's primary site.
+    "is_primary_site":        ["is primary", "is primary site", "primary site", "primary location", "primary"],
 }
+
+_YES = {"Y", "YES", "TRUE", "1", "X", "PRIMARY"}
+_NO = {"N", "NO", "FALSE", "0", "SHIP-TO", "SHIP TO"}
+
+
+def _primary_flag(value: str) -> Optional[int]:
+    """1 / 0 for a yes / no cell; None when blank or not recognisable (the list doesn't say)."""
+    v = value.strip().upper()
+    return 1 if v in _YES else 0 if v in _NO else None
 
 
 def _find_col(df_cols: list[str], candidates: list[str]) -> Optional[str]:
@@ -112,6 +124,8 @@ def load_account_list(
     col_city    = gc("billing_city")
     col_state   = gc("billing_state")
     col_zip     = gc("billing_zip")
+    col_street  = gc("billing_street")
+    col_primary = gc("is_primary_site")
 
     if not col_name:
         raise ValueError("Cannot find Account Name column in Account List file.")
@@ -153,6 +167,8 @@ def load_account_list(
         city    = _cell(row, col_city)
         state   = _cell(row, col_state)
         zip_raw = _cell(row, col_zip)
+        street  = _cell(row, col_street)
+        primary = _primary_flag(_cell(row, col_primary))
 
         # Determine effective entity code
         entity_code = pec if pec else alliant
@@ -175,6 +191,8 @@ def load_account_list(
             norm_city or None,
             norm_state or None,
             norm_zip or None,
+            street or None,
+            primary,
         )
         # The member this row updates without an Account ID upsert: a row without an ID that matches by
         # identity, or a row with a new ID whose facility was loaded earlier without one (it takes the ID).
@@ -193,6 +211,7 @@ def load_account_list(
                         name = ?, canonical_key = ?,
                         billing_city = ?, billing_state = ?, billing_zip = ?,
                         norm_city = ?, norm_state = ?, norm_zip = ?,
+                        billing_street = ?, is_primary_site = ?,
                         is_active = 1, updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
                     """,
@@ -207,8 +226,8 @@ def load_account_list(
                         account_id, premier_entity_code, alliant_entity_code, entity_code,
                         name, canonical_key,
                         billing_city, billing_state, billing_zip,
-                        norm_city, norm_state, norm_zip
-                    ) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        norm_city, norm_state, norm_zip, billing_street, is_primary_site
+                    ) VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     fields,
                 )
@@ -221,8 +240,8 @@ def load_account_list(
                         account_id, premier_entity_code, alliant_entity_code, entity_code,
                         name, canonical_key,
                         billing_city, billing_state, billing_zip,
-                        norm_city, norm_state, norm_zip
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        norm_city, norm_state, norm_zip, billing_street, is_primary_site
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(account_id) DO UPDATE SET
                         premier_entity_code = excluded.premier_entity_code,
                         alliant_entity_code = excluded.alliant_entity_code,
@@ -235,6 +254,8 @@ def load_account_list(
                         norm_city           = excluded.norm_city,
                         norm_state          = excluded.norm_state,
                         norm_zip            = excluded.norm_zip,
+                        billing_street      = excluded.billing_street,
+                        is_primary_site     = excluded.is_primary_site,
                         is_active           = 1,
                         updated_at          = CURRENT_TIMESTAMP
                     """,

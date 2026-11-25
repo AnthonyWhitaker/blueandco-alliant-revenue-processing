@@ -156,6 +156,8 @@ CREATE TABLE IF NOT EXISTS member (
     billing_city            TEXT,
     billing_state           TEXT,
     billing_zip             TEXT,
+    billing_street          TEXT,              -- Street, to pick between sites sharing an entity code
+    is_primary_site         INTEGER,           -- 1 primary / 0 ship-to site; NULL when the list doesn't say
     -- Pre-normalized fields (stored for fast matching without re-normalizing)
     norm_city               TEXT,
     norm_state              TEXT,

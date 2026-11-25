@@ -205,6 +205,8 @@ def init_db(db_path: Optional[str] = None):
     _safe_add_column(conn, "revenue_row", "duplicate_group", "INTEGER" if not is_mssql() else "INT")
     _safe_add_column(conn, "gpo_key_entry", "zip", text)
     _safe_add_column(conn, "gpo_key_entry", "zip_norm", text)
+    _safe_add_column(conn, "member", "billing_street", text)
+    _safe_add_column(conn, "member", "is_primary_site", "INTEGER" if not is_mssql() else "INT")
 
     return conn
 

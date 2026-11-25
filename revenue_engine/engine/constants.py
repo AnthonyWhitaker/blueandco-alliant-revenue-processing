@@ -59,6 +59,10 @@ MATCH_STATE         = "state"
 MATCH_NATIONWIDE    = "nationwide"
 MATCH_UNMATCHED     = "unmatched"
 MATCH_ENTITY_CODE   = "entity_code_exact"
+# An entity code shared by several members (ship-to sites): which rule picked the site.
+MATCH_ENTITY_CODE_SITE_ADDRESS = "entity_code_site_address"  # row street + ZIP equal one site's
+MATCH_ENTITY_CODE_PRIMARY      = "entity_code_primary_site"  # else the site flagged primary
+MATCH_ENTITY_CODE_NO_PRIMARY   = "entity_code_no_primary"    # else unmatched, to review (not a match)
 MATCH_ACCOUNT_ID    = "account_id_exact"
 MATCH_PIVOT_ALLOCATION = "pivot_allocation"
 MATCH_GPO_KEY       = "gpo_key"
@@ -228,3 +232,25 @@ STATE_ABBREV = {
     "PR": "PUERTO RICO", "VI": "VIRGIN ISLANDS",
 }
 STATE_FULL_TO_ABBREV = {v: k for k, v in STATE_ABBREV.items()}
+
+# ---------------------------------------------------------------------------
+# Street words → USPS standard abbreviation (Publication 28), for comparing
+# street addresses (engine/normalizer.normalize_street). Unit designators map
+# to "" so "Suite 219", "STE 219", "#219" all reduce to "219".
+# ---------------------------------------------------------------------------
+STREET_ABBREV = {
+    # suffixes
+    "ALLEY": "ALY", "AVENUE": "AVE", "AV": "AVE", "AVEN": "AVE", "BOULEVARD": "BLVD", "BOUL": "BLVD",
+    "CENTER": "CTR", "CENTRE": "CTR", "CIRCLE": "CIR", "COURT": "CT", "CROSSING": "XING", "DRIVE": "DR",
+    "DRV": "DR", "EXPRESSWAY": "EXPY", "FREEWAY": "FWY", "HEIGHTS": "HTS", "HIGHWAY": "HWY", "HIWAY": "HWY",
+    "LANE": "LN", "PARKWAY": "PKWY", "PKY": "PKWY", "PARKWY": "PKWY", "PLACE": "PL", "PLAZA": "PLZ",
+    "POINT": "PT", "ROAD": "RD", "ROUTE": "RTE", "SQUARE": "SQ", "STREET": "ST", "STR": "ST",
+    "TERRACE": "TER", "TRAIL": "TRL", "TURNPIKE": "TPKE", "WY": "WAY",
+    # directionals
+    "NORTH": "N", "SOUTH": "S", "EAST": "E", "WEST": "W",
+    "NORTHEAST": "NE", "NORTHWEST": "NW", "SOUTHEAST": "SE", "SOUTHWEST": "SW",
+    # unit designators: dropped, the number stays
+    "SUITE": "", "STE": "", "UNIT": "", "APT": "", "APARTMENT": "", "NO": "",
+    # secondary words kept, but spelled one way
+    "BUILDING": "BLDG", "FLOOR": "FL", "ROOM": "RM",
+}

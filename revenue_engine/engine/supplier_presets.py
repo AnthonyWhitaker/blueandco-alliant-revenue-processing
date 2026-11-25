@@ -9,7 +9,12 @@ same settings can be edited afterwards in Admin > Suppliers / Column Maps.
 Profile keys not given fall back to the supplier_profile column defaults.
 """
 
+from dataclasses import dataclass, field
+from typing import Optional
+
+from .constants import IDENTITY_GPO_KEY, IDENTITY_MEMBER_MATCH
 from .db import execute_insert_ignore, execute_upsert
+from .gpo_key import KeyFileError, load_gpo_key, without_missing_zip
 
 # Every supplier_profile column a preset may set.
 _PROFILE_FIELDS = [
@@ -27,15 +32,17 @@ _DEFAULTS = {
 MEDLINE = {
     "profile": dict(
         name="Medline",
-        description="Medline — item-level invoice lines (one row per invoice line). GPO ID is verified against "
-                    "the Medline GPO key by account number, account name and address; lines roll up to one "
-                    "row per GPO ID per month (Volume = extended price, Total Revenue = GPO fee).",
+        description="Medline — item-level invoice lines (one row per invoice line). Facilities are matched to "
+                    "members by GPO ID, Medline account number history and name/location (member matching); "
+                    "lines roll up to one row per facility per month (Volume = extended price, Total Revenue = "
+                    "GPO fee). Switch identity_mode to gpo_key to verify GPO IDs against a loaded GPO key instead.",
         contract_id="AL-DS-001",
         payor_filter_name="Medline",
         # Only the grand-total row at the bottom has no invoice number. (Not the account number: an
         # invoice line missing its account number must reach the exceptions report, not be stripped.)
         skip_rows_where_col_null="InvoiceNumber",
-        identity_mode="gpo_key",
+        # What Medline runs today. gpo_key verification is built and tested, but not switched on yet.
+        identity_mode="member_match",
         volume_mode="sum",
     ),
     # Headers of the mock file (scripts/make_medline_mock.py), modelled on Medline's 22-column file.
@@ -110,3 +117,54 @@ def apply_preset(conn: object, preset: dict) -> int:
         )
     conn.commit()
     return supplier_id
+
+
+@dataclass
+class SeedResult:
+    supplier_ids: dict[str, int]
+    key_loaded: Optional[int] = None      # entries loaded; None when no key file was given or it failed
+    key_error: Optional[str] = None       # why the key file didn't load
+    key_without_zip: bool = False         # the key has no ZIP column: the street alone is compared
+    held_back: list[str] = field(default_factory=list)   # gpo_key presets left in their previous mode (no key)
+
+
+def seed_presets(conn: object, presets: list[dict], gpo_key_path: Optional[str] = None,
+                 key_supplier: str = "Medline") -> SeedResult:
+    """
+    Apply *presets* and optionally load *gpo_key_path* as *key_supplier*'s GPO key.
+
+    A preset in gpo_key mode is applied in the supplier's previous mode (member_match for a new
+    supplier) and switched to gpo_key only once it has a key, so a key that fails to load never
+    leaves a supplier verifying every row against an empty key.
+    """
+    previous = {r["name"]: r["identity_mode"] for r in conn.execute(
+        "SELECT name, identity_mode FROM supplier_profile").fetchall()}
+    result = SeedResult(supplier_ids={})
+    deferred: list[str] = []
+    for preset in presets:
+        name = preset["profile"]["name"]
+        if {**_DEFAULTS, **preset["profile"]}["identity_mode"] == IDENTITY_GPO_KEY:
+            deferred.append(name)
+            hold = previous.get(name) or IDENTITY_MEMBER_MATCH
+            preset = {**preset, "profile": {**preset["profile"], "identity_mode": hold}}
+        result.supplier_ids[name] = apply_preset(conn, preset)
+
+    if gpo_key_path:
+        try:
+            columns = without_missing_zip(gpo_key_path)
+            result.key_without_zip = columns.zip is None
+            result.key_loaded = load_gpo_key(conn, result.supplier_ids[key_supplier], gpo_key_path, columns).loaded
+        except KeyFileError as e:
+            conn.rollback()
+            result.key_error = str(e)
+
+    for name in deferred:
+        sid = result.supplier_ids[name]
+        entries = conn.execute(
+            "SELECT COUNT(*) AS n FROM gpo_key_entry WHERE supplier_profile_id = ?", (sid,)).fetchone()["n"]
+        if entries and not (result.key_error and name == key_supplier):
+            conn.execute("UPDATE supplier_profile SET identity_mode = ? WHERE id = ?", (IDENTITY_GPO_KEY, sid))
+        else:
+            result.held_back.append(name)
+    conn.commit()
+    return result
